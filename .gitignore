@@ -76,4 +76,5 @@ debug.txt
 
 # OS files
 .DS_Store
-videos/
+# Local temporary video outputs (keep docs/static/videos for project page)
+/videos/
