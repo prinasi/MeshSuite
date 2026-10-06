@@ -13,6 +13,12 @@ import torch
 from PIL import Image
 
 from msbench.core.cameras import CameraBatch
+from msbench.core.image_sources import (
+    is_prepared_image_dir,
+    is_legacy_image_cache,
+    require_prepared_image_dir,
+    resolve_colmap_image_source,
+)
 from msbench.vendor.dtu_utils import decompose_dtu_projection, load_dtu_pil_image
 from msbench.vendor.training_images import load_rgba_for_training
 from msbench.vendor.triangle_splatting.utils.general_utils import PILtoTorch
@@ -183,6 +189,11 @@ def _camera_batch_from_w2c(
 
 
 def _resolve_image_path(root: Path, image_dir: str, name: str) -> Path | None:
+    if is_prepared_image_dir(image_dir):
+        path = root / image_dir / (name + ".png" if is_legacy_image_cache(image_dir) else name)
+        if not path.is_file():
+            raise FileNotFoundError(f"Prepared COLMAP image missing: {path}")
+        return path
     candidates = [
         root / image_dir / name,
         root / "images" / name,
@@ -270,11 +281,14 @@ class ColmapDataset(DatasetBase):
         image_dir: str = "images",
         resolution: int = 1,
         resolution_rounding: str = "round",
+        image_preprocessing: str = "stored",
     ):
         super().__init__(dataset_path, split)
         self.eval_every = eval_every
-        self.image_dir = image_dir
-        self.resolution = resolution
+        self.image_dir, self.resolution = resolve_colmap_image_source(
+            image_dir, resolution, root=self.dataset_path, image_preprocessing=image_preprocessing,
+        )
+        require_prepared_image_dir(self.dataset_path, self.image_dir)
         self.resolution_rounding = resolution_rounding
         self._samples = self._load_samples()
 
@@ -599,6 +613,7 @@ def load_dataset(
     dtu_eval_mode: str = "full",
     background: str | None = None,
     use_alpha: bool = True,
+    image_preprocessing: str = "stored",
 ) -> DatasetBase:
     dtype = str(infer_dataset_type(dataset_path, dataset_type)).lower()
     if dtype in {"colmap", "mipnerf360", "tanks", "tanksandtemples", "tankstemple"}:
@@ -609,6 +624,7 @@ def load_dataset(
             image_dir=image_dir,
             resolution=resolution,
             resolution_rounding=resolution_rounding,
+            image_preprocessing=image_preprocessing,
         )
     if dtype in {"blender", "synthetic", "nerf-synthetic", "nerf_synthetic"}:
         return NerfSyntheticDataset(

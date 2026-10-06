@@ -6,7 +6,10 @@ from typing import Callable, Tuple
 try:
     from . import _C
 except ImportError:
-    _C = None
+    try:
+        import diff_triangle_rasterization._C as _C
+    except ImportError:
+        _C = None
 
 
 def cpu_deep_copy_tuple(input_tuple):

@@ -1,0 +1,20 @@
+# Copy outside configs/<method>/<dataset>/ and replace the Python paths.
+# Each interpreter must have its own installed msbench wheel and CUDA modules.
+schema_version: 1
+methods:
+  2dts:
+    python: /path/to/envs/2dts/bin/python
+    env:
+      CUDA_VISIBLE_DEVICES: "0"
+  triangle-splatting:
+    python: /path/to/envs/triangle-splatting/bin/python
+    env:
+      CUDA_VISIBLE_DEVICES: "0"
+  mesh-splatting:
+    python: /path/to/envs/mesh-splatting/bin/python
+    env:
+      CUDA_VISIBLE_DEVICES: "0"
+  diffsoup:
+    python: /path/to/envs/diffsoup/bin/python
+    env:
+      CUDA_VISIBLE_DEVICES: "0"

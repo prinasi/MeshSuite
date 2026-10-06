@@ -25,6 +25,8 @@ env/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+.cache/msbench/
+profile_output/
 
 # IDE
 .idea/

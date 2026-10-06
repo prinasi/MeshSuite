@@ -9,8 +9,11 @@ modules are loaded lazily from a package-local namespace.
 from __future__ import annotations
 
 import importlib.util
+from importlib import import_module
 from dataclasses import dataclass
 from pathlib import Path
+
+from msbench.methods import CUDA_MODULES, METHODS, canonical_method_name
 
 
 _PACKAGE_ROOT = Path(__file__).resolve().parents[1]
@@ -56,10 +59,6 @@ class BackendSpec:
             return Path(override).expanduser().resolve()
         return self.vendor_path
 
-    def sys_paths(self, override: str | Path | None = None) -> list[Path]:
-        """Compatibility shim: bundled backends do not need sys.path injection."""
-        return [self.repo_root(override)]
-
     def status(self, override: str | Path | None = None) -> dict[str, object]:
         """Return a lightweight availability report for this bundled backend."""
         modules = [self.package, *self.extension_modules]
@@ -81,6 +80,10 @@ def _probe_module(module_name: str) -> ModuleStatus:
         spec = importlib.util.find_spec(module_name)
         if spec is None:
             return ModuleStatus(name=module_name, available=False)
+        if module_name.endswith(("._C", "._core")):
+            # A Python wrapper can exist even when the binary is missing or
+            # was compiled against a different PyTorch/CUDA ABI.
+            import_module(module_name)
         return ModuleStatus(
             name=module_name,
             available=True,
@@ -91,57 +94,20 @@ def _probe_module(module_name: str) -> ModuleStatus:
 
 
 BACKENDS: dict[str, BackendSpec] = {
-    "2dts": BackendSpec(
-        name="2dts",
-        package="msbench.vendor.d2ts.diff_recon",
-        extension_modules=(
-            "msbench.vendor._cmod.d2ts_rasterization",
-            "msbench.vendor._cmod.simple_knn",
-        ),
-        aliases=("d2ts", "2DTS"),
-        vendor_subdir="d2ts",
-    ),
-    "diffsoup": BackendSpec(
-        name="diffsoup",
-        package="msbench.vendor.diffsoup",
-        extension_modules=("msbench.vendor.diffsoup.diffsoup._core",),
-        vendor_subdir="diffsoup",
-    ),
-    "mesh-splatting": BackendSpec(
-        name="mesh-splatting",
-        package="msbench.vendor.mesh_splatting",
-        extension_modules=(
-            "msbench.vendor._cmod.mesh_splatting_rasterization",
-            "msbench.vendor._cmod.simple_knn",
-        ),
-        aliases=("meshsplatting", "mesh_splatting"),
-        vendor_subdir="mesh_splatting",
-    ),
-    "triangle-splatting": BackendSpec(
-        name="triangle-splatting",
-        package="msbench.vendor.triangle_splatting",
-        extension_modules=(
-            "msbench.vendor._cmod.triangle_splatting_rasterization",
-            "msbench.vendor._cmod.simple_knn",
-        ),
-        aliases=("trianglesplatting", "triangle_splatting"),
-        vendor_subdir="triangle_splatting",
-    ),
-}
-
-
-_ALIASES: dict[str, str] = {
-    alias.lower(): name for name, spec in BACKENDS.items() for alias in (name, *spec.aliases)
+    name: BackendSpec(
+        name=name,
+        package=spec.package,
+        extension_modules=tuple(CUDA_MODULES[tag] for tag in spec.cuda_backends),
+        aliases=spec.aliases,
+        vendor_subdir=spec.vendor_subdir,
+    )
+    for name, spec in METHODS.items()
 }
 
 
 def canonical_backend_name(name: str) -> str:
     """Return the canonical backend name for a user-provided name or alias."""
-    key = name.lower()
-    if key not in _ALIASES:
-        available = ", ".join(sorted(BACKENDS))
-        raise KeyError(f"Unknown backend '{name}'. Available backends: {available}")
-    return _ALIASES[key]
+    return canonical_method_name(name)
 
 
 def get_backend(name: str) -> BackendSpec:
@@ -152,4 +118,3 @@ def get_backend(name: str) -> BackendSpec:
 def list_backends() -> list[str]:
     """Return all canonical backend names."""
     return sorted(BACKENDS)
-

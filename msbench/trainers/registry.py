@@ -8,12 +8,15 @@ modifying MeshSplatBench source.
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from msbench.methods import METHODS, canonical_method_name
+from msbench.core.plugins import discover_plugins
 
 if TYPE_CHECKING:
     from msbench.trainers.hooks import TrainingMethod
 
 _TRAINING_METHODS: dict[str, type[TrainingMethod]] = {}
 _PLUGINS_DISCOVERED = False
+_PLUGIN_ERRORS: dict[str, str] = {}
 
 #: Preferred entry point group that third-party packages use to register methods.
 ENTRY_POINT_GROUP = "msbench.training_methods"
@@ -55,33 +58,16 @@ def _discover_plugins() -> None:
         return
     _PLUGINS_DISCOVERED = True
 
-    try:
-        __import__("msbench.trainers.triangle_splatting_method")
-    except Exception:
-        pass
+    _PLUGIN_ERRORS.update(discover_plugins(
+        (spec.training_module for spec in METHODS.values() if spec.training_module),
+        ENTRY_POINT_GROUP,
+    ))
 
-    try:
-        __import__("msbench.trainers.mesh_splatting_method")
-    except Exception:
-        pass
 
-    try:
-        __import__("msbench.trainers.diffsoup_native")
-    except Exception:
-        pass
-
-    try:
-        from importlib.metadata import entry_points
-    except ImportError:
-        return
-
-    for ep in entry_points(group=ENTRY_POINT_GROUP):
-        try:
-            ep.load()
-        except Exception:
-            # Silently skip broken entry points so one bad plugin
-            # does not prevent the rest of the framework from working.
-            pass
+def plugin_errors() -> dict[str, str]:
+    """Return training plugin discovery failures."""
+    _discover_plugins()
+    return dict(_PLUGIN_ERRORS)
 
 
 def get_training_method(name: str) -> type[TrainingMethod]:
@@ -94,16 +80,15 @@ def get_training_method(name: str) -> type[TrainingMethod]:
 
     # Resolve aliases (e.g. "triangle_splatting" → "triangle-splatting").
     try:
-        from msbench.renderers.backends import canonical_backend_name
-
-        lookup = canonical_backend_name(name)
+        lookup = canonical_method_name(name)
     except KeyError:
         lookup = name
 
     if lookup not in _TRAINING_METHODS:
         available = ", ".join(sorted(_TRAINING_METHODS)) or "(none)"
         raise KeyError(
-            f"Training method '{name}' not found. Available: {available}"
+            f"Training method '{name}' not found. Available: {available}. "
+            f"Plugin errors: {_PLUGIN_ERRORS or '(none)'}"
         )
     return _TRAINING_METHODS[lookup]
 
@@ -118,9 +103,7 @@ def is_training_method_registered(name: str) -> bool:
     """Check whether a training method is registered under *name*."""
     _discover_plugins()
     try:
-        from msbench.renderers.backends import canonical_backend_name
-
-        name = canonical_backend_name(name)
+        name = canonical_method_name(name)
     except KeyError:
         pass
     return name in _TRAINING_METHODS

@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 import torch
+from msbench.methods import canonical_method_name
 
 
 SCHEMA_VERSION = "1.0"
@@ -59,21 +60,10 @@ class TriAssetPackage:
 def canonical_method(method: str) -> str:
     """Normalize public method aliases without importing CUDA-backed adapters."""
 
-    value = method.strip().lower().replace("_", "-")
-    aliases = {
-        "2dts": "2dts",
-        "d2ts": "2dts",
-        "triangle-splatting": "triangle-splatting",
-        "trianglesplatting": "triangle-splatting",
-        "mesh-splatting": "mesh-splatting",
-        "meshsplatting": "mesh-splatting",
-        "diffsoup": "diffsoup",
-    }
     try:
-        return aliases[value]
+        return canonical_method_name(method)
     except KeyError as exc:
-        names = ", ".join(sorted(set(aliases.values())))
-        raise ValueError(f"Unsupported Unity export method {method!r}; expected one of: {names}") from exc
+        raise ValueError(f"Unsupported Unity export method {method!r}: {exc}") from exc
 
 
 def resolve_checkpoint(method: str, checkpoint: str | Path) -> Path:

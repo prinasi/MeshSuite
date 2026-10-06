@@ -733,6 +733,11 @@ def render_video(
                 _composite_output_rgb(output, metadata.get("eval_background_color"))
             )
             # Crop trailing odd pixel for H.264 compatibility (libx264 yuv420p requires even dimensions)
+            # A one-pixel dimension cannot be cropped; pad it before making
+            # the normal crop, so small previews never become empty images.
+            if min(arr.shape[:2]) < 2:
+                arr = np.pad(arr, ((0, max(0, 2 - arr.shape[0])),
+                                   (0, max(0, 2 - arr.shape[1])), (0, 0)), mode="edge")
             if arr.shape[0] % 2 != 0 or arr.shape[1] % 2 != 0:
                 arr = arr[: arr.shape[0] - (arr.shape[0] % 2), : arr.shape[1] - (arr.shape[1] % 2)]
             if writer is not None:

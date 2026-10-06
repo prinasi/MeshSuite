@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import copy
 import os
+import shlex
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 from setuptools import Extension
+from msbench.methods import resolve_cuda_backends
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension, CUDA_HOME
 
 
@@ -17,10 +19,6 @@ PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = PACKAGE_ROOT.parent
 CSRC_ROOT = PACKAGE_ROOT / "vendor" / "_csrc"
 BUILD_JOBS = os.getenv("MAX_BUILD_JOBS")
-
-# When set, only build the listed backends (comma-separated canonical names).
-# e.g.  MSBENCH_CUDA_BACKENDS=triangle-splatting,simple-knn
-_ONLY_BACKENDS = os.getenv("MSBENCH_CUDA_BACKENDS")
 
 # Enable ccache for NVCC.  Requires ``ccache`` on PATH.
 _USE_CCACHE = os.getenv("MSBENCH_CCACHE", "").lower() in ("1", "true", "yes")
@@ -47,8 +45,8 @@ class ParallelBuildExt(BuildExtension):
         if cmake is None:
             raise RuntimeError(
                 "Building MeshSplatBench's bundled DiffSoup extension requires "
-                "CMake. Install it with `pip install cmake` or use build "
-                "isolation so pyproject.toml can install `cmake>=3.20`."
+                "CMake. Install build tools with `pip install .[cuda]` before "
+                "building with --no-build-isolation."
             )
         try:
             nanobind_dir = subprocess.check_output(
@@ -59,9 +57,8 @@ class ParallelBuildExt(BuildExtension):
             raise RuntimeError(
                 "Building MeshSplatBench's bundled DiffSoup extension requires "
                 "nanobind in the Python environment used for the build. Install "
-                "it with `pip install nanobind`, or build without "
-                "`--no-build-isolation` so pyproject.toml can install "
-                "`nanobind>=2.11.0`."
+                "it with `pip install nanobind` before building with "
+                "`--no-build-isolation`."
             ) from exc
 
         ext_fullpath = Path(self.get_ext_fullpath(ext.name)).resolve()
@@ -92,6 +89,8 @@ class ParallelBuildExt(BuildExtension):
                 nvcc_bin = str(candidate)
         if nvcc_bin:
             configure_args.append(f"-DCMAKE_CUDA_COMPILER={nvcc_bin}")
+        if _USE_CCACHE and shutil.which("ccache"):
+            configure_args.append(f"-DCMAKE_CUDA_COMPILER_LAUNCHER={shutil.which('ccache')}")
         if CUDA_HOME and Path(CUDA_HOME).exists():
             configure_args.append(f"-DCUDAToolkit_ROOT={CUDA_HOME}")
         build_args = [cmake, "--build", str(build_temp), "--config", cfg]
@@ -117,25 +116,6 @@ def _rel_sources(root: Path, files: list[str]) -> list[str]:
     ]
 
 
-def _ccache_nvcc_args() -> list[str]:
-    """Return extra nvcc args that route compilation through ccache."""
-    if not _USE_CCACHE:
-        return []
-    if not shutil.which("ccache"):
-        print("[MeshSplatBench] MSBENCH_CCACHE=1 but ccache not found on PATH — ignoring.")
-        return []
-    # The most portable way: tell nvcc to use ccache as its host compiler wrapper.
-    return []  # ccache is activated via the CUDAHOSTCXX env var instead.
-
-
-def _should_build(tag: str) -> bool:
-    """Check whether a backend extension should be included in the build."""
-    if _ONLY_BACKENDS is None:
-        return True
-    wanted = {s.strip().lower().replace("_", "-") for s in _ONLY_BACKENDS.split(",")}
-    return tag.lower().replace("_", "-") in wanted
-
-
 def get_ext_modules() -> list[Extension]:
     """Return all bundled CUDA/CMake extension modules.
 
@@ -145,21 +125,25 @@ def get_ext_modules() -> list[Extension]:
         Comma-separated list of backend names to build.  If set, only the
         listed backends are compiled (all others are skipped).  Names are
         matched case-insensitively with underscores and hyphens treated as
-        equivalent.  Example::
+        equivalent. Shared KNN dependencies are included automatically. Example::
 
             MSBENCH_CUDA_BACKENDS=triangle-splatting,simple-knn
 
     ``MSBENCH_CCACHE``
         Set to ``1`` to route NVCC through *ccache*.  Requires *ccache* on
-        ``PATH`` and activates by setting ``CUDAHOSTCXX=ccache`` before
-        invoking the compiler.
+        ``PATH``. Uses PyTorch's ``PYTORCH_NVCC`` wrapper and CMake's CUDA
+        compiler launcher, without replacing the host compiler.
 
     ``MSBENCH_CUDA_ARCHS``
         Semicolon-separated CUDA architectures (default ``89``).
     """
+    selected = resolve_cuda_backends(os.getenv("MSBENCH_CUDA_BACKENDS"))
+
     # Activate ccache for NVCC if requested (must happen before any build).
     if _USE_CCACHE and shutil.which("ccache"):
-        os.environ.setdefault("CUDAHOSTCXX", "ccache")
+        nvcc = str(Path(CUDA_HOME) / "bin" / "nvcc") if CUDA_HOME else shutil.which("nvcc")
+        if nvcc:
+            os.environ.setdefault("PYTORCH_NVCC", f"{shlex.quote(shutil.which('ccache'))} {shlex.quote(nvcc)}")
 
     tri_root = CSRC_ROOT / "triangle_splatting_rasterization"
     mesh_root = CSRC_ROOT / "mesh_splatting_rasterization"
@@ -173,7 +157,7 @@ def get_ext_modules() -> list[Extension]:
     extensions: list[Extension] = []
 
     # -- triangle-splatting rasterization -----------------------------
-    if _should_build("triangle-splatting"):
+    if "triangle-splatting" in selected:
         extensions.append(CUDAExtension(
             name="msbench.vendor._cmod.triangle_splatting_rasterization._C",
             sources=_rel_sources(
@@ -191,7 +175,7 @@ def get_ext_modules() -> list[Extension]:
         ))
 
     # -- mesh-splatting rasterization ---------------------------------
-    if _should_build("mesh-splatting"):
+    if "mesh-splatting" in selected:
         extensions.append(CUDAExtension(
             name="msbench.vendor._cmod.mesh_splatting_rasterization._C",
             sources=_rel_sources(
@@ -210,7 +194,7 @@ def get_ext_modules() -> list[Extension]:
         ))
 
     # -- 2DTS rasterization ------------------------------------------
-    if _should_build("2dts"):
+    if "2dts" in selected:
         extensions.append(CUDAExtension(
             name="msbench.vendor._cmod.d2ts_rasterization._C",
             sources=_rel_sources(
@@ -227,7 +211,7 @@ def get_ext_modules() -> list[Extension]:
         ))
 
     # -- simple-knn ---------------------------------------------------
-    if _should_build("simple-knn"):
+    if "simple-knn" in selected:
         extensions.append(CUDAExtension(
             name="msbench.vendor._cmod.simple_knn._C",
             sources=_rel_sources(
@@ -242,17 +226,10 @@ def get_ext_modules() -> list[Extension]:
         ))
 
     # -- DiffSoup (CMake) ---------------------------------------------
-    if _should_build("diffsoup"):
+    if "diffsoup" in selected:
         extensions.append(CMakeExtension(
             "msbench.vendor.diffsoup.diffsoup._core",
             diffsoup_root,
         ))
-
-    if _ONLY_BACKENDS and not extensions:
-        print(
-            f"[MeshSplatBench] MSBENCH_CUDA_BACKENDS='{_ONLY_BACKENDS}' "
-            "did not match any known backend.  Available: "
-            "triangle-splatting, mesh-splatting, 2dts, simple-knn, diffsoup"
-        )
 
     return extensions

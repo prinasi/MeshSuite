@@ -13,6 +13,7 @@ adapter:
 
 dataset:
   resolution_rounding: floor
+  image_preprocessing: legacy_bilinear_floor
 
 output:
   dir: outputs/{method}/{dataset}/{scene}

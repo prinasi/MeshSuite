@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+source "$(dirname "${BASH_SOURCE[0]}")/tools/pipeline_common.sh"
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${REPO_ROOT}"
 
@@ -96,15 +98,6 @@ require_value() {
     fi
 }
 
-canonical_method() {
-    case "$(echo "$1" | tr '[:upper:]' '[:lower:]' | tr '_' '-')" in
-        triangle-splatting|trianglesplatting|triangle_splatting|ts) echo "triangle-splatting" ;;
-        mesh-splatting|meshsplatting|mesh_splatting|ms) echo "mesh-splatting" ;;
-        2dts|d2ts) echo "2dts" ;;
-        diffsoup|diff-soup) echo "diffsoup" ;;
-        *) echo "$1" ;;
-    esac
-}
 
 POSITIONAL=()
 while [[ $# -gt 0 ]]; do

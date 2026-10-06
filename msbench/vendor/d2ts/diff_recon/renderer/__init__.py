@@ -1,31 +1,17 @@
 from .triangle_renderer import TriangleRenderer
 
-_OPTIONAL_RASTERIZATION_MODULES = {
-    "custom_gaussian_rasterization",
-    "hybrid_rasterization",
+__all__ = ["TriangleRenderer", "GaussianRenderer", "HybridRenderer"]
+_EXPERIMENTAL_SYMBOLS = {
+    "GaussianRenderer": ".gaussian_renderer",
+    "HybridRenderer": ".hybrid_renderer",
 }
 
 
-def _optional_import(import_fn):
-    try:
-        return import_fn()
-    except ModuleNotFoundError as exc:
-        if exc.name not in _OPTIONAL_RASTERIZATION_MODULES:
-            raise
-        return None
+def __getattr__(name):
+    if name not in _EXPERIMENTAL_SYMBOLS:
+        raise AttributeError(name)
+    from .._optional import optional_symbol
 
-
-GaussianRenderer = _optional_import(lambda: __import__(
-    f"{__name__}.gaussian_renderer",
-    fromlist=["GaussianRenderer"],
-).GaussianRenderer)
-HybridRenderer = _optional_import(lambda: __import__(
-    f"{__name__}.hybrid_renderer",
-    fromlist=["HybridRenderer"],
-).HybridRenderer)
-
-__all__ = [
-    "TriangleRenderer",
-    "GaussianRenderer",
-    "HybridRenderer",
-]
+    value = optional_symbol(__name__ + _EXPERIMENTAL_SYMBOLS[name], name)
+    globals()[name] = value
+    return value

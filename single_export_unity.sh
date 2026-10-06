@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+source "$(dirname "${BASH_SOURCE[0]}")/tools/pipeline_common.sh"
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${REPO_ROOT}"
 
@@ -81,18 +83,6 @@ require_value() {
 
 lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
 
-canonical_method() {
-    local name
-    name="$(lower "$1")"
-    name="${name//_/-}"
-    case "${name}" in
-        trianglesplatting) echo "triangle-splatting" ;;
-        meshsplatting) echo "mesh-splatting" ;;
-        2dts|d2ts) echo "2dts" ;;
-        diffsoup) echo "diffsoup" ;;
-        *) echo "${name}" ;;
-    esac
-}
 
 dataset_label() {
     local name

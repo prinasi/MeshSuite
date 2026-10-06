@@ -1,11 +1,3 @@
-plyfile
-ninja
-cmake
-torch
-torchvision
-trimesh
-open3d
-scikit-image
-scikit-learn
-matplotlib
-mediapy
+# Legacy all-method development environment. CUDA compilation remains explicit.
+# Prefer pyproject extras for each isolated method environment.
+-e .[runtime,cuda,method-2dts,method-triangle-splatting,method-mesh-splatting,method-diffsoup,geometry]

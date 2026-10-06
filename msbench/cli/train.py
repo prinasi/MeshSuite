@@ -8,6 +8,7 @@ scheduling are consistent across backends.
 
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
 from typing import Optional
@@ -331,7 +332,17 @@ def _train_from_structured_config(
         if key in dataset_cfg and key not in trainer_cfg:
             trainer_cfg[key] = dataset_cfg[key]
 
+    (run_output_dir / "dataset_source.json").write_text(
+        json.dumps({"schema_version": 1, "dataset": {"root": str(dataset_root), **dataset_cfg},
+                    "training_images": trainer_cfg.get("images"),
+                    "training_resolution": trainer_cfg.get("resolution")}, indent=2) + "\n"
+    )
+
     method_name = str(trainer_cfg.get("type", trainer_cfg.get("name", ""))).replace("_", "-")
+    try:
+        method_name = canonical_backend_name(method_name)
+    except KeyError:
+        pass
     _preserve_dtu_background_defaults(dataset_root, trainer_cfg)
     native_loop = bool(
         trainer_cfg.pop(
@@ -438,6 +449,9 @@ def _run_triangle_splatting_native_config(
     quiet: bool,
 ) -> dict:
     """Run triangle-splatting with its native training loop."""
+    from msbench.runtime import require_method_cuda
+
+    require_method_cuda("triangle-splatting")
     from msbench.vendor.triangle_splatting.train import run_training
 
     # Native loop writes point_cloud/iteration_N + cfg_args under model_path;
@@ -471,6 +485,9 @@ def _run_mesh_splatting_native_config(
     quiet: bool,
 ) -> dict:
     """Run MeshSplatting with its native training loop."""
+    from msbench.runtime import optional_operator_status, require_method_cuda
+
+    require_method_cuda("mesh-splatting", trainer_cfg=trainer_cfg)
     from msbench.vendor.mesh_splatting.train import run_training
 
     # Native loop writes point_cloud/iteration_N + cfg_args under model_path;
@@ -492,6 +509,7 @@ def _run_mesh_splatting_native_config(
                 "total_time_s": 0.0,
                 "avg_step_time_ms": 0.0,
                 "final_losses": {},
+                "optional_operators": optional_operator_status(),
             }
 
     start = time.time()
@@ -514,7 +532,27 @@ def _run_mesh_splatting_native_config(
         "total_time_s": total_time,
         "avg_step_time_ms": total_time * 1000.0 / max(trained_steps, 1),
         "final_losses": {},
+        "optional_operators": optional_operator_status(),
     }
+
+
+def _native_image_source_argv(trainer_cfg: dict, dataset_root: str) -> list[str]:
+    from msbench.core.image_sources import require_prepared_image_dir, resolve_scene_image_source
+
+    images = trainer_cfg.get("images")
+    resolution = trainer_cfg.get("resolution")
+    if resolution is not None:
+        images, resolution = resolve_scene_image_source(
+            dataset_root, str(images or "images"), int(resolution)
+        )
+    if images is not None:
+        require_prepared_image_dir(dataset_root, images)
+    argv = []
+    if images is not None:
+        argv.extend(["-i", str(images)])
+    if resolution is not None:
+        argv.extend(["-r", str(resolution)])
+    return argv
 
 
 def _triangle_splatting_native_argv(
@@ -546,12 +584,7 @@ def _triangle_splatting_native_argv(
         str(max_steps),
     ]
 
-    images = trainer_cfg.get("images")
-    if images is not None:
-        argv.extend(["-i", str(images)])
-    resolution = trainer_cfg.get("resolution")
-    if resolution is not None:
-        argv.extend(["-r", str(resolution)])
+    argv.extend(_native_image_source_argv(trainer_cfg, dataset_root))
     dtu_eval_mode = trainer_cfg.get("dtu_eval_mode")
     if dtu_eval_mode is not None:
         argv.extend(["--dtu_eval_mode", str(dtu_eval_mode)])
@@ -626,12 +659,7 @@ def _mesh_splatting_native_argv(
         "-1",
     ]
 
-    images = trainer_cfg.get("images")
-    if images is not None:
-        argv.extend(["-i", str(images)])
-    resolution = trainer_cfg.get("resolution")
-    if resolution is not None:
-        argv.extend(["-r", str(resolution)])
+    argv.extend(_native_image_source_argv(trainer_cfg, dataset_root))
     dtu_eval_mode = trainer_cfg.get("dtu_eval_mode")
     if dtu_eval_mode is not None:
         argv.extend(["--dtu_eval_mode", str(dtu_eval_mode)])

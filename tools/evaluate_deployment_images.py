@@ -61,9 +61,14 @@ def native_gaussian_ssim(prediction: np.ndarray, target: np.ndarray) -> float:
 
 
 def _image_key(path: Path) -> str:
+    from msbench.core.image_sources import is_legacy_image_cache
+
+    stem = path.stem
+    if any(is_legacy_image_cache(parent) for parent in path.parents):
+        stem = Path(stem).stem  # cache preserves the original extension before .png
     # MeshSplatBench Native renders use ``00023_DSC08140.png`` while Unity captures
     # use ``DSC08140.png``. Strip only the framework's numeric prefix.
-    return re.sub(r"^\d{5}_", "", path.stem).casefold()
+    return re.sub(r"^\d{5}_", "", stem).casefold()
 
 
 def image_index(root: Path) -> dict[str, Path]:

@@ -29,6 +29,9 @@ def run_d2ts_native_config(
     quiet: bool = True,
 ) -> dict[str, Any]:
     """Run the bundled 2DTS VanillaTS trainer from a MeshSplatBench config."""
+    from msbench.runtime import require_method_cuda
+
+    require_method_cuda("2dts")
     from msbench.vendor.d2ts.diff_recon import VanillaTSTrainer
 
     native = _build_d2ts_native_config(
@@ -226,6 +229,19 @@ def _build_d2ts_native_config(
     if image_dir is not None:
         native.dataset.image_dir = str(image_dir)
     dataset_type = str(dataset_cfg.get("type", dataset_cfg.get("dataset_type", ""))).lower()
+    from msbench.core.image_sources import COLMAP_TYPES, is_colmap_scene, resolve_colmap_image_source
+
+    if resolution is not None and (
+        dataset_type in COLMAP_TYPES or (dataset_type in {"", "auto"} and is_colmap_scene(dataset_path))
+    ):
+        image_dir, resolution = resolve_colmap_image_source(
+            str(getattr(native.dataset, "image_dir", None) or "images"),
+            int(dataset_cfg.get("resolution", 1)),
+            root=dataset_path, image_preprocessing=str(dataset_cfg.get("image_preprocessing", "stored")),
+        )
+        native.dataset.image_dir = image_dir
+        native.dataset.train_target_res = resolution
+        native.dataset.test_target_res = resolution
     synthetic_dataset = dataset_type in {
         "synthetic",
         "blender",

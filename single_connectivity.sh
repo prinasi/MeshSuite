@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+source "$(dirname "${BASH_SOURCE[0]}")/tools/pipeline_common.sh"
+
 # single_connectivity.sh - batch MeshSplatting connectivity evaluation.
 #
 # Primary interface:
@@ -95,15 +97,6 @@ lower() {
     printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
 }
 
-canonical_method() {
-    local name
-    name="$(lower "$1")"
-    name="${name//_/-}"
-    case "${name}" in
-        meshsplatting) echo "mesh-splatting" ;;
-        *) echo "${name}" ;;
-    esac
-}
 
 normalize_dataset() {
     local name

@@ -28,66 +28,114 @@ MeshSplatBench provides a single, consistent evaluation framework for comparing 
 
 ## Installation
 
-### Option 1: Conda Environment (Recommended)
+A normal install now provides the lightweight benchmark controller and does **not**
+compile CUDA, even when `nvcc` or `CUDA_HOME` is present. Native commands use the
+`runtime` extra. Existing command/config/script interfaces are retained.
+
+### Controller environment
 
 ```bash
-git clone https://github.com/prinasi/MeshSplatBench.git
-cd MeshSplatBench
-conda env create -f environment.yml
-conda activate msbench
+python -m pip install .
+msbench run --help
 ```
 
-### Option 2: Pip Install / Editable Development Install
+The controller needs Python >= 3.10 and PyYAML; it does not import PyTorch,
+CUDA extensions, or method adapters.
 
-If you already have a Conda or Python environment with PyTorch (>= 2.0 with CUDA support), install MeshSplatBench in editable mode:
+### Method environments
+
+Create/manage each environment yourself, installing the PyTorch/torchvision and
+CUDA toolkit versions appropriate to that method. For example, in the 2DTS environment:
 
 ```bash
-git clone https://github.com/prinasi/MeshSplatBench.git
-cd MeshSplatBench
+# Install Python dependencies/build tools first; this does not compile CUDA.
+python -m pip install '.[runtime,method-2dts,cuda]'
+
+# Compile only 2DTS and its shared KNN dependency using this environment's torch.
+MSBENCH_CUDA_BACKENDS=2dts python -m pip install '.[runtime,method-2dts,cuda]' --no-build-isolation
 ```
 
-#### 1. Full Installation (Compiling All Bundled CUDA Extensions)
-To build all bundled CUDA rendering backends (Triangle Splatting, MeshSplatting, 2DTS, Simple-KNN, and DiffSoup):
+Use `method-triangle-splatting`, `method-mesh-splatting`, or `method-diffsoup`
+with the corresponding `MSBENCH_CUDA_BACKENDS` value for the other methods.
+Add `[geometry]` when running optional geometric evaluation. MeshSplatting
+configs enabling restricted Delaunay additionally require a separately installed
+`submodules/effrdel` (`rdel`) in that method environment.
+
+For isolated runs, use **non-editable** installs so each environment owns its
+compiled operators. Editable installs remain supported for development with the
+existing native CLI/scripts; isolated workers reject them because multiple
+editable environments can share and overwrite the same `.so` files.
+Setuptools build directories are separated by interpreter, selected backends,
+PyTorch/CUDA versions, and architecture settings.
+
+CUDA names: `2dts`, `triangle-splatting`, `mesh-splatting`, `diffsoup`, `simple-knn`.
+Selecting one of the first three automatically includes `simple-knn`. Unknown
+names fail the build. To compile every bundled backend explicitly:
 
 ```bash
-# Ensure CUDA_HOME points to CUDA 11.8+ (required for Ada Lovelace / sm_89 / RTX 40-series cards)
-export CUDA_HOME=/usr/local/cuda-11.8
-export PATH=$CUDA_HOME/bin:$PATH
-
-pip install -e ".[dev,cuda]" --no-build-isolation
+MSBENCH_BUILD_CUDA=1 python -m pip install '.[runtime,cuda]' --no-build-isolation
+# Equivalent selection: MSBENCH_CUDA_BACKENDS=all
 ```
 
-> **Tip for Multi-CUDA Systems**:
-> If your system default `/usr/bin/nvcc` is an older version (e.g., CUDA 11.5), setting `CUDA_HOME` (or `export CUDACXX=$CUDA_HOME/bin/nvcc`) ensures both PyTorch and CMake (used by DiffSoup) use the matching CUDA 11.8+ compiler.
+| Environment variable | Meaning | Default |
+| --- | --- | --- |
+| `MSBENCH_SKIP_CUDA` | Always skip compilation; overrides build requests | Unset |
+| `MSBENCH_BUILD_CUDA` | Explicitly request all bundled extensions | Unset |
+| `MSBENCH_CUDA_BACKENDS` | Select methods/operators, automatically including KNN | No compilation |
+| `MSBENCH_CUDA_ARCHS` | CUDA architectures for DiffSoup's CMake build | `89` |
+| `TORCH_CUDA_ARCH_LIST` | CUDA architectures for PyTorch-built extensions | PyTorch default |
+| `MSBENCH_CCACHE` | Use ccache through PyTorch/CMake compiler launchers | Unset |
+| `MAX_BUILD_JOBS` | Compilation job limit | Auto |
 
-#### 2. Fast Python-Only Install (Skip CUDA Compilation)
-If you only need to work on Python code, CLI tools, evaluation scripts, or tests without compiling C++/CUDA extensions:
+Install build tools and PyTorch **before** using `--no-build-isolation`; pip does
+not manage build dependencies in that mode. See the [pip build-system documentation](https://pip.pypa.io/en/stable/reference/build-system/).
+
+The existing `environment.yml` and `requirements.txt` remain convenience options
+for an all-method development environment. CUDA compilation is now a separate,
+explicit step. They are not version locks for reproducible published runs.
+
+### Isolated benchmark execution
+
+Copy [configs/runtimes.example.yaml](configs/runtimes.example.yaml), replacing each
+interpreter path with your method environment's Python. No environments are created
+or modified by the runner.
 
 ```bash
-MSBENCH_SKIP_CUDA=1 pip install -e ".[dev]" --no-build-isolation
+msbench run --config configs/triangle-splatting/mipnerf360/bicycle.yaml \
+  --runtimes /path/to/runtimes.yaml \
+  --stage train --stage render --stage eval --stage profile --dry-run
+
+# Remove --dry-run to execute the stages in the stated order.
 ```
 
-#### 3. Selective Backend Compilation
-If you only require specific CUDA backends (e.g., skipping DiffSoup CMake compilation or only building Triangle Splatting):
+The equivalent lightweight entry point is `msbench-run`. Relative dataset/output
+paths use the current working directory, or the directory supplied by `--workspace`.
+Workers launch with `python -I` and load the package installed in their own environment.
+The existing native outputs keep their paths. Additional run records go to:
 
-```bash
-# Compile only triangle-splatting, mesh-splatting, 2dts, and simple-knn (skip DiffSoup)
-MSBENCH_CUDA_BACKENDS=triangle-splatting,mesh-splatting,2dts,simple-knn pip install -e ".[dev]" --no-build-isolation
-
-# Or compile only Triangle Splatting and its KNN dependency
-MSBENCH_CUDA_BACKENDS=triangle-splatting,simple-knn pip install -e ".[dev]" --no-build-isolation
+```text
+outputs/{method}/{dataset}/{scene}/benchmark_runs/{run_id}/
+  config.yaml
+  run.json
+  {stage}.request.json
+  {stage}.result.json
+  {stage}.log
 ```
 
-Supported backend identifiers: `triangle-splatting`, `mesh-splatting`, `2dts`, `simple-knn`, `diffsoup`.
+Supported isolated stages are `train`, `render`, `eval`, `profile`, and `inspect`.
+A stage fails when its worker fails, its response identity does not match, or its
+required result artifacts are missing/stale. Existing Unity, viewer, connectivity,
+video, and export commands remain available through their current entry points.
 
-#### 4. Additional Build Environment Variables
-| Environment Variable | Description | Default |
-| ------------------- | ----------- | ------- |
-| `MSBENCH_SKIP_CUDA` | Skip compiling all CUDA extensions (`1`, `true`, `yes`) | Unset |
-| `MSBENCH_CUDA_BACKENDS` | Comma-separated list of backends to build | All |
-| `MSBENCH_CUDA_ARCHS` | Semicolon-separated CUDA architectures for CMake (DiffSoup) | `89` |
-| `MSBENCH_CCACHE` | Enable `ccache` compilation caching for NVCC (`1`, `true`, `yes`) | Unset |
-| `MAX_BUILD_JOBS` | Maximum parallel compilation jobs | Auto |
+Training requires a working CUDA device and loadable method-specific rasterizer/KNN
+operators. KNN never falls back silently to `torch.cdist`. Restricted Delaunay's
+`rdel` dependency is checked when enabled. MeshSplatting retains its existing optional
+fused-SSIM choice and records its availability. Evaluation still runs in the method
+environment to preserve the current metric semantics; shared image scoring is a
+separate next phase.
+
+See [BENCHMARK_MAINTENANCE.md](BENCHMARK_MAINTENANCE.md) for the code audit,
+method integration contract, limitations, and proposed maintenance roadmap.
 
 ## Dataset Setup
 
@@ -355,17 +403,19 @@ appearance are rejected instead of producing misleading numbers.
 To isolate the value of MeshSplatting's shared-vertex topology, use:
 
 ```bash
-./single_mesh_topology_unity_eval.sh mipnerf360/all 0 \
+./single_unity_eval.sh mesh-splatting mipnerf360/all 0 \
   --unity "$UNITY" \
-  --unity-project unity
+  --unity-project unity \
+  --general-purpose --indexed-mesh-method-aware --topology indexed \
+  --output-name unity_indexed_mesh_method_aware
 ```
 
-This runs `mesh-splatting` with three deployment layouts:
+Use the existing wrapper to evaluate each of these deployment layouts separately:
 
 - `mesh`: preserves the exported indexed mesh and renders it through a real
   Unity `MeshFilter`/`MeshRenderer` with `Mesh.SetIndices`.  For
-  MeshSplatting, `single_mesh_topology_unity_eval.sh` enables
-  `--indexed-mesh-method-aware`, so the Unity indexed mesh path still evaluates
+  MeshSplatting, the command above enables `--indexed-mesh-method-aware`,
+  so the Unity indexed mesh path still evaluates
   the learned SH appearance instead of falling back to the older DC-only
   vertex-color baseline.
 - `shader-soup`: loads the same indexed `.triasset`, but uses the procedural
@@ -375,11 +425,8 @@ This runs `mesh-splatting` with three deployment layouts:
   duplicated positions/SH/opacity attributes and sequential soup indices. This
   is intended for asset-memory, load-feasibility, and CG compatibility evidence.
 
-Reports are written under:
-
-```text
-outputs/unity_reports/mesh-splatting/unity_mesh_topology/{indexed_mesh,shader_soup,materialized_soup}/
-```
+Reports are written under `outputs/unity_reports/mesh-splatting/{output-name}/`.
+Set a separate `--output-name` for each condition.
 
 The lower-level wrapper also accepts `--topology indexed|soup` directly when a
 single shader-level condition is needed:
@@ -462,9 +509,31 @@ rebuilt:
 
 ### Resolution and dataset rules
 
-The wrapper reads each scene config. For Mip-NeRF 360, `image_dir: images` plus
-`resolution: 4` resolves to `images_4`; `resolution: 2` resolves to `images_2`.
-This keeps Unity quality/profile resolution aligned with native evaluation.
+The scene config determines the image preprocessing protocol. **2DTS** uses
+`dataset.image_preprocessing: legacy_bilinear_floor`: offline PIL bilinear
+resizing with integer-floor dimensions, saved as lossless PNG. This reproduces
+its historical native training/evaluation pixels without resizing during training.
+Existing `images_2/4` JPEG files are a different protocol and are not substituted.
+
+Prepare all nine scenes once in the 2DTS runtime environment:
+
+```bash
+python -m tools.prepare_2dts_images --config configs/2dts/mipnerf360 --workers 4
+```
+
+Caches live in `.cache/msbench/images/` (override with
+`MSBENCH_IMAGE_CACHE_DIR`, using the same value for preparation and all runs).
+The manifest records the protocol, Pillow version, source hashes, pixel hashes,
+dimensions and source file metadata. Training/evaluation reject missing caches
+and changed source files. Explicit cache directories can also be selected with
+`image_dir` and `resolution: 1`. Other methods retain their stored `images_X`
+protocol. DTU and synthetic preprocessing remain as configured.
+
+COLMAP loaders set the effective resize factor to `1` for prepared images.
+Stored pixel dimensions determine camera size and scaled intrinsics.
+Structured training records the effective source in `dataset_source.json` beside
+the original `config.yaml`. Explicit custom image folders and target-width
+controls retain their existing semantics.
 The Unity camera replay currently requires COLMAP `sparse/0/cameras.bin` and
 `sparse/0/images.bin`.
 

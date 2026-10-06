@@ -416,18 +416,14 @@ def load_mipnerf360_scene(
     first_cam = cams[imgs[0]["camera_id"]]
     K0, orig_H, orig_W = _intrinsics_from_camera(first_cam)
 
-    # Image folder. Prefer pre-resized folders when available, but allow
-    # standard COLMAP datasets that only provide images/ by resizing on load.
+    # Standard benchmark factors use prepared images, never a resizing fallback.
     folder = _image_folder_name(downscale)
     img_dir = os.path.join(scene_root, folder)
-    resize_to: Optional[Tuple[int, int]] = None
     if not os.path.isdir(img_dir):
-        fallback_folder = "images"
-        fallback_dir = os.path.join(scene_root, fallback_folder)
-        if downscale <= 1 or not os.path.isdir(fallback_dir):
-            raise FileNotFoundError(f"'{folder}' folder not found at: {img_dir}")
-        folder = fallback_folder
-        img_dir = fallback_dir
+        raise FileNotFoundError(
+            f"'{folder}' folder not found at: {img_dir}. Generate {folder} before "
+            "training/evaluation; dynamic downsampling fallback is disabled."
+        )
 
     # Determine actual resolution from first image
     name0 = imgs[0]["name"]
@@ -436,9 +432,6 @@ def load_mipnerf360_scene(
         p0 = os.path.join(img_dir, os.path.basename(name0))
     im0 = iio.imread(p0)
     out_H, out_W = im0.shape[0], im0.shape[1]
-    if folder == "images" and downscale > 1:
-        out_H, out_W = _resize_hw(out_H, out_W, downscale)
-        resize_to = (out_H, out_W)
 
     # Scale intrinsics to match chosen image folder
     sx, sy = out_W / float(orig_W), out_H / float(orig_H)
@@ -475,7 +468,7 @@ def load_mipnerf360_scene(
         img = torch.from_numpy(iio.imread(img_path).astype(np.float32) / 255.0)
         if img.ndim == 2:
             img = img[..., None].expand(-1, -1, 3)
-        if resize_to is not None or (img.shape[0], img.shape[1]) != (out_H, out_W):
+        if (img.shape[0], img.shape[1]) != (out_H, out_W):
             img = TF.resize(
                 img.permute(2, 0, 1),
                 [out_H, out_W],
