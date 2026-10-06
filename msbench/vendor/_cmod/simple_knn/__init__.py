@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import torch
 
+import sys
+
 try:
     from . import _C
     _C_IMPORT_ERROR = None
@@ -14,6 +16,9 @@ except ImportError as exc:
     except ImportError:
         _C = None
         _C_IMPORT_ERROR = exc
+
+if _C is not None:
+    sys.modules[__name__ + "._C"] = _C
 
 
 def _require_cuda() -> None:

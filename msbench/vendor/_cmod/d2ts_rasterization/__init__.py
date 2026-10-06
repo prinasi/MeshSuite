@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch
 from typing import Callable, Tuple
 
+import sys
+
 try:
     from . import _C
 except ImportError:
@@ -10,6 +12,9 @@ except ImportError:
         import diff_triangle_rasterization._C as _C
     except ImportError:
         _C = None
+
+if _C is not None:
+    sys.modules[__name__ + "._C"] = _C
 
 
 def cpu_deep_copy_tuple(input_tuple):
