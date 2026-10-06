@@ -4,8 +4,9 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![arXiv](https://img.shields.io/badge/arXiv-2609.01306-b31b1b.svg)](https://arxiv.org/abs/2609.01306)
+[![Project Page](https://img.shields.io/badge/Project-Page-2563eb.svg)](https://prinasi.github.io/MeshSuite/)
 
-**MeshSplatBench** is a unified, Python-first benchmarking toolkit and evaluation framework for comparing triangle-splatting-style radiance field reconstruction methods, bridging academic novel view synthesis research and real-time industrial game engine deployment (Unity).
+**MeshSplatBench** (also presented as **MeshSuite**) is a unified, Python-first benchmarking toolkit and evaluation framework for comparing triangle-splatting-style radiance field reconstruction methods, bridging academic novel view synthesis research and real-time industrial game engine deployment (Unity). Visit the [Project Page](https://prinasi.github.io/MeshSuite/) for interactive comparisons and full leaderboards.
 
 ## Overview
 
