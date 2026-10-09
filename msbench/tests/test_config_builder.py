@@ -276,6 +276,21 @@ def test_diffsoup_config_resolves_final_params_checkpoint():
     assert cfg["adapter"]["checkpoint"] == "outputs/diffsoup/mipnerf360/room/ckpt/final_params.pt"
 
 
+def test_2dts_mipnerf360_configs_align_with_triangle_splatting():
+    indoor_scenes = ("bonsai", "counter", "kitchen", "room")
+    outdoor_scenes = ("bicycle", "flowers", "garden", "stump", "treehill")
+
+    for scene in indoor_scenes:
+        cfg = load_config(Path(f"configs/2dts/mipnerf360/{scene}.yaml"))
+        assert cfg["dataset"]["image_dir"] == "images_2"
+        assert cfg["dataset"]["resolution"] == 1
+
+    for scene in outdoor_scenes:
+        cfg = load_config(Path(f"configs/2dts/mipnerf360/{scene}.yaml"))
+        assert cfg["dataset"]["image_dir"] == "images_4"
+        assert cfg["dataset"]["resolution"] == 1
+
+
 
 def test_scene_triangle_caps_support_scan_pattern(tmp_path: Path):
     base = tmp_path / "caps.yaml"

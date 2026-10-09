@@ -330,7 +330,7 @@ def readColmapCameras(cam_extrinsics_path: str, cam_intrinsics_path: str, images
         else:
             raise NotImplementedError("Colmap camera model not handled! Only PINHOLE or SIMPLE_PINHOLE cameras supported!")
 
-        image_path = os.path.join(images_folder, extr.name)
+        image_path = os.path.join(images_folder, os.path.basename(extr.name))
         image_name = os.path.basename(image_path).split(".")[0]
 
         cam_info = CameraInfo(

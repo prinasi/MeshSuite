@@ -363,6 +363,32 @@ def test_2dts_disables_native_training_eval_by_default():
     assert cfg.d2ts.native_overrides.trainer.eval_interval_iter == 0
 
 
+def test_2dts_mipnerf360_native_config_uses_aligned_image_dirs():
+    from msbench.trainers.d2ts_native import _build_d2ts_native_config
+
+    bicycle_cfg = Config.fromfile("configs/2dts/mipnerf360/bicycle.yaml")
+    native_bicycle = _build_d2ts_native_config(
+        cfg=bicycle_cfg,
+        dataset_root=bicycle_cfg.dataset.root,
+        output_dir=Path(bicycle_cfg.output.dir),
+        max_steps=bicycle_cfg.trainer.max_steps,
+    )
+    assert native_bicycle.dataset.image_dir == "images_4"
+    assert native_bicycle.dataset.train_target_res == 1
+    assert native_bicycle.dataset.test_target_res == 1
+
+    bonsai_cfg = Config.fromfile("configs/2dts/mipnerf360/bonsai.yaml")
+    native_bonsai = _build_d2ts_native_config(
+        cfg=bonsai_cfg,
+        dataset_root=bonsai_cfg.dataset.root,
+        output_dir=Path(bonsai_cfg.output.dir),
+        max_steps=bonsai_cfg.trainer.max_steps,
+    )
+    assert native_bonsai.dataset.image_dir == "images_2"
+    assert native_bonsai.dataset.train_target_res == 1
+    assert native_bonsai.dataset.test_target_res == 1
+
+
 
 def test_structured_train_cli_max_steps_overrides_config(tmp_path: Path):
     from msbench.cli.train import _train_from_structured_config

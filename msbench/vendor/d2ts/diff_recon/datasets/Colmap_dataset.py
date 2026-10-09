@@ -122,7 +122,8 @@ class ColmapDataset(Dataset):
                 axis=0,
             ) / 255.0
         else:
-            image = image.resize(img_size, Image.Resampling.BILINEAR)
+            if image.size != img_size:
+                image = image.resize(img_size, Image.Resampling.BILINEAR)
             image_array = np.array(image, dtype=np.float32)
             if image_array.ndim == 2:
                 image_array = np.repeat(image_array[..., None], 3, axis=-1)
@@ -196,6 +197,12 @@ class ColmapDatasetFactory(BaseDatasetFactory):
         self._file_handler = self._get_file_handler()
 
         train_cam_infos, test_cam_infos = self.getCameraInfos()
+        fallback_res = getattr(self, "_fallback_target_res", None)
+        if fallback_res is not None:
+            if train_target_res is None or train_target_res == 1:
+                train_target_res = fallback_res
+            if test_target_res is None or test_target_res == 1:
+                test_target_res = fallback_res
         if not hold_test_set:
             train_cam_infos += test_cam_infos
             self._logger.warning(f"hold_test_set not set, will merge test set into train set")
@@ -250,6 +257,16 @@ class ColmapDatasetFactory(BaseDatasetFactory):
         cameras_bin_path = "sparse/0/cameras.bin"
         cameras_txt_path = "sparse/0/cameras.txt"
         images_folder = getattr(self._config, "image_dir", None) or "images"
+        if not fs.hasFile(images_folder) and fs.hasFile("images"):
+            self._logger.warning(
+                f"Configured image_dir '{images_folder}' not found; falling back to 'images'."
+            )
+            if images_folder.startswith("images_"):
+                try:
+                    self._fallback_target_res = int(images_folder.split("_")[-1])
+                except ValueError:
+                    pass
+            images_folder = "images"
 
         if fs.hasFile(images_bin_path):
             images_path = fs.getFilePath(images_bin_path)
