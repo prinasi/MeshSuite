@@ -317,6 +317,11 @@ def _train_from_structured_config(
     if dataset_root is None:
         raise typer.BadParameter("dataset.root is required for training configs.")
 
+    if cfg.get("preprocess"):
+        from msbench.trainers.exmesh_preprocess import prepare_exmesh_initializer
+
+        prepare_exmesh_initializer(cfg, dataset_root=dataset_root)
+
     trainer_cfg = Config(cfg.trainer).to_dict()
     loop_cfg = Config(cfg.get("loop", {})).to_dict()
     configured_max_steps = int(

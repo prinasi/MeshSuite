@@ -1,10 +1,14 @@
 plyfile
+numpy<2
+tensorboard
+torchmetrics
+shapely
 ninja
 cmake
 torch
 torchvision
 trimesh
-open3d
+open3d==0.19.0
 scikit-image
 scikit-learn
 matplotlib

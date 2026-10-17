@@ -24,7 +24,7 @@ classifiers = [
 ]
 dependencies = [
     "torch>=2.0",
-    "numpy",
+    "numpy<2",
     "Pillow",
     "imageio[ffmpeg]",
     "opencv-python",
@@ -37,9 +37,17 @@ dependencies = [
     "pyyaml",
     "rich",
     "tabulate",
+    "tensorboard",
+    "torchmetrics",
+    "shapely",
 ]
 
 [project.optional-dependencies]
+exmesh = [
+    "open3d==0.19.0",
+    "xatlas==0.0.11",
+    "nvdiffrast @ git+https://github.com/NVlabs/nvdiffrast.git@253ac4fcea7de5f396371124af597e6cc957bfae",
+]
 dev = [
     "pytest>=7.0",
     "pytest-cov",
@@ -55,12 +63,14 @@ cuda = [
 msbench = "msbench.cli.main:app"
 
 [project.entry-points."msbench.adapters"]
+exmesh = "msbench.renderers.exmesh_adapter"
 d2ts = "msbench.renderers.d2ts_adapter"
 triangle_splatting = "msbench.renderers.triangle_splatting_adapter"
 mesh_splatting = "msbench.renderers.mesh_splatting_adapter"
 diffsoup = "msbench.renderers.diffsoup_adapter"
 
 [project.entry-points."msbench.training_methods"]
+exmesh = "msbench.trainers.exmesh_method"
 triangle_splatting = "msbench.trainers.triangle_splatting_method"
 diffsoup = "msbench.trainers.diffsoup_native"
 
@@ -73,6 +83,9 @@ exclude = [
 
 [tool.setuptools.exclude-package-data]
 "*" = ["__pycache__/*", "*.py[cod]"]
+
+[tool.setuptools.package-data]
+"msbench.vendor.exmesh" = ["LICENSE.md", "UPSTREAM.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["msbench/tests"]

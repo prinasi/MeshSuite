@@ -1,0 +1,1 @@
+_base_: ../benchmark/nerf_synthetic/lego.yaml

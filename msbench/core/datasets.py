@@ -33,12 +33,19 @@ class DatasetSample:
 def _resolve_resolution(
     width: int,
     height: int,
-    resolution: int = 1,
+    resolution: int | list[int] | tuple[int, int] = 1,
     rounding: str = "round",
 ) -> tuple[int, int]:
     """Match the native 3DGS/triangle-splatting resolution semantics."""
     if rounding not in {"round", "floor"}:
         raise ValueError("resolution rounding must be 'round' or 'floor'")
+    if isinstance(resolution, (list, tuple)):
+        if len(resolution) != 2 or any(
+            not isinstance(value, int) or isinstance(value, bool) or value <= 0
+            for value in resolution
+        ):
+            raise ValueError("Explicit resolution must be [width, height] with positive integers")
+        return tuple(resolution)
     if resolution in {1, 2, 4, 8}:
         if rounding == "floor":
             new_width = width // resolution
@@ -270,12 +277,16 @@ class ColmapDataset(DatasetBase):
         image_dir: str = "images",
         resolution: int = 1,
         resolution_rounding: str = "round",
+        background: str | None = None,
+        use_alpha: bool = False,
     ):
         super().__init__(dataset_path, split)
         self.eval_every = eval_every
         self.image_dir = image_dir
         self.resolution = resolution
         self.resolution_rounding = resolution_rounding
+        self.background = background
+        self.use_alpha = use_alpha
         self._samples = self._load_samples()
 
     def _load_samples(self) -> list[DatasetSample]:
@@ -340,7 +351,8 @@ class ColmapDataset(DatasetBase):
             w2c[:3, :3] = im.qvec2rotmat()
             w2c[:3, 3] = im.tvec
 
-            gt = _load_image(image_path, size=(width, height))
+            bg_color = _background_color(self.background) if self.use_alpha else None
+            gt = _load_image(image_path, size=(width, height), bg_color=bg_color)
             camera = _camera_batch_from_w2c(
                 w2c,
                 K,
@@ -353,7 +365,10 @@ class ColmapDataset(DatasetBase):
                     "split": self.split,
                 },
             )
-            samples.append(DatasetSample(camera=camera, image=gt, name=Path(im.name).stem, image_path=image_path))
+            mask = _load_alpha_mask(image_path, size=(width, height)) if self.use_alpha else None
+            metadata = {"eval_background_color": bg_color} if bg_color is not None else None
+            samples.append(DatasetSample(camera=camera, image=gt, name=Path(im.name).stem,
+                                         image_path=image_path, mask=mask, metadata=metadata))
         return samples
 
     def __len__(self) -> int:
@@ -609,6 +624,8 @@ def load_dataset(
             image_dir=image_dir,
             resolution=resolution,
             resolution_rounding=resolution_rounding,
+            background=background,
+            use_alpha=use_alpha and background is not None,
         )
     if dtype in {"blender", "synthetic", "nerf-synthetic", "nerf_synthetic"}:
         return NerfSyntheticDataset(

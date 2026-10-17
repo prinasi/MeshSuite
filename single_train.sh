@@ -790,7 +790,7 @@ run_train_config() {
         "${dataset}" "${scene}" "${GPU_ID}" "${cmd[*]}" > "${train_log}"
 
     set +e
-    CUDA_VISIBLE_DEVICES="${GPU_ID}" "${cmd[@]}" >> "${train_log}" 2>&1
+    PYTHONUNBUFFERED=1 CUDA_VISIBLE_DEVICES="${GPU_ID}" "${cmd[@]}" >> "${train_log}" 2>&1
     local exit_code=$?
     set -e
 

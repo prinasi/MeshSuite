@@ -1,0 +1,43 @@
+_base_: ../../../base/exmesh.yaml
+dataset:
+  name: nerf_synthetic
+  type: synthetic
+  root: data/nerf_synthetic
+  scene: lego
+  resolution: 1
+  background: white
+  use_alpha: true
+trainer:
+  dataset_type: synthetic
+  eval_split: true
+  white_background: true
+  max_steps: 8000
+  lambda_depth: 0.01
+  lambda_smooth: 1000
+  lambda_deviation: 1000
+  initial_mesh: outputs/exmesh-preprocess/lego/pgsr/model/mesh/tsdf_fusion_post.ply
+  depth_dir: outputs/exmesh-preprocess/lego/da3
+output:
+  dir: outputs/exmesh/benchmark/nerf_synthetic/lego
+  metrics_file: outputs/exmesh/benchmark/nerf_synthetic/lego/metrics.json
+  mesh_file: outputs/exmesh/benchmark/nerf_synthetic/lego/mesh/mesh.ply
+  stats_file: outputs/exmesh/benchmark/nerf_synthetic/lego/stats.json
+  report_file: outputs/exmesh/benchmark/nerf_synthetic/lego/report.md
+adapter:
+  checkpoint: outputs/exmesh/benchmark/nerf_synthetic/lego/ckpt/final.pt
+  render_params:
+    bg_color: white
+mesh:
+  output: outputs/exmesh/benchmark/nerf_synthetic/lego/mesh/mesh.ply
+eval:
+  mesh:
+    dtu_root: null
+    scan_id: null
+    scene_root: null
+inspect:
+  output: outputs/exmesh/benchmark/nerf_synthetic/lego/stats.json
+profile:
+  output: outputs/exmesh/benchmark/nerf_synthetic/lego/profile.json
+render:
+  video:
+    output_dir: outputs/exmesh/benchmark/nerf_synthetic/lego/video

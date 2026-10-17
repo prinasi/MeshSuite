@@ -358,7 +358,14 @@ def _apply_dtu_defaults(config: dict[str, Any]) -> dict[str, Any]:
     if isinstance(adapter_cfg, Mapping):
         adapter = dict(adapter_cfg)
         render_params = dict(adapter.get("render_params", {}) or {})
-        render_params["bg_color"] = "white" if mode == "foreground" else "black"
+        # Full-image evaluation does not imply a black compositing background.
+        # Honour the explicit image/training background instead of overriding
+        # white-background checkpoints during rendering and image evaluation.
+        full_background = dataset.get("background")
+        if full_background not in {"white", "black"}:
+            train_white = isinstance(trainer_cfg, Mapping) and trainer_cfg.get("white_background", False)
+            full_background = "white" if train_white else "black"
+        render_params["bg_color"] = "white" if mode == "foreground" else full_background
         adapter["render_params"] = render_params
         config["adapter"] = adapter
     return config

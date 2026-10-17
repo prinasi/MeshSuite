@@ -831,7 +831,7 @@ def _mesh_export_kwargs(cfg, mesh_cfg: dict, method: str | None = None) -> dict:
         "dataset_path": str(dataset_path),
         "split": str(dataset_cfg.get("split", mesh_cfg.get("split", "train"))),
         "image_dir": str(dataset_cfg.get("image_dir", "images")),
-        "resolution": int(dataset_cfg.get("resolution", 1)),
+        "resolution": dataset_cfg.get("resolution", 1),
         "eval_every": int(dataset_cfg.get("eval_every", 8)),
         "voxel_size": float(mesh_cfg.get("voxel_size", 0.004)),
         "sdf_trunc": float(mesh_cfg.get("sdf_trunc", 0.016)),

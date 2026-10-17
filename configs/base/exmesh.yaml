@@ -1,0 +1,41 @@
+_base_: _base_.yaml
+
+adapter:
+  type: exmesh
+  checkpoint: outputs/{method}/{dataset}/{scene}/ckpt/final.pt
+
+trainer:
+  type: exmesh
+  max_steps: 10000
+  dataset_type: colmap
+  eval_split: false
+  white_background: false
+  seed: 0
+  topology_enabled: true
+  texture_resolution: [2560, 2560]
+  lr_vertices_init: 0.0005
+  feature_lr: 0.0025
+  position_lr_max_steps: 10000
+  lambda_dssim: 0.2
+  lambda_depth: 0.1
+  lambda_silhouette: 0.005
+  lambda_smooth: 3000
+  lambda_deviation: 10000
+  split_from_iter: 1000
+  split_until_iter: 7000
+  densification_interval: 500
+  max_shapes: 200000
+
+loop:
+  log_interval: 100
+  save_interval: 1000
+
+mesh:
+  output: outputs/{method}/{dataset}/{scene}/mesh/mesh.ply
+
+eval:
+  mesh:
+    dtu_root: data/DTU
+    scan_id: 24
+    scene_root: data/DTU/scan24
+    geometry_mode: mesh

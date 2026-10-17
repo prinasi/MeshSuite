@@ -26,6 +26,15 @@ MeshSplatBench provides a single, consistent evaluation framework for comparing 
 | Triangle Splatting           | `TriangleSplattingAdapter` | Config/train/render/eval/profile/export support |
 | MeshSplatting                | `MeshSplattingAdapter`     | Config/train/render/eval/profile/export support |
 | DiffSoup                     | `DiffSoupAdapter`          | Config/train/render/eval/export support; In-shader Micro-MLP support |
+| ExMesh                       | `ExMeshAdapter`            | Native training/render/eval/profile/export; DTU scan24 and synthetic lego measured |
+
+ExMesh setup, its reference and held-out DTU protocols, and checkpoint/UV export
+details are documented in [docs/exmesh.md](docs/exmesh.md), with measured results
+and validation limits in [docs/exmesh_validation.md](docs/exmesh_validation.md).
+The default `./single_train.sh exmesh dtu/scan24 0` (or `dtu/all`) now selects
+the [DTU paper-parameter protocol](docs/exmesh_paper_protocol.md), including automatic
+2DGS initialization and white-background RGBA compositing; its outputs are separate
+from the earlier experiments.
 
 ## Installation
 
@@ -36,6 +45,15 @@ git clone https://github.com/prinasi/MeshSplatBench.git
 cd MeshSplatBench
 conda env create -f environment.yml
 conda activate msbench
+
+# Use this environment's CUDA development toolkit, matching PyTorch cu118.
+export CUDA_HOME="$CONDA_PREFIX"
+export CUDACXX="$CUDA_HOME/bin/nvcc"
+
+# Build for the visible GPU (e.g. RTX 3060: 8.6 / 86).
+export TORCH_CUDA_ARCH_LIST="$(python -c 'import torch; print("%d.%d" % torch.cuda.get_device_capability())')"
+export MSBENCH_CUDA_ARCHS="${TORCH_CUDA_ARCH_LIST/./}"
+python -m pip install -e ".[dev,cuda]" --no-build-isolation
 ```
 
 ### Option 2: Pip Install / Editable Development Install
@@ -51,15 +69,27 @@ cd MeshSplatBench
 To build all bundled CUDA rendering backends (Triangle Splatting, MeshSplatting, 2DTS, Simple-KNN, and DiffSoup):
 
 ```bash
-# Ensure CUDA_HOME points to CUDA 11.8+ (required for Ada Lovelace / sm_89 / RTX 40-series cards)
-export CUDA_HOME=/usr/local/cuda-11.8
-export PATH=$CUDA_HOME/bin:$PATH
+# For PyTorch cu118, install the CUDA 11.8 compiler and development headers.
+# The runtime-only `cudatoolkit` package does not provide nvcc.
+conda install -c nvidia/label/cuda-11.8.0 cuda-nvcc=11.8 cuda-cudart-dev=11.8 cuda-cccl=11.8 cuda-driver-dev=11.8 cuda-nvtx=11.8
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export CUDACXX="$CUDA_HOME/bin/nvcc"
 
-pip install -e ".[dev,cuda]" --no-build-isolation
+export TORCH_CUDA_ARCH_LIST="$(python -c 'import torch; print("%d.%d" % torch.cuda.get_device_capability())')"
+export MSBENCH_CUDA_ARCHS="${TORCH_CUDA_ARCH_LIST/./}"
+
+# --no-build-isolation requires build dependencies to be installed first.
+python -m pip install "setuptools>=68" wheel "nanobind>=2.11.0" "cmake>=3.20" ninja
+python -m pip install -r requirements.txt
+
+python -m pip install -e ".[dev,cuda]" --no-build-isolation
 ```
 
 > **Tip for Multi-CUDA Systems**:
-> If your system default `/usr/bin/nvcc` is an older version (e.g., CUDA 11.5), setting `CUDA_HOME` (or `export CUDACXX=$CUDA_HOME/bin/nvcc`) ensures both PyTorch and CMake (used by DiffSoup) use the matching CUDA 11.8+ compiler.
+> Match the development toolkit to `python -c 'import torch; print(torch.version.cuda)'`; “11.8 or newer” alone is insufficient for PyTorch cu118. Set both `CUDA_HOME` and `CUDACXX` so PyTorch and CMake (used by DiffSoup) use the same compiler. For a system toolkit, replace `CUDA_HOME` with its actual installation directory. Without a visible GPU, set the architecture variables manually (e.g. `8.6` / `86` for RTX 3060, `8.9` / `89` for RTX 4090).
+>
+> To retain these settings across Conda activations, run `conda env config vars set CUDA_HOME="$CUDA_HOME" CUDACXX="$CUDACXX" TORCH_CUDA_ARCH_LIST="$TORCH_CUDA_ARCH_LIST" MSBENCH_CUDA_ARCHS="$MSBENCH_CUDA_ARCHS"`, then reactivate the environment.
 
 #### 2. Fast Python-Only Install (Skip CUDA Compilation)
 If you only need to work on Python code, CLI tools, evaluation scripts, or tests without compiling C++/CUDA extensions:

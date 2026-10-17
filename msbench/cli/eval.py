@@ -267,11 +267,13 @@ def _primitive_count_from_checkpoint(checkpoint, method=None) -> int | None:
             sd = torch.load(cand, map_location="cpu", weights_only=True)
         except Exception:
             try:
-                sd = torch.load(cand, map_location="cpu")
+                sd = torch.load(cand, map_location="cpu", weights_only=False)
             except Exception:
                 continue
         if isinstance(sd, dict) and isinstance(sd.get("state_dict"), dict):
             sd = sd["state_dict"]
+        if isinstance(sd, dict) and sd.get("method") == "exmesh" and isinstance(sd.get("model"), dict):
+            sd = sd["model"]
         if not isinstance(sd, dict):
             continue
         for key in count_keys:

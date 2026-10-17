@@ -56,6 +56,11 @@ def _discover_plugins() -> None:
     _PLUGINS_DISCOVERED = True
 
     try:
+        __import__("msbench.trainers.exmesh_method")
+    except Exception:
+        pass
+
+    try:
         __import__("msbench.trainers.triangle_splatting_method")
     except Exception:
         pass

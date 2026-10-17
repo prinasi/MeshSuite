@@ -8,6 +8,39 @@ import pytest
 import torch
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is required")
+def test_2dts_rasterizer_backward_accepts_expanded_gradients():
+    from msbench.vendor._cmod import d2ts_rasterization as d2ts
+
+    if d2ts._C is None:
+        pytest.skip("2DTS CUDA extension is not built")
+
+    eye = torch.eye(4, device="cuda")
+    settings = d2ts.TriangleRasterizationSettings(
+        image_width=32, image_height=32, tanfovx=1.0, tanfovy=1.0,
+        viewmatrix=eye, projmatrix=eye, campos=torch.zeros(3, device="cuda"),
+        sh_degree=0, gamma=1.0, background_depth=10.0,
+        background=torch.zeros(3, device="cuda"), back_culling=False,
+        rich_info=True, sort_level=0, debug=False,
+    )
+    vertices = torch.tensor(
+        [[[-0.5, -0.5, 1.0], [0.5, -0.5, 1.0], [0.0, 0.5, 1.0]]],
+        device="cuda", requires_grad=True,
+    )
+    features = torch.ones(1, 3, device="cuda", requires_grad=True)
+    opacity = torch.full((1, 1), 0.9, device="cuda", requires_grad=True)
+    image, *_ = d2ts.TriangleRasterizer(settings)(
+        vertices, torch.zeros_like(vertices), opacity, feature=features,
+    )
+
+    assert image.max() > 0
+    # sum() supplies an expanded, zero-stride gradient to the CUDA wrapper.
+    image.sum().backward()
+    for tensor in (vertices, features, opacity):
+        assert tensor.grad is not None
+        assert torch.isfinite(tensor.grad).all()
+
+
 def test_2dts_model_enforce_max_primitives_prunes_optimizer_state():
     pytest.importorskip("cv2")
     pytest.importorskip("scipy")

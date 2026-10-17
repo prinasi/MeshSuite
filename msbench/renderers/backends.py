@@ -91,6 +91,10 @@ def _probe_module(module_name: str) -> ModuleStatus:
 
 
 BACKENDS: dict[str, BackendSpec] = {
+    "exmesh": BackendSpec(
+        name="exmesh", package="msbench.vendor.exmesh",
+        extension_modules=("nvdiffrast.torch", "xatlas"),
+    ),
     "2dts": BackendSpec(
         name="2dts",
         package="msbench.vendor.d2ts.diff_recon",

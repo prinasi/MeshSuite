@@ -1,0 +1,10 @@
+_base_: ../../base/exmesh_paper_dtu.yaml
+dataset:
+  scene: scan65
+trainer:
+  lambda_smooth: 3000
+  lambda_depth: 0.01
+eval:
+  mesh:
+    scan_id: 65
+    scene_root: data/DTU/scan65

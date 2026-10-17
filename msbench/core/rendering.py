@@ -529,7 +529,8 @@ def _transform_poses_pca(
     t_mean = t.mean(axis=0)
     t = t - t_mean
 
-    eigval, eigvec = np.linalg.eig(t.T @ t)
+    # The covariance matrix is symmetric; eigh keeps degenerate paths real.
+    eigval, eigvec = np.linalg.eigh(t.T @ t)
     inds = np.argsort(eigval)[::-1]
     eigvec = eigvec[:, inds]
     rot = eigvec.T
@@ -732,6 +733,13 @@ def render_video(
             arr = tensor_to_uint8(
                 _composite_output_rgb(output, metadata.get("eval_background_color"))
             )
+            # Preserve a nonempty frame when an axis has only one pixel.
+            if arr.shape[0] == 1 or arr.shape[1] == 1:
+                arr = np.pad(
+                    arr,
+                    ((0, int(arr.shape[0] == 1)), (0, int(arr.shape[1] == 1)), (0, 0)),
+                    mode="edge",
+                )
             # Crop trailing odd pixel for H.264 compatibility (libx264 yuv420p requires even dimensions)
             if arr.shape[0] % 2 != 0 or arr.shape[1] % 2 != 0:
                 arr = arr[: arr.shape[0] - (arr.shape[0] % 2), : arr.shape[1] - (arr.shape[1] % 2)]

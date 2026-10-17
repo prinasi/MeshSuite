@@ -58,6 +58,7 @@ def _discover_plugins() -> None:
     _PLUGINS_DISCOVERED = True
 
     for module_name in (
+        "msbench.renderers.exmesh_adapter",
         "msbench.renderers.d2ts_adapter",
         "msbench.renderers.triangle_splatting_adapter",
         "msbench.renderers.mesh_splatting_adapter",

@@ -1,0 +1,9 @@
+_base_: ../../../base/exmesh_benchmark_dtu.yaml
+
+dataset:
+  scene: scan24
+
+eval:
+  mesh:
+    scan_id: 24
+    scene_root: data/DTU/scan24

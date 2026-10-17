@@ -30,6 +30,30 @@ def export():
     """Export trained geometry without starting interactive tools."""
 
 
+@export_app.command("textured-mesh")
+def textured_mesh(
+    config: Optional[Path] = typer.Option(None, "--config"),
+    method: Optional[str] = typer.Option(None, "--method", "-m"),
+    checkpoint: Optional[str] = typer.Option(None, "--checkpoint", "-c"),
+    output: Optional[Path] = typer.Option(None, "--output", "-o"),
+):
+    """Export a method's UV-textured mesh as OBJ, MTL and PNG."""
+    from msbench.core.builder import build_adapter
+    cfg = load_cli_config(config) if config is not None else None
+    if cfg is None and (method is None or checkpoint is None or output is None):
+        raise typer.BadParameter("Use --config, or provide --method, --checkpoint and --output.")
+    if output is None:
+        root = config_output_dir(cfg)
+        if root is None:
+            raise typer.BadParameter("Set output.dir or pass --output.")
+        output = Path(root) / "mesh/mesh.obj"
+    adapter = build_adapter(adapter_config(cfg, method=method, checkpoint=checkpoint))
+    if not hasattr(adapter, "export_textured_mesh"):
+        raise typer.BadParameter(f"{adapter.name} does not expose a UV-textured mesh export.")
+    path = adapter.export_textured_mesh(output)
+    typer.echo(f"Textured mesh saved to {path} (OBJ/MTL/PNG)")
+
+
 @export_app.command("point-cloud")
 def point_cloud(
     method: Optional[str] = typer.Option(None, "--method", "-m", help="Method name"),

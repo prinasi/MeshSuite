@@ -12,6 +12,14 @@ dependencies:
   - pytorch>=2.0.0
   - torchvision
   - pytorch-cuda=11.8
+  # Runtime packages alone do not include the compiler or CUDA headers.
+  - cuda-nvcc=11.8
+  - cuda-cudart-dev=11.8
+  - cuda-cccl=11.8
+  - cuda-driver-dev=11.8
+  - cuda-nvtx=11.8
+  - setuptools>=68
+  - wheel
   - pip:
       - numpy<2.0.0
       - Pillow
@@ -25,10 +33,15 @@ dependencies:
       - pyyaml
       - rich
       - tabulate
+      - tensorboard
+      - torchmetrics
+      - shapely
       - plyfile
-      - open3d
+      - open3d==0.19.0
       - scikit-image
       - scikit-learn
       - matplotlib
+      - mediapy
       - nanobind>=2.11.0
-      - -e .
+      # Install the project after activation as documented in README.md,
+      # so its build uses this environment's PyTorch and CUDA toolkit.
