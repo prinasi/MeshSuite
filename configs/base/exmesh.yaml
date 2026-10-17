@@ -35,7 +35,7 @@ mesh:
 
 eval:
   mesh:
-    dtu_root: data/DTU
+    dtu_root: data/dtu
     scan_id: 24
-    scene_root: data/DTU/scan24
+    scene_root: data/dtu/scan24
     geometry_mode: mesh

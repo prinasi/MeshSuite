@@ -7,4 +7,4 @@ trainer:
 eval:
   mesh:
     scan_id: 83
-    scene_root: data/DTU/scan83
+    scene_root: data/dtu/scan83

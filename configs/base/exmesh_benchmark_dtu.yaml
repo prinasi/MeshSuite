@@ -9,7 +9,7 @@ preprocess:
 dataset:
   name: dtu
   type: dtu
-  root: data/DTU
+  root: data/dtu
   resolution: 2
   eval_split: true
   eval_every: 8

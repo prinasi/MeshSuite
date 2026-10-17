@@ -10,7 +10,7 @@ trainer:
 eval:
   mesh:
     scan_id: 24
-    scene_root: data/DTU/scan24
+    scene_root: data/dtu/scan24
 
 output:
   dir: outputs/exmesh/reproduction/dtu/scan24

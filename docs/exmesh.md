@@ -56,7 +56,7 @@ Prepare the held-out benchmark initializer independently:
 
 ```bash
 python tools/prepare_exmesh_pgsr.py --pgsr-repo ../ExMesh/PGSR \
-  --dataset data/DTU/scan24 --output outputs/exmesh-preprocess/scan24-benchmark --holdout 8
+  --dataset data/dtu/scan24 --output outputs/exmesh-preprocess/scan24-benchmark --holdout 8
 ```
 
 This tool stages COLMAP inputs inside the output directory. PGSR's generated sparse

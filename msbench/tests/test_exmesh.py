@@ -193,7 +193,7 @@ def test_exmesh_configs_have_isolated_outputs():
         assert cfg.mesh.output == root + "/mesh/mesh.ply"
         assert cfg.profile.output == root + "/profile.json"
         method = build_training_method(
-            cfg.trainer, default_args=dict(dataset="data/DTU/scan24", output_dir=root)
+            cfg.trainer, default_args=dict(dataset="data/dtu/scan24", output_dir=root)
         )
         assert method.max_steps == 10000 and method.opt.lambda_depth == 0.1
 
