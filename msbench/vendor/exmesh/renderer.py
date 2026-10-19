@@ -39,7 +39,7 @@ def _compute_vertex_normals(verts: torch.Tensor, faces: torch.Tensor) -> torch.T
     return vn
 
 
-def render(viewpoint_camera, mesh, pipe, bg_color: torch.Tensor, *, context=None):
+def render(viewpoint_camera, mesh, pipe, bg_color: torch.Tensor, *, context=None, mode="train"):
     """
     Rendering with nvdiffrast: use mesh vertices and uvmap texture, output a dictionary compatible with training.
     Mesh should provide: _vertices(N,3), _uvs(N_uv,2), _uv_indices(M,3), _vmapping(N_uv,), _texture(3,Ht,Wt), _faces(M,3).
@@ -111,6 +111,15 @@ def render(viewpoint_camera, mesh, pipe, bg_color: torch.Tensor, *, context=None
         alpha_aa = alpha_aa.squeeze(0).squeeze(-1)
     alpha_aa = alpha_aa.unsqueeze(0)
     render_rgb = rgb * alpha_aa + bg_color.view(3, 1, 1) * (1 - alpha_aa)
+ 
+    if mode == "eval":
+        return {
+            "render": render_rgb,          # (3,H,W)
+            "rend_alpha": alpha_aa,        # (1,H,W)
+            "rend_normal": rend_normal,    # (3,H,W)
+            "rend_depth": phys_depth,      # (1,H,W)
+            "scaling": None,
+        }
 
     # Get per-face constant attribute for pixel triangle ID, and count pixel coverage (image_size)
     M = faces.shape[0]

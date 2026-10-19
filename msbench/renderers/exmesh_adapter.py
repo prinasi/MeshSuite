@@ -84,10 +84,18 @@ class ExMeshAdapter(RendererAdapter):
         cameras = cameras.to(self.device)
         bg = torch.tensor(self._background, device=self.device)
         outputs = []
+        render_mode = "eval" if mode.startswith("eval") else mode
         with torch.set_grad_enabled(mode.startswith("train")):
             for i in range(cameras.batch_size):
                 outputs.append(
-                    render(native_camera(cameras, i), self._model, None, bg, context=self._context)
+                    render(
+                        native_camera(cameras, i),
+                        self._model,
+                        None,
+                        bg,
+                        context=self._context,
+                        mode=render_mode,
+                    )
                 )
 
         def pack(name, kind):
