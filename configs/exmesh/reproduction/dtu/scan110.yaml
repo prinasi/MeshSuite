@@ -1,0 +1,37 @@
+_base_: ../../../base/exmesh_paper_dtu.yaml
+
+dataset:
+  scene: scan110
+
+trainer:
+  lambda_smooth: 1000
+  lambda_depth: 0.01
+
+eval:
+  mesh:
+    scan_id: 110
+    scene_root: data/dtu/scan110
+
+output:
+  dir: outputs/exmesh/reproduction/dtu/scan110
+  metrics_file: outputs/exmesh/reproduction/dtu/scan110/metrics.json
+  mesh_metrics_file: outputs/exmesh/reproduction/dtu/scan110/mesh_metrics.json
+  mesh_file: outputs/exmesh/reproduction/dtu/scan110/mesh/mesh.ply
+  stats_file: outputs/exmesh/reproduction/dtu/scan110/stats.json
+  report_file: outputs/exmesh/reproduction/dtu/scan110/report.md
+
+adapter:
+  checkpoint: outputs/exmesh/reproduction/dtu/scan110/ckpt/final.pt
+
+mesh:
+  output: outputs/exmesh/reproduction/dtu/scan110/mesh/mesh.ply
+
+inspect:
+  output: outputs/exmesh/reproduction/dtu/scan110/stats.json
+
+profile:
+  output: outputs/exmesh/reproduction/dtu/scan110/profile.json
+
+render:
+  video:
+    output_dir: outputs/exmesh/reproduction/dtu/scan110/video

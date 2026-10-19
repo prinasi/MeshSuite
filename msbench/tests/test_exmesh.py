@@ -187,15 +187,17 @@ def test_exmesh_configs_have_isolated_outputs():
     from msbench.core.config import Config
     from msbench.core.builder import build_training_method
 
+    scenes = [24, 37, 40, 55, 63, 65, 69, 83, 97, 105, 106, 110, 114, 118, 122]
     for protocol in ("reproduction", "benchmark"):
-        cfg = Config.fromfile(f"configs/exmesh/{protocol}/dtu/scan24.yaml")
-        root = cfg.output.dir
-        assert cfg.mesh.output == root + "/mesh/mesh.ply"
-        assert cfg.profile.output == root + "/profile.json"
-        method = build_training_method(
-            cfg.trainer, default_args=dict(dataset="data/dtu/scan24", output_dir=root)
-        )
-        assert method.max_steps == 10000 and method.opt.lambda_depth == 0.1
+        outputs = set()
+        for sid in scenes:
+            cfg = Config.fromfile(f"configs/exmesh/{protocol}/dtu/scan{sid}.yaml")
+            root = cfg.output.dir
+            assert cfg.mesh.output == root + "/mesh/mesh.ply"
+            assert cfg.profile.output == root + "/profile.json"
+            assert root.startswith(f"outputs/exmesh/{protocol}/dtu/scan{sid}")
+            outputs.add(root)
+        assert len(outputs) == 15
 
 
 def test_synthetic_pgsr_stage_preserves_cameras_and_excludes_test(tmp_path):
