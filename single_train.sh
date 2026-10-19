@@ -31,6 +31,10 @@ if [[ -n "${PYTHON_BIN:-}" ]]; then
     PYTHON_BIN="${PYTHON_BIN}"
 elif [[ -n "${PYTHON:-}" ]]; then
     PYTHON_BIN="${PYTHON}"
+elif [[ -x "/home/zkx/miniconda3/envs/msbench/bin/python" ]]; then
+    PYTHON_BIN="/home/zkx/miniconda3/envs/msbench/bin/python"
+elif [[ -n "${CONDA_PREFIX:-}" && -x "${CONDA_PREFIX}/bin/python" ]]; then
+    PYTHON_BIN="${CONDA_PREFIX}/bin/python"
 elif command -v python >/dev/null 2>&1; then
     PYTHON_BIN="python"
 else
@@ -204,13 +208,18 @@ normalize_dataset() {
 }
 
 dataset_label() {
-    case "$(normalize_dataset "$1")" in
-        mipnerf360) echo "mipnerf360" ;;
-        tandt) echo "tandt" ;;
-        nerf_synthetic) echo "nerf_synthetic" ;;
-        dtu) echo "dtu" ;;
-        custom) echo "custom" ;;
-        *) echo "$(normalize_dataset "$1")" ;;
+    case "$1" in
+        reproduction/*|benchmark/*) echo "$1" ;;
+        *)
+            case "$(normalize_dataset "$1")" in
+                mipnerf360) echo "mipnerf360" ;;
+                tandt) echo "tandt" ;;
+                nerf_synthetic) echo "nerf_synthetic" ;;
+                dtu) echo "dtu" ;;
+                custom) echo "custom" ;;
+                *) echo "$(normalize_dataset "$1")" ;;
+            esac
+            ;;
     esac
 }
 
@@ -265,6 +274,13 @@ parse_target() {
         return
     fi
 
+    if [[ "${target}" == */*/* ]]; then
+        PARSED_DATASET="${target%/*}"
+        PARSED_SCENE="${target##*/}"
+        PARSED_RAW_TARGET="${target}"
+        return
+    fi
+
     if [[ "${target}" == */* ]]; then
         PARSED_DATASET="$(dataset_label "${target%%/*}")"
         PARSED_SCENE="${target#*/}"
@@ -279,6 +295,10 @@ parse_target() {
 
 scene_config_path() {
     local method="$1" dataset="$2" scene="$3"
+    if [[ -f "${CONFIG_ROOT}/${method}/${dataset}/${scene}.yaml" ]]; then
+        echo "${CONFIG_ROOT}/${method}/${dataset}/${scene}.yaml"
+        return 0
+    fi
     echo "${CONFIG_ROOT}/${method}/$(dataset_label "${dataset}")/${scene}.yaml"
 }
 
@@ -344,7 +364,9 @@ config_with_runtime_overrides() {
         tag="${tag}_${DTU_EVAL_MODE}"
     fi
 
-    output_file="${TEMP_OVERRIDE_CONFIG_DIR}/${METHOD_ID}_$(dataset_label "${dataset}")_${scene}${tag}.yaml"
+    local clean_tag_ds
+    clean_tag_ds="$(dataset_label "${dataset}" | tr '/' '_')"
+    output_file="${TEMP_OVERRIDE_CONFIG_DIR}/${METHOD_ID}_${clean_tag_ds}_${scene}${tag}.yaml"
 
     cat > "${output_file}" <<EOF
 _base_: ${base_abs}
@@ -591,6 +613,13 @@ expand_targets() {
             continue
         fi
 
+        if [[ "${target}" == */dtu/all || "${target}" == */dtu ]]; then
+            local prefix="${target%/all}"
+            prefix="${prefix%/dtu}"
+            for scene in "${DTU_SCENES[@]}"; do EXPANDED_TARGETS+=("${prefix}/dtu/${scene}"); done
+            continue
+        fi
+
         if [[ "${target}" == "dtu" || "${target}" == "dtu/all" || "${target}" == "all_dtu" ]]; then
             for scene in "${DTU_SCENES[@]}"; do EXPANDED_TARGETS+=("dtu/${scene}"); done
             continue
@@ -619,7 +648,8 @@ expand_targets() {
 
 log_prefix() {
     local dataset="$1" scene="$2"
-    echo "$(dataset_label "${dataset}")_${scene}_gpu${GPU_ID}"
+    local clean_ds="${dataset//\//_}"
+    echo "$(dataset_label "${clean_ds}")_${scene}_gpu${GPU_ID}"
 }
 
 # -- Metric readers --------------------------------------------------------

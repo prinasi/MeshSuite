@@ -2,12 +2,21 @@ _base_: ../../../base/exmesh_paper_dtu.yaml
 
 dataset:
   scene: scan97
+  dtu_eval_mode: foreground
+  eval_split: true
+  eval_every: 8
 
 trainer:
   lambda_smooth: 3000
   lambda_depth: 0.01
 
+render:
+  split: test
+  video:
+    output_dir: outputs/exmesh/reproduction/dtu/scan97/video
+
 eval:
+  split: test
   mesh:
     scan_id: 97
     scene_root: data/dtu/scan97
@@ -31,7 +40,3 @@ inspect:
 
 profile:
   output: outputs/exmesh/reproduction/dtu/scan97/profile.json
-
-render:
-  video:
-    output_dir: outputs/exmesh/reproduction/dtu/scan97/video

@@ -125,6 +125,15 @@ def _metric_rgb_for_sample(
     metadata = sample.metadata or getattr(sample.camera, "metadata", None) or {}
     bg_color = metadata.get("eval_background_color")
     pred = _composite_output_rgb(output, bg_color)
+    metrics_mode = str(metadata.get("dtu_eval_mode", "")).lower()
+    if metrics_mode in ("foreground", "fg", "masked") and sample.mask is not None:
+        mask = sample.mask.to(pred.device, dtype=pred.dtype)
+        if mask.dim() == 2:
+            mask = mask.unsqueeze(-1)
+        bg = torch.tensor(bg_color or [0.0, 0.0, 0.0], dtype=pred.dtype, device=pred.device).view(1, 1, 3)
+        pred = (pred * mask + bg * (1.0 - mask)).clamp(0, 1)
+        if target is not None:
+            target = (target * mask + bg * (1.0 - mask)).clamp(0, 1)
     return pred, target
 
 

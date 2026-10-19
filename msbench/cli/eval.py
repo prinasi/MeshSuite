@@ -99,7 +99,9 @@ def evaluate_images(
         )
         split = str(dataset_cfg.get("split", split))
         dataset_kind = str(dataset_cfg.get("type", dataset_cfg.get("dataset_type", ""))).lower()
-        metrics_mode = str(dataset_cfg.get("dtu_eval_mode", "full")) if dataset_kind == "dtu" else None
+        dataset_name = str(dataset_cfg.get("name", "")).lower()
+        is_dtu = dataset_kind == "dtu" or dataset_name == "dtu" or "dtu" in str(dataset_cfg.get("root", "")).lower()
+        metrics_mode = str(dataset_cfg.get("dtu_eval_mode", "full")) if is_dtu else None
         method_label = adapter_cfg.get("type")
         checkpoint_label = adapter_cfg.get("checkpoint")
         dataset_label = dataset_cfg.get("root", dataset_cfg.get("dataset_path"))

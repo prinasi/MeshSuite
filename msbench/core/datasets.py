@@ -279,6 +279,7 @@ class ColmapDataset(DatasetBase):
         resolution_rounding: str = "round",
         background: str | None = None,
         use_alpha: bool = False,
+        dtu_eval_mode: str = "full",
     ):
         super().__init__(dataset_path, split)
         self.eval_every = eval_every
@@ -287,6 +288,7 @@ class ColmapDataset(DatasetBase):
         self.resolution_rounding = resolution_rounding
         self.background = background
         self.use_alpha = use_alpha
+        self.dtu_eval_mode = str(dtu_eval_mode).lower()
         self._samples = self._load_samples()
 
     def _load_samples(self) -> list[DatasetSample]:
@@ -366,7 +368,10 @@ class ColmapDataset(DatasetBase):
                 },
             )
             mask = _load_alpha_mask(image_path, size=(width, height)) if self.use_alpha else None
-            metadata = {"eval_background_color": bg_color} if bg_color is not None else None
+            metadata = {
+                "eval_background_color": bg_color,
+                "dtu_eval_mode": self.dtu_eval_mode,
+            }
             samples.append(DatasetSample(camera=camera, image=gt, name=Path(im.name).stem,
                                          image_path=image_path, mask=mask, metadata=metadata))
         return samples
@@ -626,6 +631,7 @@ def load_dataset(
             resolution_rounding=resolution_rounding,
             background=background,
             use_alpha=use_alpha and background is not None,
+            dtu_eval_mode=dtu_eval_mode,
         )
     if dtype in {"blender", "synthetic", "nerf-synthetic", "nerf_synthetic"}:
         return NerfSyntheticDataset(
