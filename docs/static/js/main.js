@@ -450,7 +450,7 @@ function initCodeTabs() {
 /* -------------------------------------------------------------
  * 4. 3-Way Video Split Slider (Standard -> Dedicated -> Non-Engine)
  * ------------------------------------------------------------- */
-const VIDEO_BASE_URL = 'https://github.com/X-UP-Lab/X-UP-Lab.github.io/releases/download/v1.0-meshsuite-media';
+const VIDEO_BASE_URL = 'https://github.com/prinasi/MeshSuite/releases/download/v1.0-media';
 
 const TRI_VIDEO_DATA = {
   '2dts': {
