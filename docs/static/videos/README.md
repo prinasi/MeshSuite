@@ -1,8 +1,6 @@
 # Video Trajectory Showcase Directory
 
-> **Note**: To keep repository clone size minimal and prevent GitHub Pages build timeouts, online project page demonstration videos are hosted in [MeshSuite GitHub Releases (`v1.0-media`)](https://github.com/prinasi/MeshSuite/releases/tag/v1.0-media).
-
-Place your local exported camera orbit MP4 videos here to test or preview them locally:
+Place your exported camera orbit MP4 videos here to display them automatically on the project page:
 
 - `bicycle.mp4` - Trajectory video for Mip-NeRF 360 Bicycle
 - `garden.mp4` - Trajectory video for Mip-NeRF 360 Garden

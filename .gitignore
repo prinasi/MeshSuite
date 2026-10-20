@@ -76,9 +76,5 @@ debug.txt
 
 # OS files
 .DS_Store
-
-# Video outputs & web assets (videos are hosted via GitHub Releases to keep repo lightweight and avoid Pages build timeout)
+# Local temporary video outputs (keep docs/static/videos for project page)
 /videos/
-*.mp4
-docs/static/videos/*/*.mp4
-!docs/static/videos/README.md
