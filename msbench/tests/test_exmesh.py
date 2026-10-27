@@ -134,12 +134,11 @@ def test_2dgs_staging_resizes_images_and_intrinsics_without_changing_poses(tmp_p
             _resolve_resolution(16, 12, invalid)
 
 
-def test_reproduction_dtu_configs_cover_all_scenes_with_published_parameters():
+def test_exmesh_dtu_configs_use_shared_protocol_with_published_parameters():
     from msbench.core.config import Config
     from msbench.core.builder import build_training_method
-    from msbench.cli.render import _mesh_export_kwargs
+    from msbench.cli.train import inherit_dataset_defaults
 
-    scenes = [24, 37, 40, 55, 63, 65, 69, 83, 97, 105, 106, 110, 114, 118, 122]
     expected_params = {
         24: {"lambda_smooth": 3000, "lambda_depth": 0.1},
         37: {"lambda_smooth": 3000, "lambda_depth": 0.1},
@@ -158,72 +157,38 @@ def test_reproduction_dtu_configs_cover_all_scenes_with_published_parameters():
         122: {"lambda_smooth": 1000, "lambda_depth": 0.03},
     }
     outputs = set()
-    for sid in scenes:
-        cfg = Config.fromfile(f"configs/exmesh/reproduction/dtu/scan{sid}.yaml")
+    for sid, params in expected_params.items():
+        cfg = Config.fromfile(f"configs/exmesh/dtu/scan{sid}.yaml")
+        # Same dataset protocol as every other method in MeshSuite.
+        other = Config.fromfile(f"configs/triangle-splatting/dtu/scan{sid}.yaml")
+        assert cfg.dataset.to_dict() == other.dataset.to_dict()
+        assert cfg.render.split == other.render.split == "test"
+        assert cfg.eval.split == other.eval.split == "test"
+        assert cfg.adapter.render_params.bg_color == other.adapter.render_params.bg_color
+        assert cfg.trainer.white_background == other.trainer.white_background
+
+        trainer = inherit_dataset_defaults(cfg.trainer.to_dict(), cfg.dataset.to_dict())
         method = build_training_method(
-            cfg.trainer, default_args=dict(dataset=cfg.dataset.root, output_dir=cfg.output.dir)
+            trainer, default_args=dict(dataset=cfg.dataset.root, output_dir=cfg.output.dir)
         )
+        # ExMesh paper Sec. 4.1 schedule; per-scene weights from the official run_dtu.py.
         assert method.max_steps == 8000 and method.opt.split_until_iter == 7000
-        assert method.opt.lambda_depth == expected_params[sid]["lambda_depth"]
-        assert method.opt.lambda_smooth == expected_params[sid]["lambda_smooth"]
+        assert method.opt.lambda_depth == params["lambda_depth"]
+        assert method.opt.lambda_smooth == params["lambda_smooth"]
         assert method.opt.lambda_deviation == 10000
         assert method.opt.lr_vertices_init == 0.0005 and method.opt.feature_lr == 0.0025
-        # Paper: 800x600 images and 2DGS init; official repo: black background.
-        assert cfg.dataset.resolution == 2
-        assert method.background == 0 and cfg.dataset.background == "black" and cfg.dataset.use_alpha
-        assert cfg.adapter.render_params.bg_color == "black"
-        # Foreground metrics on held-out views; training and 2DGS never see them.
-        assert cfg.dataset.dtu_eval_mode == "foreground"
-        assert cfg.dataset.eval_split and cfg.dataset.eval_every == 8
-        assert method.eval_split and method.llffhold == 8
-        assert cfg.render.split == cfg.eval.split == "test"
-        assert cfg.preprocess.type == "exmesh_2dgs" and cfg.preprocess.holdout == 8
+        assert method.background == float(cfg.trainer.white_background)
+        assert method.eval_split and method.resolution == cfg.dataset.resolution
+        assert method.llffhold == cfg.dataset.eval_every
+        # 2DGS initialization never sees the held-out views.
+        assert cfg.preprocess.type == "exmesh_2dgs"
+        assert cfg.preprocess.holdout == cfg.dataset.eval_every
         assert str(method.initial_mesh).startswith(cfg.preprocess.output)
-        assert cfg.eval.mesh.scan_id == sid
-        assert cfg.output.dir == f"outputs/exmesh/reproduction/dtu/scan{sid}"
-        assert cfg.mesh.output.startswith(cfg.output.dir)
-        assert cfg.adapter.checkpoint.startswith(cfg.output.dir)
-        assert cfg.render.video.output_dir.startswith(cfg.output.dir + "/")
-        assert cfg.preprocess.output != cfg.output.dir
-        assert _mesh_export_kwargs(cfg, {}, "exmesh")["resolution"] == 2
+        assert cfg.output.dir == other.output.dir.replace("triangle-splatting", "exmesh")
+        assert cfg.mesh.output == cfg.output.mesh_file == cfg.output.dir + "/mesh/mesh.ply"
+        assert cfg.adapter.checkpoint == cfg.output.dir + "/ckpt/final.pt"
         outputs.add(cfg.output.dir)
     assert len(outputs) == 15
-
-
-def test_benchmark_dtu_configs_follow_shared_protocol():
-    from msbench.core.config import Config
-    from msbench.core.builder import build_training_method
-
-    for sid in [24, 37, 40, 55, 63, 65, 69, 83, 97, 105, 106, 110, 114, 118, 122]:
-        cfg = Config.fromfile(f"configs/exmesh/benchmark/dtu/scan{sid}.yaml")
-        method = build_training_method(
-            cfg.trainer, default_args=dict(dataset=cfg.dataset.root, output_dir=cfg.output.dir)
-        )
-        assert method.max_steps == 8000
-        assert cfg.dataset.resolution == 2
-        assert cfg.dataset.dtu_eval_mode == "foreground"
-        assert method.background == 1 and cfg.dataset.background == "white"
-        assert cfg.adapter.render_params.bg_color == "white"
-        assert cfg.dataset.eval_split and cfg.dataset.eval_every == 8 and method.eval_split
-        assert cfg.render.split == cfg.eval.split == "test"
-        assert cfg.preprocess.type == "exmesh_2dgs" and cfg.preprocess.holdout == 8
-
-
-def test_exmesh_configs_have_isolated_outputs():
-    from msbench.core.config import Config
-    from msbench.core.builder import build_training_method
-
-    scenes = [24, 37, 40, 55, 63, 65, 69, 83, 97, 105, 106, 110, 114, 118, 122]
-    for protocol in ("reproduction", "benchmark"):
-        outputs = set()
-        for sid in scenes:
-            cfg = Config.fromfile(f"configs/exmesh/{protocol}/dtu/scan{sid}.yaml")
-            root = cfg.output.dir
-            assert cfg.mesh.output == root + "/mesh/mesh.ply"
-            assert cfg.profile.output == root + "/profile.json"
-            assert root.startswith(f"outputs/exmesh/{protocol}/dtu/scan{sid}")
-            outputs.add(root)
-        assert len(outputs) == 15
 
 
 def test_synthetic_pgsr_stage_preserves_cameras_and_excludes_test(tmp_path):
@@ -275,15 +240,19 @@ def test_synthetic_pgsr_stage_preserves_cameras_and_excludes_test(tmp_path):
     from msbench.core.config import Config
     from msbench.core.builder import build_training_method
 
-    cfg = Config.fromfile("configs/exmesh/benchmark/nerf_synthetic/lego.yaml")
+    from msbench.cli.train import inherit_dataset_defaults
+
+    cfg = Config.fromfile("configs/exmesh/nerf_synthetic/lego.yaml")
+    assert cfg.dataset.background == "white" and cfg.trainer.white_background
+    trainer = inherit_dataset_defaults(cfg.trainer.to_dict(), cfg.dataset.to_dict())
     method = build_training_method(
-        cfg.trainer, default_args=dict(dataset=str(source), output_dir=str(target))
+        trainer, default_args=dict(dataset=str(source), output_dir=str(target))
     )
     assert method.dataset_type == "synthetic" and method.eval_split
     assert method.max_steps == 8000 and method.opt.lambda_depth == 0.01
     assert method.opt.lambda_smooth == method.opt.lambda_deviation == 1000
     assert cfg.mesh.output.startswith(cfg.output.dir)
-    assert cfg.eval.mesh.dtu_root is None
+    assert cfg.output.dir == "outputs/exmesh/nerf_synthetic/lego"
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="ExMesh requires real CUDA")
@@ -454,7 +423,7 @@ def test_2dgs_initializer_holds_out_test_views_with_official_dtu_defaults(tmp_pa
     monkeypatch.setattr(pp.subprocess, "check_output", lambda *a, **k: pp.TWO_DGS_REVISION)
     monkeypatch.setattr(pp, "stage_colmap", lambda *a, **k: {"views": []})
     monkeypatch.setattr(pp, "_record_effective_arguments", capture)
-    cfg = load_config("configs/exmesh/benchmark/dtu/scan24.yaml")
+    cfg = load_config("configs/exmesh/dtu/scan24.yaml")
     cfg["preprocess"].update(source_repo=str(tmp_path), output=str(tmp_path / "out"))
 
     with pytest.raises(Captured) as captured:

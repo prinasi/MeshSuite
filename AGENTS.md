@@ -57,31 +57,29 @@
   - `config`: 配置文件新增或优化
 - **示例**：
   - `fix(exmesh): align dtu paper config with black background and pgsr init`
-  - `config(exmesh): add dual benchmark and reproduction dtu configs`
+  - `config(exmesh): inherit the shared DTU dataset protocol`
   - `test(exmesh): update published paper hyperparameter assertions`
 
 ---
 
-## 4. DTU 数据集与算法配置协议规范
+## 4. 数据集与方法配置协议规范
 
-在 MeshSuite 中，DTU 数据集的处理严格划分为两个不同版本，Agent 在创建或修改配置时必须严格遵循：
+MeshSuite 中所有方法在同一数据集上使用**同一套数据集配置**，以保证横向对比公平。Agent 在创建或修改配置时必须严格遵循：
 
-1. **论文官方复现版（Reproduction Version）**：
-   - **定位**：沿用方法论文的训练设置（论文未说明之处沿用官方实现，如 ExMesh 官方 DTU 脚本使用黑色背景），但在留出视点上评测前景指标。
-   - **核心属性**：
-     - 背景模式：`dtu_eval_mode: foreground`，`background: black`，`white_background: false`（显式的 `dataset.background` 优先于前景模式默认的白色背景）。
-     - 分辨率：`resolution: 2`（论文 Sec. 4.2：降采样至 800×600）。
-     - 初始化：论文 Sec. 4.1 的 2DGS 7k iters + 256³ TSDF 粗网格（`preprocess.type: exmesh_2dgs`），2DGS 使用相同留出划分（`preprocess.holdout: 8`），不接触测试视点。
-     - 迭代次数：8k（论文 Sec. 4.1：1k 预热、1k–7k 拓扑更新、最后 1k 冻结拓扑）。
-     - 优先级：论文明确给出的设置优先于官方仓库默认值；论文未说明的细节（黑色背景、逐场景 lambda、学习率调度）沿用官方仓库。
-     - 视点划分：留出评估模式（`dataset.eval_split: true`，`eval_every: 8`，`trainer.eval_split: true`，`render.split: test`，`eval.split: test`）。注意 `trainer.eval_split` 不会从 `dataset` 继承，必须显式设置。
-   - **配置路径**：`configs/base/exmesh_paper_dtu.yaml`、`configs/exmesh/reproduction/dtu/scan*.yaml`（`single_train.sh exmesh dtu/<scene>` 默认指向此版本）。
+1. **数据集协议只来自共享数据集基础配置**：
+   - 每个场景配置按 `configs/<method>/<dataset>/<scene>.yaml` 组织，并依次继承 `configs/base/<dataset>.yaml`（数据集协议）与 `configs/base/<method>.yaml`（方法默认值），必要时再加 `configs/base/<method>-<dataset>.yaml`（方法在该数据集上的专属流程）。
+   - 方法基础配置（`configs/base/<method>.yaml`、`<method>-<dataset>.yaml`）**禁止**设置数据集协议字段：分辨率、`image_dir`、背景、`dtu_eval_mode`、`eval_split`/`eval_every`、`render.split`/`eval.split`。
+   - 场景配置中的数据集字段（如 Mip-NeRF 360 每个场景的 `image_dir`/`resolution`）在所有方法间必须一致。
+   - `configs/base/<dataset>.yaml` 只放数据集协议，不放某个方法的训练超参数（例如 Triangle Splatting / MeshSplatting 的 DTU 训练参数位于 `configs/base/splatting-dtu.yaml`）。
+   - 方法基础配置（`configs/base/<method>.yaml`）不继承 `_base_.yaml`，否则会以全局默认值覆盖数据集协议。
 
-2. **标准基准评测版（Benchmark Version）**：
-   - **定位**：MeshSplatBench 统一横向对比评测协议（与其他方法如 2DTS、Triangle-Splatting 等在同一基准线上对比）。
-   - **核心属性**：
-     - 背景模式：`dtu_eval_mode: foreground`，`background: white`，`white_background: true`。
-     - 分辨率：`resolution: 2`（2 倍降采样）。
-     - 视点划分：留出评估模式（`eval_split: true`，`eval_every: 8`）。
-     - 初始化：基准预处理网格（如 2DGS 降采样提取的 mesh）。
-   - **配置路径**：`configs/base/exmesh_benchmark_dtu.yaml`、`configs/exmesh/benchmark/dtu/scan*.yaml`。
+2. **DTU 统一协议**（`configs/base/dtu.yaml`）：
+   - `dtu_eval_mode: foreground`，前景模式下训练与渲染使用白色背景。
+   - `resolution: 2`（2 倍降采样）。
+   - 留出评估：`eval_split: true`，`eval_every: 8`，`render.split: test`，`eval.split: test`。
+   - 训练器的 `eval_split`、`resolution`、`dtu_eval_mode` 由 `msbench.cli.train.inherit_dataset_defaults` 从 `dataset` 继承；方法基础配置不要显式设置这些字段。
+   - 任何初始化/预处理（如粗网格）必须使用相同的留出划分，不得接触测试视点。
+
+3. **方法专属超参数**：迭代次数、损失权重、初始化方式等按方法论文设置；论文明确给出的设置优先于官方仓库默认值，论文未说明的细节沿用官方仓库。
+   - 例：ExMesh（`configs/base/exmesh.yaml`、`configs/base/exmesh-dtu.yaml`、`configs/exmesh/dtu/scan*.yaml`）：8k 迭代（论文 Sec. 4.1）、2DGS 7k iters + 256³ TSDF 初始化（论文 Sec. 4.1，`preprocess.holdout: 8`），逐场景 `lambda_smooth`/`lambda_depth` 与学习率调度沿用官方 `scripts/run_dtu.py` 与默认参数。
+   - 测试 `msbench/tests/test_exmesh.py` 断言 ExMesh 的 DTU 数据集配置与其他方法完全一致；新增方法时应添加同类断言。

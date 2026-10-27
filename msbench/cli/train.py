@@ -9,6 +9,7 @@ scheduling are consistent across backends.
 from __future__ import annotations
 
 import time
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Optional
 
@@ -59,6 +60,16 @@ def _coerce_value(value: str) -> object:
         return float(value)
     except ValueError:
         return value
+
+
+def inherit_dataset_defaults(trainer_cfg: dict, dataset_cfg: Mapping) -> dict:
+    """Fill dataset-protocol trainer options (split, resolution, ...) not set by the method."""
+    if "image_dir" in dataset_cfg and "images" not in trainer_cfg:
+        trainer_cfg["images"] = dataset_cfg["image_dir"]
+    for key in ("resolution", "eval_split", "llffhold", "dtu_eval_mode"):
+        if key in dataset_cfg and key not in trainer_cfg:
+            trainer_cfg[key] = dataset_cfg[key]
+    return trainer_cfg
 
 
 def _preserve_dtu_background_defaults(dataset_root: str | Path, trainer_cfg: dict) -> None:
@@ -330,11 +341,7 @@ def _train_from_structured_config(
     max_steps = int(max_steps_override) if max_steps_override is not None else configured_max_steps
     loop_cfg["max_steps"] = max_steps
 
-    if "image_dir" in dataset_cfg and "images" not in trainer_cfg:
-        trainer_cfg["images"] = dataset_cfg["image_dir"]
-    for key in ("resolution", "eval_split", "llffhold", "dtu_eval_mode"):
-        if key in dataset_cfg and key not in trainer_cfg:
-            trainer_cfg[key] = dataset_cfg[key]
+    inherit_dataset_defaults(trainer_cfg, dataset_cfg)
 
     method_name = str(trainer_cfg.get("type", trainer_cfg.get("name", ""))).replace("_", "-")
     _preserve_dtu_background_defaults(dataset_root, trainer_cfg)

@@ -196,7 +196,7 @@ canonical_method() {
 normalize_dataset() {
     local name
     name="$(lower "$1")"
-    name="${name##*/}"  # reproduction/dtu -> dtu
+    name="${name##*/}"  # nested target, e.g. ablation/dtu -> dtu
     name="${name//_/-}"
     case "${name}" in
         mipnerf360|mipnerf-360|m360|360|nerf360) echo "mipnerf360" ;;
@@ -210,7 +210,7 @@ normalize_dataset() {
 
 dataset_label() {
     case "$1" in
-        */*) echo "$1" ;;  # protocol-prefixed, e.g. reproduction/dtu
+        */*) echo "$1" ;;  # nested target, e.g. ablation/dtu
         *)
             case "$(normalize_dataset "$1")" in
                 mipnerf360) echo "mipnerf360" ;;
@@ -300,15 +300,7 @@ scene_config_path() {
         echo "${CONFIG_ROOT}/${method}/${dataset}/${scene}.yaml"
         return 0
     fi
-    local label
-    label="$(dataset_label "${dataset}")"
-    # Methods with protocol subdirectories (e.g. ExMesh) default to reproduction/.
-    if [[ ! -f "${CONFIG_ROOT}/${method}/${label}/${scene}.yaml" \
-          && -f "${CONFIG_ROOT}/${method}/reproduction/${label}/${scene}.yaml" ]]; then
-        echo "${CONFIG_ROOT}/${method}/reproduction/${label}/${scene}.yaml"
-        return 0
-    fi
-    echo "${CONFIG_ROOT}/${method}/${label}/${scene}.yaml"
+    echo "${CONFIG_ROOT}/${method}/$(dataset_label "${dataset}")/${scene}.yaml"
 }
 
 TEMP_OVERRIDE_CONFIG_DIR=""

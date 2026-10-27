@@ -1,4 +1,5 @@
-_base_: _base_.yaml
+# ExMesh method defaults. Dataset protocol (resolution, background, splits) comes
+# from the shared dataset bases, e.g. configs/base/dtu.yaml.
 
 adapter:
   type: exmesh
@@ -9,9 +10,6 @@ trainer:
   # Paper Sec. 4.1: 1k warm-up, topology updates over 1k-7k, last 1k frozen (8k total).
   # The official repo defaults to 10k; position_lr_max_steps keeps its 10k LR schedule.
   max_steps: 8000
-  dataset_type: colmap
-  eval_split: false
-  white_background: false
   seed: 0
   topology_enabled: true
   texture_resolution: [2560, 2560]
@@ -32,12 +30,12 @@ loop:
   log_interval: 100
   save_interval: 1000
 
+# ExMesh trains the mesh directly and exports it at the end of training.
 mesh:
   output: outputs/{method}/{dataset}/{scene}/mesh/mesh.ply
+output:
+  mesh_file: outputs/{method}/{dataset}/{scene}/mesh/mesh.ply
 
 eval:
   mesh:
-    dtu_root: data/dtu
-    scan_id: 24
-    scene_root: data/dtu/scan24
     geometry_mode: mesh

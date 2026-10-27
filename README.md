@@ -26,34 +26,28 @@ MeshSplatBench provides a single, consistent evaluation framework for comparing 
 | Triangle Splatting           | `TriangleSplattingAdapter` | Config/train/render/eval/profile/export support |
 | MeshSplatting                | `MeshSplattingAdapter`     | Config/train/render/eval/profile/export support |
 | DiffSoup                     | `DiffSoupAdapter`          | Config/train/render/eval/export support; In-shader Micro-MLP support |
-| ExMesh                       | `ExMeshAdapter`            | Native training/render/eval/profile/export; reproduction and benchmark DTU protocols |
+| ExMesh                       | `ExMeshAdapter`            | Native training/render/eval/profile/export; DTU and NeRF-Synthetic configs |
 
-### ExMesh DTU protocols
+### ExMesh
 
-ExMesh has two DTU config sets. Both score foreground metrics on the same
-held-out views (every 8th image), and both write to separate output trees:
-
-| Protocol | Configs | Background | Resolution | Initial mesh |
-| -------- | ------- | ---------- | ---------- | ------------ |
-| Reproduction (ExMesh paper setup) | `configs/exmesh/reproduction/dtu/` | black | 1/2 (paper: 800×600) | 2DGS, 7k iters, 256³ TSDF |
-| Benchmark (shared MeshSplatBench protocol) | `configs/exmesh/benchmark/dtu/` | white | 1/2 | 2DGS, 7k iters, 256³ TSDF |
+ExMesh uses the same dataset configs as every other method (e.g. DTU from
+`configs/base/dtu.yaml`: foreground evaluation on white, 1/2 resolution, every 8th
+view held out), so its results are directly comparable:
 
 ```bash
-bash single_train.sh exmesh dtu/scan24 0                # reproduction (default)
-bash single_train.sh exmesh reproduction/dtu/all 0
-bash single_train.sh exmesh benchmark/dtu/all 0
+bash single_train.sh exmesh dtu/all 0
+bash single_train.sh exmesh nerf_synthetic/lego 0
 ```
 
-The reproduction set follows the ExMesh paper (8k iterations, 2DGS initialization,
-800×600 images). Details the paper leaves open (black background, per-scene
-`lambda_smooth`/`lambda_depth`, LR schedule) come from the official ExMesh repo.
-Both sets train ExMesh and its 2DGS initialization only on the training views, so
-test metrics are truly held out. The coarse initial mesh is built automatically
-before training and cached under `outputs/exmesh-preprocess/`. The pinned 2DGS
-source is cloned to `outputs/exmesh-preprocess/2dgs_source` on first use; its
-`diff_surfel_rasterization` extension must be installed. ExMesh also reads monocular depth priors
-from `data/dtu/<scan>/mono_priors/da3/` and needs the `exmesh` extra
-(`pip install -e ".[exmesh]"`).
+Its method settings follow the ExMesh paper: 8k iterations and a coarse initial
+mesh from 2DGS (7k iterations, TSDF at 256³). Settings the paper leaves open
+(per-scene `lambda_smooth`/`lambda_depth`, LR schedule) come from the official
+ExMesh repo. On DTU the 2DGS initialization is built automatically before training,
+on the training views only, and cached under `outputs/exmesh-preprocess/`. The
+pinned 2DGS source is cloned to `outputs/exmesh-preprocess/2dgs_source` on first
+use, and its `diff_surfel_rasterization` extension must be installed. ExMesh also
+reads monocular depth priors from `data/dtu/<scan>/mono_priors/da3/` and needs the
+`exmesh` extra (`pip install -e ".[exmesh]"`).
 
 ## Installation
 
@@ -551,9 +545,8 @@ configs/2dts/
 ├── native/dtu.yaml
 └── tandt/truck.yaml
 configs/exmesh/
-├── reproduction/dtu/scan24.yaml   # official ExMesh setup, held-out views
-├── benchmark/dtu/scan24.yaml      # shared MeshSplatBench protocol
-└── benchmark/nerf_synthetic/lego.yaml
+├── dtu/scan24.yaml
+└── nerf_synthetic/lego.yaml
 ```
 
 For example, `configs/triangle-splatting/mipnerf360/bicycle.yaml` inherits the
@@ -602,7 +595,7 @@ bash single_train.sh 2dts dtu/all 0
 Use `all` as the target to run all built-in datasets in one pass.
 
 > **DTU Evaluation Modes**:
-> DTU training and evaluation defaults to masked foreground evaluation composited on a white background (`--dtu-foreground` or alias `--dtu-masked`). A config that sets `dataset.background` explicitly keeps that background in foreground mode; the ExMesh reproduction configs use this to train on black. To train and evaluate on unmasked full images with natural backgrounds (Mode A), pass `--dtu-full` or alias `--dtu-unmasked`:
+> DTU training and evaluation defaults to masked foreground evaluation composited on a white background (`--dtu-foreground` or alias `--dtu-masked`). A config that sets `dataset.background` explicitly keeps that background in foreground mode. To train and evaluate on unmasked full images with natural backgrounds (Mode A), pass `--dtu-full` or alias `--dtu-unmasked`:
 > ```bash
 > # Unmasked full-image evaluation (Mode A)
 > bash single_train.sh triangle-splatting dtu/all 0 --dtu-unmasked
@@ -676,7 +669,7 @@ The `adapter.checkpoint` template in each method base config points at `ckpt/`:
 | Triangle Splatting | `outputs/{method}/{dataset}/{scene}/ckpt/point_cloud/iteration_{max_steps}` |
 | MeshSplatting      | `outputs/{method}/{dataset}/{scene}/ckpt/point_cloud/iteration_{max_steps}` |
 | DiffSoup           | `outputs/{method}/{dataset}/{scene}/ckpt/final_params.pt`     |
-| ExMesh             | `outputs/{method}/{dataset}/{scene}/ckpt/final.pt` (DTU: `outputs/exmesh/{reproduction,benchmark}/dtu/{scene}/ckpt/final.pt`) |
+| ExMesh             | `outputs/{method}/{dataset}/{scene}/ckpt/final.pt`             |
 
 
 ## Project Structure
