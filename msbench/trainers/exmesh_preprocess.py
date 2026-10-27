@@ -167,7 +167,8 @@ def prepare_2dgs(config, *, dataset_root):
         raise ValueError("ExMesh initialization, training and evaluation backgrounds must agree")
     if importlib.util.find_spec("diff_surfel_rasterization") is None:
         raise ImportError(
-            "2DGS preprocessing requires the official diff_surfel_rasterization extension; see docs/exmesh.md"
+            "2DGS preprocessing requires the official diff_surfel_rasterization extension; "
+            "see 'ExMesh DTU protocols' in README.md"
         )
     output = Path(options["output"]).resolve()
     source = Path(options["source_repo"]).resolve()

@@ -26,15 +26,34 @@ MeshSplatBench provides a single, consistent evaluation framework for comparing 
 | Triangle Splatting           | `TriangleSplattingAdapter` | Config/train/render/eval/profile/export support |
 | MeshSplatting                | `MeshSplattingAdapter`     | Config/train/render/eval/profile/export support |
 | DiffSoup                     | `DiffSoupAdapter`          | Config/train/render/eval/export support; In-shader Micro-MLP support |
-| ExMesh                       | `ExMeshAdapter`            | Native training/render/eval/profile/export; DTU scan24 and synthetic lego measured |
+| ExMesh                       | `ExMeshAdapter`            | Native training/render/eval/profile/export; reproduction and benchmark DTU protocols |
 
-ExMesh setup, its reference and held-out DTU protocols, and checkpoint/UV export
-details are documented in [docs/exmesh.md](docs/exmesh.md), with measured results
-and validation limits in [docs/exmesh_validation.md](docs/exmesh_validation.md).
-The default `./single_train.sh exmesh dtu/scan24 0` (or `dtu/all`) now selects
-the [DTU paper-parameter protocol](docs/exmesh_paper_protocol.md), including automatic
-2DGS initialization and white-background RGBA compositing; its outputs are separate
-from the earlier experiments.
+### ExMesh DTU protocols
+
+ExMesh has two DTU config sets. Both score foreground metrics on the same
+held-out views (every 8th image), and both write to separate output trees:
+
+| Protocol | Configs | Background | Resolution | Initial mesh |
+| -------- | ------- | ---------- | ---------- | ------------ |
+| Reproduction (official ExMesh setup) | `configs/exmesh/reproduction/dtu/` | black | full (1554×1162) | PGSR, 5000 iters |
+| Benchmark (shared MeshSplatBench protocol) | `configs/exmesh/benchmark/dtu/` | white | 1/2 | 2DGS |
+
+```bash
+bash single_train.sh exmesh dtu/scan24 0                # reproduction (default)
+bash single_train.sh exmesh reproduction/dtu/all 0
+bash single_train.sh exmesh benchmark/dtu/all 0
+```
+
+The reproduction set follows the official ExMesh DTU script (black background,
+per-scene `lambda_smooth`/`lambda_depth`), but trains and initializes PGSR only on
+the training views so test metrics are truly held out. The coarse initial mesh is
+built automatically before training and cached under `outputs/exmesh-preprocess/`;
+this needs the official PGSR source (place it at
+`outputs/exmesh-preprocess/pgsr_source`) or, for the benchmark, the 2DGS source at
+`outputs/exmesh-preprocess/2dgs_source` with its `diff_surfel_rasterization`
+extension installed. ExMesh also reads monocular depth priors
+from `data/dtu/<scan>/mono_priors/da3/` and needs the `exmesh` extra
+(`pip install -e ".[exmesh]"`).
 
 ## Installation
 
@@ -134,7 +153,22 @@ ln -s /path/to/tandt data/tandt
 ln -s /path/to/DTU data/dtu
 ```
 
-Detailed directory trees, download links, and COLMAP structures are documented in [data/README.md](data/README.md).
+Each scene directory is expected to look like this:
+
+```text
+data/
+├── mipnerf360/<scene>/       images/ (images_2, images_4, ...), sparse/0/
+├── nerf_synthetic/<scene>/   train/, test/, transforms_{train,test}.json
+├── tandt/<scene>/            images/, sparse/0/
+└── dtu/
+    ├── ObsMask/, Points/stl/ # official DTU evaluation data (Chamfer distance)
+    └── scan<id>/             images/, mask/, sparse/0/, cameras.npz
+                              # ExMesh also needs mono_priors/da3/
+```
+
+The 15 DTU evaluation scans are 24, 37, 40, 55, 63, 65, 69, 83, 97, 105, 106, 110,
+114, 118, and 122. Config paths are lowercase (`data/dtu`), so the symlink name
+must match on case-sensitive file systems.
 
 ## Quick Start
 
@@ -383,20 +417,13 @@ appearance are rejected instead of producing misleading numbers.
 
 ### MeshSplatting topology ablation
 
-To isolate the value of MeshSplatting's shared-vertex topology, use:
-
-```bash
-./single_mesh_topology_unity_eval.sh mipnerf360/all 0 \
-  --unity "$UNITY" \
-  --unity-project unity
-```
-
-This runs `mesh-splatting` with three deployment layouts:
+To isolate the value of MeshSplatting's shared-vertex topology, run
+`single_unity_eval.sh` for `mesh-splatting` with three deployment layouts
+(commands below):
 
 - `mesh`: preserves the exported indexed mesh and renders it through a real
-  Unity `MeshFilter`/`MeshRenderer` with `Mesh.SetIndices`.  For
-  MeshSplatting, `single_mesh_topology_unity_eval.sh` enables
-  `--indexed-mesh-method-aware`, so the Unity indexed mesh path still evaluates
+  Unity `MeshFilter`/`MeshRenderer` with `Mesh.SetIndices`. Pass
+  `--indexed-mesh-method-aware` so the Unity indexed mesh path still evaluates
   the learned SH appearance instead of falling back to the older DC-only
   vertex-color baseline.
 - `shader-soup`: loads the same indexed `.triasset`, but uses the procedural
@@ -523,19 +550,28 @@ configs/2dts/
 ├── mipnerf360/bicycle.yaml
 ├── native/dtu.yaml
 └── tandt/truck.yaml
+configs/exmesh/
+├── reproduction/dtu/scan24.yaml   # official ExMesh setup, held-out views
+├── benchmark/dtu/scan24.yaml      # shared MeshSplatBench protocol
+└── benchmark/nerf_synthetic/lego.yaml
 ```
 
 For example, `configs/triangle-splatting/mipnerf360/bicycle.yaml` inherits the
 MipNeRF360 dataset defaults plus Triangle Splatting defaults, then only sets the
-scene and scene-specific training options:
+scene and scene-specific options:
 
 ```yaml
 _base_:
   - ../../base/mipnerf360.yaml
   - ../../base/triangle-splatting.yaml
 
+experiment:
+  name: triangle_splatting_bicycle
+
 dataset:
   scene: bicycle
+  image_dir: images_4
+  resolution: 1
 
 trainer:
   outdoor: true
@@ -566,7 +602,7 @@ bash single_train.sh 2dts dtu/all 0
 Use `all` as the target to run all built-in datasets in one pass.
 
 > **DTU Evaluation Modes**:
-> DTU training and evaluation defaults to masked foreground evaluation composited on a white background (`--dtu-foreground` or alias `--dtu-masked`). To train and evaluate on unmasked full images with natural backgrounds (Mode A), pass `--dtu-full` or alias `--dtu-unmasked`:
+> DTU training and evaluation defaults to masked foreground evaluation composited on a white background (`--dtu-foreground` or alias `--dtu-masked`). A config that sets `dataset.background` explicitly keeps that background in foreground mode; the ExMesh reproduction configs use this to train on black. To train and evaluate on unmasked full images with natural backgrounds (Mode A), pass `--dtu-full` or alias `--dtu-unmasked`:
 > ```bash
 > # Unmasked full-image evaluation (Mode A)
 > bash single_train.sh triangle-splatting dtu/all 0 --dtu-unmasked
@@ -640,6 +676,7 @@ The `adapter.checkpoint` template in each method base config points at `ckpt/`:
 | Triangle Splatting | `outputs/{method}/{dataset}/{scene}/ckpt/point_cloud/iteration_{max_steps}` |
 | MeshSplatting      | `outputs/{method}/{dataset}/{scene}/ckpt/point_cloud/iteration_{max_steps}` |
 | DiffSoup           | `outputs/{method}/{dataset}/{scene}/ckpt/final_params.pt`     |
+| ExMesh             | `outputs/{method}/{dataset}/{scene}/ckpt/final.pt` (DTU: `outputs/exmesh/{reproduction,benchmark}/dtu/{scene}/ckpt/final.pt`) |
 
 
 ## Project Structure
@@ -648,16 +685,17 @@ The `adapter.checkpoint` template in each method base config points at `ckpt/`:
 ```
 MeshSplatBench/
 ├── msbench/
-│   ├── core/           # Cameras, stats, profiling, registry, config
+│   ├── core/           # Config, datasets, cameras, metrics, mesh eval, profiling, viewer
 │   ├── primitives/     # Triangle primitive types (independent, mesh, convex)
 │   ├── renderers/      # Adapter wrappers for each method
-│   ├── trainers/       # Training loop, losses, hooks
-│   ├── metrics/        # PSNR, SSIM, LPIPS, geometry metrics
-│   ├── datasets/       # Scene dataset loaders
+│   ├── trainers/       # Training loop, per-method trainers, losses, hooks
 │   ├── cli/            # Typer-based CLI commands
-│   └── utils/          # Logging, timing, visualization helpers
-├── configs/            # YAML experiment configs
-├── tests/              # pytest test suite
+│   ├── vendor/         # Bundled upstream method code and CUDA extensions
+│   └── tests/          # pytest test suite
+├── configs/            # YAML experiment configs (base/ + <method>/<dataset>/<scene>.yaml)
+├── tools/              # Metrics formatting, Unity export/eval, preprocessing scripts
+├── unity/              # Unity project used for engine-side evaluation
+├── single_*.sh         # Scene/dataset pipeline wrappers (train, export, Unity eval)
 └── pyproject.toml
 ```
 
