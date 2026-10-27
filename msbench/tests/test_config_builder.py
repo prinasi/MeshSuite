@@ -493,3 +493,30 @@ def test_all_methods_share_scene_dataset_protocol():
                 mismatches.append((dataset, scene, field, values))
     assert len(by_scene) >= 34
     assert not mismatches
+
+
+def test_dtu_trains_every_method_on_all_views():
+    """DTU is a mesh benchmark: no method holds out views for training or meshing."""
+    import yaml
+
+    from msbench.cli.train import inherit_dataset_defaults
+
+    repo = Path(__file__).resolve().parents[2]
+    methods = set()
+    for path in sorted((repo / "configs").glob("*/dtu/*.yaml")):
+        method = path.parts[-3]
+        if method == "base":
+            continue
+        cfg = load_config(path)
+        trainer = inherit_dataset_defaults(dict(cfg["trainer"]), cfg["dataset"])
+        assert cfg["dataset"]["eval_split"] is False, path
+        assert trainer["eval_split"] is False, path
+        assert cfg["mesh"]["split"] == "all", path
+        if "preprocess" in cfg:
+            assert cfg["preprocess"].get("holdout", 0) == 0, path
+        native = cfg.get("d2ts", {}).get("native_config")
+        if native:
+            native_cfg = yaml.safe_load((repo / native).read_text())
+            assert native_cfg["dataset"]["hold_test_set"] is False, path
+        methods.add(method)
+    assert {"2dts", "diffsoup", "exmesh", "mesh-splatting", "triangle-splatting"} <= methods

@@ -145,7 +145,8 @@ def test_triangle_splatting_native_argv_maps_dtu_config():
     assert argv[argv.index("-s") + 1] == "data/dtu/scan24"
     assert argv[argv.index("-m") + 1] == "outputs/triangle-splatting/dtu-fg/scan24"
     assert argv[argv.index("-r") + 1] == "2"
-    assert "--eval" in argv
+    # DTU trains on every view, so no views are held out with --eval.
+    assert "--eval" not in argv
     assert "--no_dome" in argv
     assert argv[argv.index("--max_shapes") + 1] == "500000"
     assert argv[argv.index("--lambda_opacity") + 1] == "0.0044"
@@ -766,7 +767,7 @@ def test_mesh_export_kwargs_resolve_dataset_and_mesh_options():
     kwargs = _mesh_export_kwargs(cfg, cfg.mesh.to_dict())
 
     assert kwargs["dataset_path"] == "data/dtu/scan24"
-    assert kwargs["split"] == "train"
+    assert kwargs["split"] == "all"
     assert kwargs["resolution"] == 2
     assert kwargs["voxel_size"] == 0.004
     assert kwargs["sdf_trunc"] == 0.016

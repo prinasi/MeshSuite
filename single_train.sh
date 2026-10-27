@@ -12,6 +12,7 @@ set -euo pipefail
 # Pipeline:
 #   train -> render configured image split -> compute image metrics
 #   -> optional DTU mesh metrics -> export video -> formatted summary
+#   DTU trains on every view and skips image rendering and image metrics.
 
 # ---------------------------------------------------------------------------
 # Defaults
@@ -134,6 +135,9 @@ Options:
   --dtu-unmasked           Alias for --dtu-full
   --python PATH            Python executable
   -h, --help               Show this help
+
+On DTU every method trains on all views, so only DTU mesh metrics are reported:
+image rendering and NVS metrics are skipped there, even when requested.
 
 Each stage reads configs/<method>/<dataset>/<scene>.yaml. By default, output
 paths are outputs/<method>/<dataset>/<scene>. When --max_primitives or a
@@ -1138,6 +1142,17 @@ for TARGET in "${EXPANDED_TARGETS[@]}"; do
     fi
     PREFIX="$(log_prefix "${DATASET}" "${SCENE}")"
 
+    # DTU trains on every view (no held-out test views), so only DTU mesh metrics
+    # are reported there; image rendering and NVS metrics are skipped.
+    SCENE_SKIP_RENDERING="${SKIP_RENDERING}"
+    SCENE_SKIP_NVS_METRICS="${SKIP_NVS_METRICS}"
+    SCENE_IS_DTU=0
+    if [[ "$(normalize_dataset "${DATASET}")" == "dtu" ]]; then
+        SCENE_IS_DTU=1
+        SCENE_SKIP_RENDERING=1
+        SCENE_SKIP_NVS_METRICS=1
+    fi
+
     TRAINING_ALREADY_DONE=0
     TRAINING_MARKER=""
     if [[ "${SKIP_TRAINING}" -eq 0 ]] && TRAINING_MARKER="$(training_complete_marker "${CONFIG_FILE}" "${MODEL_PATH}")"; then
@@ -1154,13 +1169,13 @@ for TARGET in "${EXPANDED_TARGETS[@]}"; do
 
     RENDERING_ALREADY_DONE=0
     RENDERING_MARKER=""
-    if [[ "${SKIP_RENDERING}" -eq 0 && "${FORCE_RERUN_EXISTING}" -eq 0 ]] && RENDERING_MARKER="$(rendering_complete_marker "${CONFIG_FILE}" "${MODEL_PATH}")"; then
+    if [[ "${SCENE_SKIP_RENDERING}" -eq 0 && "${FORCE_RERUN_EXISTING}" -eq 0 ]] && RENDERING_MARKER="$(rendering_complete_marker "${CONFIG_FILE}" "${MODEL_PATH}")"; then
         RENDERING_ALREADY_DONE=1
     fi
 
     METRICS_ALREADY_DONE=0
     METRICS_MARKER=""
-    if [[ "${SKIP_NVS_METRICS}" -eq 0 && "${FORCE_RERUN_EXISTING}" -eq 0 ]] && METRICS_MARKER="$(metrics_complete_marker "${CONFIG_FILE}" "${MODEL_PATH}")"; then
+    if [[ "${SCENE_SKIP_NVS_METRICS}" -eq 0 && "${FORCE_RERUN_EXISTING}" -eq 0 ]] && METRICS_MARKER="$(metrics_complete_marker "${CONFIG_FILE}" "${MODEL_PATH}")"; then
         METRICS_ALREADY_DONE=1
     fi
 
@@ -1219,7 +1234,7 @@ for TARGET in "${EXPANDED_TARGETS[@]}"; do
         fi
     fi
 
-    if [[ "${SKIP_RENDERING}" -eq 0 ]]; then
+    if [[ "${SCENE_SKIP_RENDERING}" -eq 0 ]]; then
         if [[ "${RENDERING_ALREADY_DONE}" -eq 1 ]]; then
             echo "[${DATASET}/${SCENE}] Rendering skipped; existing output detected at ${RENDERING_MARKER}. Use --rerun_existing to rebuild."
         else
@@ -1227,7 +1242,7 @@ for TARGET in "${EXPANDED_TARGETS[@]}"; do
         fi
     fi
 
-    if [[ "${SKIP_NVS_METRICS}" -eq 0 ]]; then
+    if [[ "${SCENE_SKIP_NVS_METRICS}" -eq 0 ]]; then
         if [[ "${METRICS_ALREADY_DONE}" -eq 1 ]]; then
             read_metrics_from_json "${METRICS_MARKER}"
             echo "[${DATASET}/${SCENE}] Metrics skipped; existing output detected at ${METRICS_MARKER}. Use --rerun_existing to rebuild."
@@ -1257,6 +1272,9 @@ for TARGET in "${EXPANDED_TARGETS[@]}"; do
     fi
 
     read_metrics_from_json "$(metrics_output_file "${CONFIG_FILE}" "${MODEL_PATH}")"
+    if [[ "${SCENE_IS_DTU}" -eq 1 ]]; then
+        LAST_PSNR="N/A"; LAST_SSIM="N/A"; LAST_LPIPS="N/A"; LAST_RENDER_FPS="N/A"
+    fi
     warn_diffsoup_metric_mismatch "${CONFIG_FILE}" "${MODEL_PATH}"
     echo "[${DATASET}/${SCENE}] Summary: PSNR=${LAST_PSNR} SSIM=${LAST_SSIM} LPIPS=${LAST_LPIPS} FPS=${LAST_RENDER_FPS} Mem=${LAST_TRAIN_MEMORY}MiB Time=${LAST_TRAIN_TIME}s Chamfer=${LAST_CHAMFER} Video=${LAST_VIDEO}"
     SUMMARY_ROWS+=("${DATASET}/${SCENE}|${LAST_PSNR}|${LAST_SSIM}|${LAST_LPIPS}|${LAST_RENDER_FPS}|${LAST_TRAIN_MEMORY}|${LAST_TRAIN_TIME}|${LAST_CHAMFER}|${LAST_VIDEO}")

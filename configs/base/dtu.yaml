@@ -8,7 +8,9 @@ dataset:
   root: data/dtu
   image_dir: images
   resolution: 2
-  eval_every: 8
+  # DTU is a mesh benchmark: every method trains on all views (no held-out test
+  # views, as in the methods' papers) and only mesh metrics are reported.
+  eval_split: false
   # "foreground" uses white DTU RGBA compositing/rendering; foreground-loss defaults are method-specific.
   dtu_eval_mode: foreground # "full" (Mode A) or "foreground" (Mode B)
 
@@ -22,7 +24,7 @@ adapter:
 
 mesh:
   output: outputs/{method}/{dataset}/{scene}/mesh/fuse_post.ply
-  split: train
+  split: all
   voxel_size: 0.004
   sdf_trunc: 0.016
   depth_trunc: 3.0

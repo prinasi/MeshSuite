@@ -162,8 +162,9 @@ def test_exmesh_dtu_configs_use_shared_protocol_with_published_parameters():
         # Same dataset protocol as every other method in MeshSuite.
         other = Config.fromfile(f"configs/triangle-splatting/dtu/scan{sid}.yaml")
         assert cfg.dataset.to_dict() == other.dataset.to_dict()
-        assert cfg.render.split == other.render.split == "test"
-        assert cfg.eval.split == other.eval.split == "test"
+        # DTU is a mesh benchmark: every view trains, nothing is held out.
+        assert cfg.dataset.eval_split is False
+        assert cfg.mesh.split == other.mesh.split == "all"
         assert cfg.adapter.render_params.bg_color == other.adapter.render_params.bg_color
         assert cfg.trainer.white_background == other.trainer.white_background
 
@@ -178,11 +179,10 @@ def test_exmesh_dtu_configs_use_shared_protocol_with_published_parameters():
         assert method.opt.lambda_deviation == 10000
         assert method.opt.lr_vertices_init == 0.0005 and method.opt.feature_lr == 0.0025
         assert method.background == float(cfg.trainer.white_background)
-        assert method.eval_split and method.resolution == cfg.dataset.resolution
-        assert method.llffhold == cfg.dataset.eval_every
-        # 2DGS initialization never sees the held-out views.
+        assert not method.eval_split and method.resolution == cfg.dataset.resolution
+        # 2DGS initialization sees the same views as ExMesh training: all of them.
         assert cfg.preprocess.type == "exmesh_2dgs"
-        assert cfg.preprocess.holdout == cfg.dataset.eval_every
+        assert cfg.preprocess.holdout == 0
         assert str(method.initial_mesh).startswith(cfg.preprocess.output)
         assert cfg.output.dir == other.output.dir.replace("triangle-splatting", "exmesh")
         assert cfg.mesh.output == cfg.output.mesh_file == cfg.output.dir + "/mesh/mesh.ply"
@@ -429,10 +429,10 @@ def test_2dgs_initializer_holds_out_test_views_with_official_dtu_defaults(tmp_pa
     with pytest.raises(Captured) as captured:
         pp.prepare_exmesh_initializer(cfg, dataset_root=str(tmp_path))
     command = captured.value.args[0]
-    assert "--eval" in command
+    assert "--eval" not in command
     assert command[command.index("--lambda_dist") + 1] == "1000.0"
     settings = json.loads((tmp_path / "out/settings.json").read_text())
-    assert settings["holdout"] == 8 and settings["num_cluster"] == 1
+    assert settings["holdout"] == 0 and settings["num_cluster"] == 1
 
     cfg["preprocess"].update(holdout=4, output=str(tmp_path / "out4"))
     with pytest.raises(ValueError, match="holdout 0 or 8"):

@@ -1,13 +1,13 @@
 # ExMesh on DTU. The dataset protocol comes from dtu.yaml like every other
 # method; this file only adds ExMesh's own pipeline on top of it.
 
-# Paper Sec. 4.1: coarse mesh from 2DGS (7k iterations, TSDF at 256^3). 2DGS uses
-# the same held-out views as dataset.eval_every, so it never sees test views.
+# Paper Sec. 4.1: coarse mesh from 2DGS (7k iterations, TSDF at 256^3). 2DGS sees
+# the same views as ExMesh training: all of them (dataset.eval_split: false).
 preprocess:
   type: exmesh_2dgs
   source_repo: outputs/exmesh-preprocess/2dgs_source
   output: outputs/exmesh-preprocess/{dataset}/{scene}
-  holdout: 8
+  holdout: 0
 
 trainer:
   dataset_type: dtu

@@ -71,6 +71,7 @@ class MetricsTarget:
     scene: str
     metrics_file: Path
     mesh_metrics_file: Path | None = None
+    train_stats_file: Path | None = None
 
 
 @dataclass
@@ -183,6 +184,7 @@ def target_from_layout(method: str, dataset: str, scene: str, outputs_root: Path
         scene=scene,
         metrics_file=run_dir / "metrics.json",
         mesh_metrics_file=run_dir / "mesh_metrics.json" if dataset == "dtu" else None,
+        train_stats_file=run_dir / "train_stats.json",
     )
 
 
@@ -202,10 +204,11 @@ def target_from_config(path: Path) -> MetricsTarget:
     )
     scene = str(dataset_cfg.get("scene") or Path(str(dataset_cfg.get("root", path.stem))).name)
 
+    out_dir = output_cfg.get("dir")
+    run_dir = Path(out_dir) if out_dir else Path("outputs") / method / dataset / scene
     metrics_value = eval_cfg.get("output") or eval_cfg.get("metrics_file") or output_cfg.get("metrics_file")
     if metrics_value is None:
-        out_dir = output_cfg.get("dir")
-        metrics_file = Path(out_dir) / "metrics.json" if out_dir else Path("outputs") / method / dataset / scene / "metrics.json"
+        metrics_file = run_dir / "metrics.json"
     else:
         metrics_file = Path(str(metrics_value))
 
@@ -217,6 +220,7 @@ def target_from_config(path: Path) -> MetricsTarget:
         scene=scene,
         metrics_file=metrics_file,
         mesh_metrics_file=mesh_metrics_file if dataset == "dtu" else None,
+        train_stats_file=run_dir / "train_stats.json",
     )
 
 
@@ -236,6 +240,8 @@ def _infer_dataset_from_root(root: Any) -> str | None:
 
 
 def read_row(target: MetricsTarget) -> MetricsRow:
+    if target.dataset == "dtu":
+        return _read_dtu_row(target)
     metrics_path = _resolve_path(target.metrics_file)
     row = MetricsRow(
         dataset=target.dataset,
@@ -262,12 +268,24 @@ def read_row(target: MetricsTarget) -> MetricsRow:
         row.training_time_s = _number(data.get("training_time_s")) or _number(training.get("total_time_s"))
     else:
         row.metrics_file = f"{metrics_path} (missing)"
+    return row
 
-    if target.mesh_metrics_file is not None:
-        mesh_path = _resolve_path(target.mesh_metrics_file)
-        if mesh_path.exists():
-            mesh = _read_json(mesh_path)
-            row.cd = _first_number(mesh, ["overall", "chamfer_distance", "chamfer", "cd", "mean"])
+
+def _read_dtu_row(target: MetricsTarget) -> MetricsRow:
+    """DTU trains on every view, so only mesh metrics and training stats are reported."""
+    mesh_path = _resolve_path(target.mesh_metrics_file)
+    row = MetricsRow(dataset=target.dataset, scene=target.scene, metrics_file=str(mesh_path))
+    if mesh_path.exists():
+        mesh = _read_json(mesh_path)
+        row.cd = _first_number(mesh, ["overall", "chamfer_distance", "chamfer", "cd", "mean"])
+    else:
+        row.metrics_file = f"{mesh_path} (missing)"
+    if target.train_stats_file is not None:
+        stats_path = _resolve_path(target.train_stats_file)
+        if stats_path.exists():
+            stats = _read_json(stats_path)
+            row.training_memory_mib = _number(stats.get("peak_gpu_memory_mib"))
+            row.training_time_s = _number(stats.get("total_time_s"))
     return row
 
 

@@ -31,8 +31,8 @@ MeshSplatBench provides a single, consistent evaluation framework for comparing 
 ### ExMesh
 
 ExMesh uses the same dataset configs as every other method (e.g. DTU from
-`configs/base/dtu.yaml`: foreground evaluation on white, 1/2 resolution, every 8th
-view held out), so its results are directly comparable:
+`configs/base/dtu.yaml`: foreground evaluation on white, 1/2 resolution, all views
+used for training), so its results are directly comparable:
 
 ```bash
 bash single_train.sh exmesh dtu/all 0
@@ -43,7 +43,7 @@ Its method settings follow the ExMesh paper: 8k iterations and a coarse initial
 mesh from 2DGS (7k iterations, TSDF at 256³). Settings the paper leaves open
 (per-scene `lambda_smooth`/`lambda_depth`, LR schedule) come from the official
 ExMesh repo. On DTU the 2DGS initialization is built automatically before training,
-on the training views only, and cached under `outputs/exmesh-preprocess/`. The
+on the same views as ExMesh training, and cached under `outputs/exmesh-preprocess/`. The
 pinned 2DGS source is cloned to `outputs/exmesh-preprocess/2dgs_source` on first
 use, and its `diff_surfel_rasterization` extension must be installed. ExMesh also
 reads monocular depth priors from `data/dtu/<scan>/mono_priors/da3/` and needs the
@@ -163,6 +163,10 @@ data/
 The 15 DTU evaluation scans are 24, 37, 40, 55, 63, 65, 69, 83, 97, 105, 106, 110,
 114, 118, and 122. Config paths are lowercase (`data/dtu`), so the symlink name
 must match on case-sensitive file systems.
+
+DTU is evaluated as a mesh benchmark. Every method trains on all views of each scan,
+as in the methods' papers, and only DTU mesh metrics (Chamfer distance) are reported;
+`single_train.sh` skips image rendering and NVS metrics on DTU.
 
 ## Quick Start
 
