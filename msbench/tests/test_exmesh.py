@@ -163,7 +163,7 @@ def test_reproduction_dtu_configs_cover_all_scenes_with_published_parameters():
         method = build_training_method(
             cfg.trainer, default_args=dict(dataset=cfg.dataset.root, output_dir=cfg.output.dir)
         )
-        assert method.max_steps == 10000
+        assert method.max_steps == 8000 and method.opt.split_until_iter == 7000
         assert method.opt.lambda_depth == expected_params[sid]["lambda_depth"]
         assert method.opt.lambda_smooth == expected_params[sid]["lambda_smooth"]
         assert method.opt.lambda_deviation == 10000
@@ -199,6 +199,7 @@ def test_benchmark_dtu_configs_follow_shared_protocol():
         method = build_training_method(
             cfg.trainer, default_args=dict(dataset=cfg.dataset.root, output_dir=cfg.output.dir)
         )
+        assert method.max_steps == 8000
         assert cfg.dataset.resolution == 2
         assert cfg.dataset.dtu_eval_mode == "foreground"
         assert method.background == 1 and cfg.dataset.background == "white"

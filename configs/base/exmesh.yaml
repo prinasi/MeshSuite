@@ -6,7 +6,9 @@ adapter:
 
 trainer:
   type: exmesh
-  max_steps: 10000
+  # Paper Sec. 4.1: 1k warm-up, topology updates over 1k-7k, last 1k frozen (8k total).
+  # The official repo defaults to 10k; position_lr_max_steps keeps its 10k LR schedule.
+  max_steps: 8000
   dataset_type: colmap
   eval_split: false
   white_background: false

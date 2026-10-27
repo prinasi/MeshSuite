@@ -28,7 +28,6 @@ dataset:
   use_alpha: true
 
 trainer:
-  max_steps: 10000
   dataset_type: colmap
   eval_split: true
   llffhold: 8
