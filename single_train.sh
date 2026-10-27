@@ -711,6 +711,26 @@ PY
     return 0
 }
 
+read_train_stats_from_json() {
+    local stats_file="$1"
+    local values metric_train_memory metric_train_time
+    values=$("${PYTHON_BIN}" - "${stats_file}" <<'PY'
+import json, sys
+
+try:
+    with open(sys.argv[1]) as f:
+        d = json.load(f)
+    print(int(round(float(d["peak_gpu_memory_mib"]))), f"{float(d['total_time_s']):.1f}")
+except Exception:
+    print("N/A N/A")
+PY
+)
+    read -r metric_train_memory metric_train_time <<< "${values}"
+    [[ "${metric_train_memory}" != "N/A" ]] && LAST_TRAIN_MEMORY="${metric_train_memory}"
+    [[ "${metric_train_time}" != "N/A" ]] && LAST_TRAIN_TIME="${metric_train_time}"
+    return 0
+}
+
 read_chamfer_from_json() {
     local results_file="$1"
     LAST_CHAMFER=$("${PYTHON_BIN}" - "${results_file}" <<'PY'
@@ -1293,6 +1313,8 @@ for TARGET in "${EXPANDED_TARGETS[@]}"; do
     read_metrics_from_json "$(metrics_output_file "${CONFIG_FILE}" "${MODEL_PATH}")"
     if [[ "${SCENE_IS_DTU}" -eq 1 ]]; then
         LAST_PSNR="N/A"; LAST_SSIM="N/A"; LAST_LPIPS="N/A"; LAST_RENDER_FPS="N/A"
+        # DTU writes no image-metrics file, so training stats come from train_stats.json.
+        read_train_stats_from_json "${MODEL_PATH}/train_stats.json"
     fi
     warn_diffsoup_metric_mismatch "${CONFIG_FILE}" "${MODEL_PATH}"
     echo "[${DATASET}/${SCENE}] Summary: PSNR=${LAST_PSNR} SSIM=${LAST_SSIM} LPIPS=${LAST_LPIPS} FPS=${LAST_RENDER_FPS} Mem=${LAST_TRAIN_MEMORY}MiB Time=${LAST_TRAIN_TIME}s Chamfer=${LAST_CHAMFER} Video=${LAST_VIDEO}"
