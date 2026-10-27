@@ -1,42 +1,10 @@
 _base_: ../../../base/exmesh_paper_dtu.yaml
-
 dataset:
   scene: scan63
-  dtu_eval_mode: foreground
-  eval_split: true
-  eval_every: 8
-
 trainer:
   lambda_smooth: 3000
   lambda_depth: 0.03
-
-render:
-  split: test
-  video:
-    output_dir: outputs/exmesh/reproduction/dtu/scan63/video
-
 eval:
-  split: test
   mesh:
     scan_id: 63
     scene_root: data/dtu/scan63
-
-output:
-  dir: outputs/exmesh/reproduction/dtu/scan63
-  metrics_file: outputs/exmesh/reproduction/dtu/scan63/metrics.json
-  mesh_metrics_file: outputs/exmesh/reproduction/dtu/scan63/mesh_metrics.json
-  mesh_file: outputs/exmesh/reproduction/dtu/scan63/mesh/mesh.ply
-  stats_file: outputs/exmesh/reproduction/dtu/scan63/stats.json
-  report_file: outputs/exmesh/reproduction/dtu/scan63/report.md
-
-adapter:
-  checkpoint: outputs/exmesh/reproduction/dtu/scan63/ckpt/final.pt
-
-mesh:
-  output: outputs/exmesh/reproduction/dtu/scan63/mesh/mesh.ply
-
-inspect:
-  output: outputs/exmesh/reproduction/dtu/scan63/stats.json
-
-profile:
-  output: outputs/exmesh/reproduction/dtu/scan63/profile.json

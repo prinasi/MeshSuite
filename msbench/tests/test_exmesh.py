@@ -134,7 +134,7 @@ def test_2dgs_staging_resizes_images_and_intrinsics_without_changing_poses(tmp_p
             _resolve_resolution(16, 12, invalid)
 
 
-def test_paper_dtu_configs_cover_all_scenes_with_published_parameters():
+def test_reproduction_dtu_configs_cover_all_scenes_with_published_parameters():
     from msbench.core.config import Config
     from msbench.core.builder import build_training_method
     from msbench.cli.render import _mesh_export_kwargs
@@ -159,7 +159,7 @@ def test_paper_dtu_configs_cover_all_scenes_with_published_parameters():
     }
     outputs = set()
     for sid in scenes:
-        cfg = Config.fromfile(f"configs/exmesh/dtu/scan{sid}.yaml")
+        cfg = Config.fromfile(f"configs/exmesh/reproduction/dtu/scan{sid}.yaml")
         method = build_training_method(
             cfg.trainer, default_args=dict(dataset=cfg.dataset.root, output_dir=cfg.output.dir)
         )
@@ -168,12 +168,19 @@ def test_paper_dtu_configs_cover_all_scenes_with_published_parameters():
         assert method.opt.lambda_smooth == expected_params[sid]["lambda_smooth"]
         assert method.opt.lambda_deviation == 10000
         assert method.opt.lr_vertices_init == 0.0005 and method.opt.feature_lr == 0.0025
+        # Official ExMesh DTU setup: full resolution, black background.
+        assert cfg.dataset.resolution == 1
         assert method.background == 0 and cfg.dataset.background == "black" and cfg.dataset.use_alpha
         assert cfg.adapter.render_params.bg_color == "black"
-        assert not cfg.dataset.eval_split and cfg.render.split == cfg.eval.split == "all"
-        assert cfg.preprocess.type == "exmesh_pgsr"
+        # Foreground metrics on held-out views; training and PGSR never see them.
+        assert cfg.dataset.dtu_eval_mode == "foreground"
+        assert cfg.dataset.eval_split and cfg.dataset.eval_every == 8
+        assert method.eval_split and method.llffhold == 8
+        assert cfg.render.split == cfg.eval.split == "test"
+        assert cfg.preprocess.type == "exmesh_pgsr" and cfg.preprocess.holdout == 8
+        assert str(method.initial_mesh).startswith(cfg.preprocess.output)
         assert cfg.eval.mesh.scan_id == sid
-        assert cfg.output.dir == f"outputs/exmesh/dtu/scan{sid}"
+        assert cfg.output.dir == f"outputs/exmesh/reproduction/dtu/scan{sid}"
         assert cfg.mesh.output.startswith(cfg.output.dir)
         assert cfg.adapter.checkpoint.startswith(cfg.output.dir)
         assert cfg.render.video.output_dir.startswith(cfg.output.dir + "/")
@@ -181,6 +188,24 @@ def test_paper_dtu_configs_cover_all_scenes_with_published_parameters():
         assert _mesh_export_kwargs(cfg, {}, "exmesh")["resolution"] == 1
         outputs.add(cfg.output.dir)
     assert len(outputs) == 15
+
+
+def test_benchmark_dtu_configs_follow_shared_protocol():
+    from msbench.core.config import Config
+    from msbench.core.builder import build_training_method
+
+    for sid in [24, 37, 40, 55, 63, 65, 69, 83, 97, 105, 106, 110, 114, 118, 122]:
+        cfg = Config.fromfile(f"configs/exmesh/benchmark/dtu/scan{sid}.yaml")
+        method = build_training_method(
+            cfg.trainer, default_args=dict(dataset=cfg.dataset.root, output_dir=cfg.output.dir)
+        )
+        assert cfg.dataset.resolution == 2
+        assert cfg.dataset.dtu_eval_mode == "foreground"
+        assert method.background == 1 and cfg.dataset.background == "white"
+        assert cfg.adapter.render_params.bg_color == "white"
+        assert cfg.dataset.eval_split and cfg.dataset.eval_every == 8 and method.eval_split
+        assert cfg.render.split == cfg.eval.split == "test"
+        assert cfg.preprocess.type == "exmesh_2dgs" and cfg.preprocess.holdout == 8
 
 
 def test_exmesh_configs_have_isolated_outputs():

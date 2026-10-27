@@ -73,13 +73,13 @@
 在 MeshSuite 中，DTU 数据集的处理严格划分为两个不同版本，Agent 在创建或修改配置时必须严格遵循：
 
 1. **论文官方复现版（Reproduction Version）**：
-   - **定位**：严格对齐原始论文发表设置，用于高保真指标复现（如 ExMesh scan24 CD 0.44 mm）。
+   - **定位**：沿用方法官方实现的训练设置（ExMesh 官方 DTU 脚本使用黑色背景），但在留出视点上评测前景指标。
    - **核心属性**：
-     - 背景模式：`dtu_eval_mode: full`，`background: black`，`white_background: false`。
+     - 背景模式：`dtu_eval_mode: foreground`，`background: black`，`white_background: false`（显式的 `dataset.background` 优先于前景模式默认的白色背景）。
      - 分辨率：`resolution: 1`（全分辨率 1554×1162）。
-     - 初始化：官方推荐粗网格（如 PGSR 5000 iters 提取的 mesh）。
-     - 训练与视点：全视角训练（`eval_split: false`，`render.split: all`）。
-   - **配置路径**：`configs/base/exmesh_paper_dtu.yaml`、`configs/exmesh/reproduction/dtu/scan*.yaml`（及 `configs/exmesh/dtu/scan*.yaml`）。
+     - 初始化：官方推荐粗网格（PGSR 5000 iters 提取的 mesh），PGSR 使用相同留出划分（`preprocess.holdout: 8`），不接触测试视点。
+     - 视点划分：留出评估模式（`dataset.eval_split: true`，`eval_every: 8`，`trainer.eval_split: true`，`render.split: test`，`eval.split: test`）。注意 `trainer.eval_split` 不会从 `dataset` 继承，必须显式设置。
+   - **配置路径**：`configs/base/exmesh_paper_dtu.yaml`、`configs/exmesh/reproduction/dtu/scan*.yaml`（`single_train.sh exmesh dtu/<scene>` 默认指向此版本）。
 
 2. **标准基准评测版（Benchmark Version）**：
    - **定位**：MeshSplatBench 统一横向对比评测协议（与其他方法如 2DTS、Triangle-Splatting 等在同一基准线上对比）。

@@ -7,54 +7,57 @@ paper_protocol:
   initialization_iterations: 5000
   tsdf_voxel_size: 0.01
 
-# User-selected paper settings; unpublished details use recorded official defaults.
+# Reproduction protocol: the official ExMesh DTU setup (full resolution, black
+# background, PGSR initialization) evaluated on the foreground of held-out views.
+# PGSR is rerun with the same holdout so the initial mesh never sees test views.
 preprocess:
   type: exmesh_pgsr
   source_repo: outputs/exmesh-preprocess/pgsr_source
-  output: outputs/exmesh-preprocess/dtu_pgsr/{scene}
-  holdout: 0
+  output: outputs/exmesh-preprocess/dtu_pgsr_holdout8/{scene}
+  holdout: 8
 
 dataset:
   name: dtu
   type: colmap
   root: data/dtu
   resolution: 1
-  eval_split: false
-  dtu_eval_mode: full
+  eval_split: true
+  eval_every: 8
+  dtu_eval_mode: foreground
   background: black
   use_alpha: true
 
 trainer:
   max_steps: 10000
   dataset_type: colmap
-  eval_split: false
+  eval_split: true
+  llffhold: 8
   white_background: false
   lambda_depth: 0.1
   lambda_smooth: 3000
   lambda_deviation: 10000
-  initial_mesh: data/dtu/{scene}/mesh.ply
+  initial_mesh: outputs/exmesh-preprocess/dtu_pgsr_holdout8/{scene}/model/mesh/tsdf_fusion_post.ply
 
 render:
-  split: all
+  split: test
   video:
-    output_dir: outputs/exmesh/dtu/{scene}/video
+    output_dir: outputs/exmesh/reproduction/dtu/{scene}/video
 eval:
-  split: all
+  split: test
 
 output:
-  dir: outputs/exmesh/dtu/{scene}
-  metrics_file: outputs/exmesh/dtu/{scene}/metrics.json
-  mesh_metrics_file: outputs/exmesh/dtu/{scene}/mesh_metrics.json
-  mesh_file: outputs/exmesh/dtu/{scene}/mesh/mesh.ply
-  stats_file: outputs/exmesh/dtu/{scene}/stats.json
-  report_file: outputs/exmesh/dtu/{scene}/report.md
+  dir: outputs/exmesh/reproduction/dtu/{scene}
+  metrics_file: outputs/exmesh/reproduction/dtu/{scene}/metrics.json
+  mesh_metrics_file: outputs/exmesh/reproduction/dtu/{scene}/mesh_metrics.json
+  mesh_file: outputs/exmesh/reproduction/dtu/{scene}/mesh/mesh.ply
+  stats_file: outputs/exmesh/reproduction/dtu/{scene}/stats.json
+  report_file: outputs/exmesh/reproduction/dtu/{scene}/report.md
 adapter:
-  checkpoint: outputs/exmesh/dtu/{scene}/ckpt/final.pt
+  checkpoint: outputs/exmesh/reproduction/dtu/{scene}/ckpt/final.pt
 mesh:
-  output: outputs/exmesh/dtu/{scene}/mesh/mesh.ply
+  output: outputs/exmesh/reproduction/dtu/{scene}/mesh/mesh.ply
 inspect:
-  output: outputs/exmesh/dtu/{scene}/stats.json
+  output: outputs/exmesh/reproduction/dtu/{scene}/stats.json
 profile:
-  split: all
-  output: outputs/exmesh/dtu/{scene}/profile.json
-
+  split: test
+  output: outputs/exmesh/reproduction/dtu/{scene}/profile.json

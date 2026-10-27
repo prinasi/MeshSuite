@@ -300,7 +300,15 @@ scene_config_path() {
         echo "${CONFIG_ROOT}/${method}/${dataset}/${scene}.yaml"
         return 0
     fi
-    echo "${CONFIG_ROOT}/${method}/$(dataset_label "${dataset}")/${scene}.yaml"
+    local label
+    label="$(dataset_label "${dataset}")"
+    # Methods with protocol subdirectories (e.g. ExMesh) default to reproduction/.
+    if [[ ! -f "${CONFIG_ROOT}/${method}/${label}/${scene}.yaml" \
+          && -f "${CONFIG_ROOT}/${method}/reproduction/${label}/${scene}.yaml" ]]; then
+        echo "${CONFIG_ROOT}/${method}/reproduction/${label}/${scene}.yaml"
+        return 0
+    fi
+    echo "${CONFIG_ROOT}/${method}/${label}/${scene}.yaml"
 }
 
 TEMP_OVERRIDE_CONFIG_DIR=""
