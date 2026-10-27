@@ -575,7 +575,12 @@ def load_dtu_scene(
         resize_to = (out_H, out_W)
 
     sorted_indices = list(range(num_views))
-    test_set = {idx for rank, idx in enumerate(sorted_indices) if rank % holdout == 0}
+    # holdout <= 0 trains on every view and leaves the test split empty.
+    test_set = (
+        {idx for rank, idx in enumerate(sorted_indices) if rank % holdout == 0}
+        if holdout > 0
+        else set()
+    )
     if split == "test":
         selected = [idx for idx in sorted_indices if idx in test_set]
     else:

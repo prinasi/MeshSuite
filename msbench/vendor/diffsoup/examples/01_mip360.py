@@ -112,6 +112,7 @@ def main(
     white_background: Optional[bool] = None,
     foreground_training: bool = False,
     dtu_eval_mode: str = "full",
+    dtu_holdout: int = 8,
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     scene_name = os.path.basename(os.path.normpath(scene_root))
@@ -134,7 +135,7 @@ def main(
 
     if dataset_type == "dtu":
         train_data = load_dtu_scene(
-            scene_root, split="train", downscale=downscale, device=device,
+            scene_root, split="train", holdout=dtu_holdout, downscale=downscale, device=device,
             white_background=use_white_background,
             use_alpha=use_dtu_alpha,
         )
@@ -467,9 +468,13 @@ def main(
 
     # ── Test evaluation ──────────────────────────────────────────────
 
+    if dataset_type == "dtu" and dtu_holdout <= 0:
+        print("[views] test=0 (every DTU view was used for training)")
+        return
+
     if dataset_type == "dtu":
         test_data = load_dtu_scene(
-            scene_root, split="test", downscale=downscale, device=device,
+            scene_root, split="test", holdout=dtu_holdout, downscale=downscale, device=device,
             white_background=use_white_background,
             use_alpha=use_dtu_alpha,
         )

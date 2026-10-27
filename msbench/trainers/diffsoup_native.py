@@ -122,6 +122,7 @@ def _run_mip360_script(
         white_background = False
     dtu_eval_mode = str(dataset_cfg.get("dtu_eval_mode", trainer_cfg.get("dtu_eval_mode", "full"))).lower()
     foreground_training = bool(trainer_cfg.get("foreground_training", False))
+    eval_split = bool(trainer_cfg.get("eval_split", dataset_cfg.get("eval_split", True)))
     target_prims = _primitive_target(trainer_cfg, "n_points", "target_prims")
     with _reference_import_context(examples_dir):
         module.main(
@@ -136,6 +137,7 @@ def _run_mip360_script(
             white_background=None if white_background is None else bool(white_background),
             foreground_training=foreground_training,
             dtu_eval_mode=dtu_eval_mode,
+            dtu_holdout=int(dataset_cfg.get("eval_every", 8)) if eval_split else 0,
         )
 
 
