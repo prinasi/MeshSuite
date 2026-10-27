@@ -196,6 +196,7 @@ canonical_method() {
 normalize_dataset() {
     local name
     name="$(lower "$1")"
+    name="${name##*/}"  # reproduction/dtu -> dtu
     name="${name//_/-}"
     case "${name}" in
         mipnerf360|mipnerf-360|m360|360|nerf360) echo "mipnerf360" ;;
