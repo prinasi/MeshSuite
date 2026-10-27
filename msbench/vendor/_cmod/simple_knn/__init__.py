@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import torch
+
 try:
     from . import _C
 except ImportError:
