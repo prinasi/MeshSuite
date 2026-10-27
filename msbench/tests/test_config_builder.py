@@ -135,6 +135,30 @@ def test_dtu_foreground_defaults_enable_diff_soup_foreground_loss(tmp_path: Path
     assert cfg["adapter"]["render_params"]["bg_color"] == "white"
 
 
+def test_dtu_foreground_respects_explicit_dataset_background(tmp_path: Path):
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        "dataset:\n"
+        "  name: dtu\n"
+        "  type: dtu\n"
+        "  root: data/dtu\n"
+        "  scene: scan24\n"
+        "  dtu_eval_mode: foreground\n"
+        "  background: black\n"
+        "trainer:\n"
+        "  type: exmesh\n"
+        "  white_background: false\n"
+        "adapter:\n"
+        "  type: exmesh\n"
+    )
+
+    cfg = load_config(config)
+
+    assert cfg["dataset"]["dtu_eval_mode"] == "foreground"
+    assert cfg["trainer"]["white_background"] is False
+    assert cfg["adapter"]["render_params"]["bg_color"] == "black"
+
+
 def test_dtu_config_templates_default_to_full(tmp_path: Path):
     config = tmp_path / "config.yaml"
     config.write_text(

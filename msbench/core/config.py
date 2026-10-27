@@ -348,7 +348,11 @@ def _apply_dtu_defaults(config: dict[str, Any]) -> dict[str, Any]:
             "foreground_training",
             mode == "foreground" and method_type in foreground_loss_methods,
         )
-        if mode == "foreground":
+        # An explicit dataset background (e.g. ExMesh's official black DTU
+        # setup) wins; otherwise foreground evaluation trains on white.
+        if dataset.get("background") in {"white", "black"}:
+            trainer["white_background"] = dataset["background"] == "white"
+        elif mode == "foreground":
             trainer["white_background"] = True
         else:
             trainer.setdefault("white_background", False)
@@ -361,11 +365,11 @@ def _apply_dtu_defaults(config: dict[str, Any]) -> dict[str, Any]:
         # Full-image evaluation does not imply a black compositing background.
         # Honour the explicit image/training background instead of overriding
         # white-background checkpoints during rendering and image evaluation.
-        full_background = dataset.get("background")
-        if full_background not in {"white", "black"}:
+        background = dataset.get("background")
+        if background not in {"white", "black"}:
             train_white = isinstance(trainer_cfg, Mapping) and trainer_cfg.get("white_background", False)
-            full_background = "white" if train_white else "black"
-        render_params["bg_color"] = "white" if mode == "foreground" else full_background
+            background = "white" if mode == "foreground" or train_white else "black"
+        render_params["bg_color"] = background
         adapter["render_params"] = render_params
         config["adapter"] = adapter
     return config
