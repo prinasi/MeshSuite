@@ -991,6 +991,25 @@ run_dtu_chamfer() {
     read_chamfer_from_json "${results_path}"
     echo "${LAST_CHAMFER}" > "${chamfer_file}"
     echo "[${dataset}/${scene}] DTU mesh metrics done. CD=${LAST_CHAMFER}"
+
+    # Methods that refine a coarse initial mesh (ExMesh) also report its CD.
+    local initial_mesh init_results final_chamfer="${LAST_CHAMFER}"
+    initial_mesh="$(config_value "${config_file}" "trainer.initial_mesh")"
+    [[ -n "${initial_mesh}" && -f "${initial_mesh}" ]] || return 0
+    init_results="${model_path}/init_mesh_metrics.json"
+    printf '\n[%s/%s] Initial mesh: %s\n\n' "${dataset}" "${scene}" "${initial_mesh}" >> "${chamfer_log}"
+    set +e
+    CUDA_VISIBLE_DEVICES="${GPU_ID}" "${cmd[@]}" --pred "${initial_mesh}" --no-force-export \
+        -o "${init_results}" >> "${chamfer_log}" 2>&1
+    exit_code=$?
+    set -e
+    if [[ "${exit_code}" -ne 0 ]]; then
+        echo "[${dataset}/${scene}] Initial-mesh metrics FAILED; see ${chamfer_log}"
+    else
+        read_chamfer_from_json "${init_results}"
+        echo "[${dataset}/${scene}] Initial-mesh metrics done. Init CD=${LAST_CHAMFER}"
+    fi
+    LAST_CHAMFER="${final_chamfer}"
 }
 
 # ---------------------------------------------------------------------------
