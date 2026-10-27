@@ -210,7 +210,7 @@ normalize_dataset() {
 
 dataset_label() {
     case "$1" in
-        reproduction/*|benchmark/*) echo "$1" ;;
+        */*) echo "$1" ;;  # protocol-prefixed, e.g. reproduction/dtu
         *)
             case "$(normalize_dataset "$1")" in
                 mipnerf360) echo "mipnerf360" ;;
