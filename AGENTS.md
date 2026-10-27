@@ -67,11 +67,13 @@
 在 MeshSuite 中，DTU 数据集的处理严格划分为两个不同版本，Agent 在创建或修改配置时必须严格遵循：
 
 1. **论文官方复现版（Reproduction Version）**：
-   - **定位**：沿用方法官方实现的训练设置（ExMesh 官方 DTU 脚本使用黑色背景），但在留出视点上评测前景指标。
+   - **定位**：沿用方法论文的训练设置（论文未说明之处沿用官方实现，如 ExMesh 官方 DTU 脚本使用黑色背景），但在留出视点上评测前景指标。
    - **核心属性**：
      - 背景模式：`dtu_eval_mode: foreground`，`background: black`，`white_background: false`（显式的 `dataset.background` 优先于前景模式默认的白色背景）。
-     - 分辨率：`resolution: 1`（全分辨率 1554×1162）。
-     - 初始化：官方推荐粗网格（PGSR 5000 iters 提取的 mesh），PGSR 使用相同留出划分（`preprocess.holdout: 8`），不接触测试视点。
+     - 分辨率：`resolution: 2`（论文 Sec. 4.2：降采样至 800×600）。
+     - 初始化：论文 Sec. 4.1 的 2DGS 7k iters + 256³ TSDF 粗网格（`preprocess.type: exmesh_2dgs`），2DGS 使用相同留出划分（`preprocess.holdout: 8`），不接触测试视点。
+     - 迭代次数：8k（论文 Sec. 4.1：1k 预热、1k–7k 拓扑更新、最后 1k 冻结拓扑）。
+     - 优先级：论文明确给出的设置优先于官方仓库默认值；论文未说明的细节（黑色背景、逐场景 lambda、学习率调度）沿用官方仓库。
      - 视点划分：留出评估模式（`dataset.eval_split: true`，`eval_every: 8`，`trainer.eval_split: true`，`render.split: test`，`eval.split: test`）。注意 `trainer.eval_split` 不会从 `dataset` 继承，必须显式设置。
    - **配置路径**：`configs/base/exmesh_paper_dtu.yaml`、`configs/exmesh/reproduction/dtu/scan*.yaml`（`single_train.sh exmesh dtu/<scene>` 默认指向此版本）。
 

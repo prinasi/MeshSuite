@@ -3,24 +3,27 @@ _base_: exmesh.yaml
 paper_protocol:
   source: https://arxiv.org/html/2606.07288
   algorithm: author_code
-  unpublished_details: official_pgsr_dtu_defaults
-  initialization_iterations: 5000
-  tsdf_voxel_size: 0.01
+  # Paper Sec. 4.1: 2DGS 7k iterations + TSDF at 256^3; Sec. 4.2: images at 800x600.
+  initialization: 2dgs
+  initialization_iterations: 7000
+  tsdf_resolution: 256
+  # Not stated in the paper; taken from the official repo's DTU script.
+  unpublished_details: [black_background, per_scene_lambdas, position_lr_schedule]
 
-# Reproduction protocol: the official ExMesh DTU setup (full resolution, black
-# background, PGSR initialization) evaluated on the foreground of held-out views.
-# PGSR is rerun with the same holdout so the initial mesh never sees test views.
+# Reproduction protocol: the paper's ExMesh DTU setup (half resolution, 2DGS
+# initialization) with the official black background, evaluated on the foreground
+# of held-out views. 2DGS uses the same holdout, so the initial mesh never sees them.
 preprocess:
-  type: exmesh_pgsr
-  source_repo: outputs/exmesh-preprocess/pgsr_source
-  output: outputs/exmesh-preprocess/dtu_pgsr_holdout8/{scene}
+  type: exmesh_2dgs
+  source_repo: outputs/exmesh-preprocess/2dgs_source
+  output: outputs/exmesh-preprocess/{scene}-reproduction
   holdout: 8
 
 dataset:
   name: dtu
   type: colmap
   root: data/dtu
-  resolution: 1
+  resolution: 2
   eval_split: true
   eval_every: 8
   dtu_eval_mode: foreground
@@ -35,7 +38,7 @@ trainer:
   lambda_depth: 0.1
   lambda_smooth: 3000
   lambda_deviation: 10000
-  initial_mesh: outputs/exmesh-preprocess/dtu_pgsr_holdout8/{scene}/model/mesh/tsdf_fusion_post.ply
+  initial_mesh: outputs/exmesh-preprocess/{scene}-reproduction/model/mesh/tsdf_fusion_post.ply
 
 render:
   split: test

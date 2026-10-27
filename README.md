@@ -35,8 +35,8 @@ held-out views (every 8th image), and both write to separate output trees:
 
 | Protocol | Configs | Background | Resolution | Initial mesh |
 | -------- | ------- | ---------- | ---------- | ------------ |
-| Reproduction (official ExMesh setup) | `configs/exmesh/reproduction/dtu/` | black | full (1554×1162) | PGSR, 5000 iters |
-| Benchmark (shared MeshSplatBench protocol) | `configs/exmesh/benchmark/dtu/` | white | 1/2 | 2DGS |
+| Reproduction (ExMesh paper setup) | `configs/exmesh/reproduction/dtu/` | black | 1/2 (paper: 800×600) | 2DGS, 7k iters, 256³ TSDF |
+| Benchmark (shared MeshSplatBench protocol) | `configs/exmesh/benchmark/dtu/` | white | 1/2 | 2DGS, 7k iters, 256³ TSDF |
 
 ```bash
 bash single_train.sh exmesh dtu/scan24 0                # reproduction (default)
@@ -44,14 +44,14 @@ bash single_train.sh exmesh reproduction/dtu/all 0
 bash single_train.sh exmesh benchmark/dtu/all 0
 ```
 
-The reproduction set follows the official ExMesh DTU script (black background,
-per-scene `lambda_smooth`/`lambda_depth`), but trains and initializes PGSR only on
-the training views so test metrics are truly held out. The coarse initial mesh is
-built automatically before training and cached under `outputs/exmesh-preprocess/`;
-this needs the official PGSR source (place it at
-`outputs/exmesh-preprocess/pgsr_source`) or, for the benchmark, the 2DGS source at
-`outputs/exmesh-preprocess/2dgs_source` with its `diff_surfel_rasterization`
-extension installed. ExMesh also reads monocular depth priors
+The reproduction set follows the ExMesh paper (8k iterations, 2DGS initialization,
+800×600 images). Details the paper leaves open (black background, per-scene
+`lambda_smooth`/`lambda_depth`, LR schedule) come from the official ExMesh repo.
+Both sets train ExMesh and its 2DGS initialization only on the training views, so
+test metrics are truly held out. The coarse initial mesh is built automatically
+before training and cached under `outputs/exmesh-preprocess/`. The pinned 2DGS
+source is cloned to `outputs/exmesh-preprocess/2dgs_source` on first use; its
+`diff_surfel_rasterization` extension must be installed. ExMesh also reads monocular depth priors
 from `data/dtu/<scan>/mono_priors/da3/` and needs the `exmesh` extra
 (`pip install -e ".[exmesh]"`).
 

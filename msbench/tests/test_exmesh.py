@@ -168,16 +168,16 @@ def test_reproduction_dtu_configs_cover_all_scenes_with_published_parameters():
         assert method.opt.lambda_smooth == expected_params[sid]["lambda_smooth"]
         assert method.opt.lambda_deviation == 10000
         assert method.opt.lr_vertices_init == 0.0005 and method.opt.feature_lr == 0.0025
-        # Official ExMesh DTU setup: full resolution, black background.
-        assert cfg.dataset.resolution == 1
+        # Paper: 800x600 images and 2DGS init; official repo: black background.
+        assert cfg.dataset.resolution == 2
         assert method.background == 0 and cfg.dataset.background == "black" and cfg.dataset.use_alpha
         assert cfg.adapter.render_params.bg_color == "black"
-        # Foreground metrics on held-out views; training and PGSR never see them.
+        # Foreground metrics on held-out views; training and 2DGS never see them.
         assert cfg.dataset.dtu_eval_mode == "foreground"
         assert cfg.dataset.eval_split and cfg.dataset.eval_every == 8
         assert method.eval_split and method.llffhold == 8
         assert cfg.render.split == cfg.eval.split == "test"
-        assert cfg.preprocess.type == "exmesh_pgsr" and cfg.preprocess.holdout == 8
+        assert cfg.preprocess.type == "exmesh_2dgs" and cfg.preprocess.holdout == 8
         assert str(method.initial_mesh).startswith(cfg.preprocess.output)
         assert cfg.eval.mesh.scan_id == sid
         assert cfg.output.dir == f"outputs/exmesh/reproduction/dtu/scan{sid}"
@@ -185,7 +185,7 @@ def test_reproduction_dtu_configs_cover_all_scenes_with_published_parameters():
         assert cfg.adapter.checkpoint.startswith(cfg.output.dir)
         assert cfg.render.video.output_dir.startswith(cfg.output.dir + "/")
         assert cfg.preprocess.output != cfg.output.dir
-        assert _mesh_export_kwargs(cfg, {}, "exmesh")["resolution"] == 1
+        assert _mesh_export_kwargs(cfg, {}, "exmesh")["resolution"] == 2
         outputs.add(cfg.output.dir)
     assert len(outputs) == 15
 
