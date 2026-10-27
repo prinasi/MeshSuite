@@ -77,3 +77,28 @@ def test_largest_component_ratio_reports_fragmentation():
     assert result["components"]["count"] == 2
     assert result["components"]["single_face_component_count"] == 2
     assert result["metrics"]["largest_component_ratio"] == 0.5
+
+
+def _grid(n: int, offset: float = 0.0) -> tuple[list[list[float]], list[list[int]]]:
+    vertices = [[offset + x, float(y), 0.0] for y in range(n + 1) for x in range(n + 1)]
+    faces = []
+    for y in range(n):
+        for x in range(n):
+            a, b = y * (n + 1) + x, y * (n + 1) + x + 1
+            c, d = a + n + 1, b + n + 1
+            faces += [[a, b, d], [a, d, c]]
+    return vertices, faces
+
+
+def test_components_follow_shared_edges_on_larger_meshes():
+    # Two separate 6x6 grids (72 faces each); small meshes can hide face/edge index mix-ups.
+    vertices, faces = _grid(6)
+    other_vertices, other_faces = _grid(6, offset=10.0)
+    shift = len(vertices)
+    mesh = _mesh(vertices + other_vertices, faces + [[i + shift for i in face] for face in other_faces])
+
+    result = calculate_connectivity_metrics(mesh)
+
+    assert result["components"]["count"] == 2
+    assert result["components"]["single_face_component_count"] == 0
+    assert result["metrics"]["largest_component_ratio"] == 0.5

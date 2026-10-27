@@ -182,7 +182,8 @@ def _connected_components(
     if num_faces == 0:
         return 0, np.zeros((0,), dtype=np.int64), np.zeros((0,), dtype=np.int64)
 
-    face_ids = np.repeat(np.arange(num_faces, dtype=np.int64), 3)
+    # _unique_edges stacks all AB edges, then BC, then CA (not face by face).
+    face_ids = np.tile(np.arange(num_faces, dtype=np.int64), 3)
     order = np.argsort(edge_inverse, kind="mergesort")
     sorted_edge_ids = edge_inverse[order]
     sorted_face_ids = face_ids[order]
