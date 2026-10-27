@@ -334,32 +334,6 @@ def test_triangle_splatting_scene_configs_apply_full_eval_caps():
         assert cfg["trainer"]["max_shapes"] == cap
 
 
-
-
-def test_2dts_mipnerf360_opaque_experiment_configs_resolve_to_isolated_outputs():
-    config_dir = Path(__file__).resolve().parents[2] / "configs" / "opaque_2dts_mipnerf360" / "2dts" / "mipnerf360"
-    scene_configs = sorted(config_dir.glob("*.yaml"))
-
-    assert len(scene_configs) == 9
-
-    for path in scene_configs:
-        cfg = Config.fromfile(path)
-        assert cfg.output.dir.startswith("outputs/opaque_2dts_mipnerf360/2dts/mipnerf360/")
-        assert cfg.adapter.checkpoint.startswith("outputs/opaque_2dts_mipnerf360/2dts/mipnerf360/")
-        assert cfg.output.metrics_file.startswith(f"{cfg.output.dir}/")
-        assert cfg.output.stats_file.startswith(f"{cfg.output.dir}/")
-        assert cfg.render.video.output_dir.startswith(f"{cfg.output.dir}/")
-        assert cfg.profile.output.startswith(f"{cfg.output.dir}/")
-        assert cfg.inspect.output.startswith(f"{cfg.output.dir}/")
-        assert cfg.d2ts.native_config == "configs/opaque_2dts_mipnerf360/2dts/native/mipnerf360.yaml"
-        assert cfg.adapter.render_params.ste_threshold == 0.3
-        assert cfg.adapter.render_params.sort_level == 2
-        assert cfg.dataset.scene == path.stem
-
-
-
-
-
 def test_build_from_cfg_with_params():
     obj = build_from_cfg(
         {"type": "toy", "params": {"width": 8}, "name": "demo"},

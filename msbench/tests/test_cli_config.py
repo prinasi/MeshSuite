@@ -239,17 +239,17 @@ def test_2dts_native_config_sets_hard_primitive_cap(tmp_path: Path):
 def test_2dts_native_config_auto_resumes_from_latest_checkpoint(tmp_path: Path):
     from msbench.trainers.d2ts_native import _build_d2ts_native_config
 
-    base_config = Path("configs/opaque_2dts_mipnerf360/2dts/mipnerf360/bicycle.yaml").resolve()
+    base_config = Path("configs/2dts/mipnerf360/bicycle.yaml").resolve()
     config = tmp_path / "bicycle_resume.yaml"
     config.write_text(f"_base_: {base_config}\n")
 
-    ckpt_dir = tmp_path / "outputs" / "opaque_2dts_mipnerf360" / "2dts" / "mipnerf360" / "bicycle" / "ckpt"
+    ckpt_dir = tmp_path / "outputs" / "2dts" / "mipnerf360" / "bicycle" / "ckpt"
     (ckpt_dir / "point_cloud").mkdir(parents=True)
     (ckpt_dir / "point_cloud" / "1500.ply").write_text("ply\n")
     (ckpt_dir / "1200.ckpt").write_bytes(b"checkpoint")
 
     cfg = Config.fromfile(config)
-    run_output_dir = tmp_path / "outputs" / "opaque_2dts_mipnerf360" / "2dts" / "mipnerf360" / "bicycle"
+    run_output_dir = tmp_path / "outputs" / "2dts" / "mipnerf360" / "bicycle"
     native = _build_d2ts_native_config(
         cfg=cfg,
         dataset_root=cfg.dataset.root,
@@ -265,16 +265,16 @@ def test_2dts_native_config_auto_resumes_from_latest_checkpoint(tmp_path: Path):
 def test_2dts_native_config_skips_resume_when_checkpoint_reaches_max_steps(tmp_path: Path):
     from msbench.trainers.d2ts_native import _build_d2ts_native_config
 
-    base_config = Path("configs/opaque_2dts_mipnerf360/2dts/mipnerf360/bicycle.yaml").resolve()
+    base_config = Path("configs/2dts/mipnerf360/bicycle.yaml").resolve()
     config = tmp_path / "bicycle_done.yaml"
     config.write_text(f"_base_: {base_config}\n")
 
-    ckpt_dir = tmp_path / "outputs" / "opaque_2dts_mipnerf360" / "2dts" / "mipnerf360" / "bicycle" / "ckpt"
+    ckpt_dir = tmp_path / "outputs" / "2dts" / "mipnerf360" / "bicycle" / "ckpt"
     ckpt_dir.mkdir(parents=True)
     (ckpt_dir / "3000.ckpt").write_bytes(b"checkpoint")
 
     cfg = Config.fromfile(config)
-    run_output_dir = tmp_path / "outputs" / "opaque_2dts_mipnerf360" / "2dts" / "mipnerf360" / "bicycle"
+    run_output_dir = tmp_path / "outputs" / "2dts" / "mipnerf360" / "bicycle"
     native = _build_d2ts_native_config(
         cfg=cfg,
         dataset_root=cfg.dataset.root,
@@ -393,7 +393,13 @@ def test_2dts_mipnerf360_native_config_uses_aligned_image_dirs():
 def test_structured_train_cli_max_steps_overrides_config(tmp_path: Path):
     from msbench.cli.train import _train_from_structured_config
 
-    cfg = Config.fromfile("configs/opaque_2dts_mipnerf360/2dts/mipnerf360/bicycle.yaml")
+    config = tmp_path / "bicycle.yaml"
+    config.write_text(
+        f"_base_: {Path('configs/2dts/mipnerf360/bicycle.yaml').resolve()}\n"
+        "output:\n"
+        f"  dir: {tmp_path / 'run'}\n"
+    )
+    cfg = Config.fromfile(config)
 
     captured = {}
 
@@ -464,43 +470,6 @@ def test_structured_train_cli_uses_configured_max_steps_unless_explicitly_overri
     assert configured.exit_code == 0, configured.output
     assert overridden.exit_code == 0, overridden.output
     assert captured_steps == [10_000, 12_000]
-
-
-
-def test_2dts_mipnerf360_opaque_experiment_native_overrides_match_dtu_style():
-    from msbench.trainers.d2ts_native import _build_d2ts_native_config
-
-    cfg = Config.fromfile("configs/opaque_2dts_mipnerf360/2dts/mipnerf360/bicycle.yaml")
-    native = _build_d2ts_native_config(
-        cfg=cfg,
-        dataset_root=cfg.dataset.root,
-        output_dir=Path(cfg.output.dir),
-        max_steps=cfg.trainer.max_steps,
-    )
-
-    assert cfg.adapter.checkpoint == "outputs/opaque_2dts_mipnerf360/2dts/mipnerf360/bicycle/ckpt"
-    assert cfg.output.dir == "outputs/opaque_2dts_mipnerf360/2dts/mipnerf360/bicycle"
-    assert cfg.d2ts.native_config == "configs/opaque_2dts_mipnerf360/2dts/native/mipnerf360.yaml"
-    assert cfg.adapter.render_params.ste_threshold == 0.3
-    assert cfg.adapter.render_params.sort_level == 2
-    assert native.model.ste_threshold == 0.3
-    assert native.model.sort_level == 2
-    assert native.model.sampling.init_opacity == 0.5
-    assert native.model.optimizer.opacity.v_final == 0.001
-    assert native.model.model_update.contribution_pruning.contrib_sum_threshold == 0.1
-    assert native.model.model_update.contribution_pruning.end_iter == 30_000
-    assert native.model.model_update.scale_pruning.radii_threshold == -1
-    assert native.model.model_update.scale_pruning.scale_threshold is None
-    assert native.model.model_update.opacity_reset.end_iter == 15_000
-    assert native.model.model_update.opacity_reset.reset_value == 0.29
-    assert native.model.model_update.gamma_schedule.gamma_final == 50.0
-    assert native.trainer.iterations == 30_000
-    assert native.trainer.save_iterations == [30_000]
-    assert native.trainer.checkpoint_iterations == [30_000]
-    assert native.trainer.save_pcd_iterations == [30_000]
-    assert native.trainer.pcd_n_sample == 5_000_000
-    assert native.trainer.geometry_loss.w_geometry == 0.05
-    assert native.trainer.distortion_loss.w_distortion == 0.05
 
 
 def test_nerf_synthetic_config_matrix_resolves_for_all_methods():
