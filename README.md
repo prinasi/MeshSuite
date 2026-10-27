@@ -39,6 +39,11 @@ bash single_train.sh exmesh dtu/all 0
 bash single_train.sh exmesh nerf_synthetic/lego 0
 ```
 
+ExMesh is benchmarked only on the object-centric datasets (DTU and NeRF-Synthetic), as
+in its paper. It refines one bounded, textured mesh from a coarse initialization, using
+object masks and a fixed face budget, so it does not apply to unbounded Mip-NeRF 360 and
+Tanks & Temples scenes; MeshSuite ships no ExMesh configs for them.
+
 Its method settings follow the ExMesh paper: 8k iterations and a coarse initial
 mesh from 2DGS (7k iterations, TSDF at 256³). Settings the paper leaves open
 (per-scene `lambda_smooth`/`lambda_depth`, LR schedule) come from the official
