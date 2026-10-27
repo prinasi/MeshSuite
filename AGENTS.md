@@ -18,16 +18,10 @@
 
 ## 2. 提交前独立检查清单（Pre-Commit Checklist）
 
-在执行 `git add` 和 `git commit` 之前，必须依次完成以下 3 项独立检查：
+在执行 `git add` 和 `git commit` 之前，必须依次完成以下 2 项独立检查：
 
-### 2.1 语法与静态检查
-确保所有新增或修改的 Python 文件无语法错误：
-```bash
-/scratch/miniconda3/envs/msbench/bin/python -m py_compile <modified_python_files>
-```
-
-### 2.2 自动化测试套件验证
-运行相关测试，确保所有测试用例 100% 通过：
+### 2.1 自动化测试套件验证
+运行相关测试，确保所有测试用例 100% 通过（pytest 会导入所有被测模块，语法错误会直接导致失败）：
 ```bash
 # 针对 ExMesh 及相关组件的单元与集成测试
 /scratch/miniconda3/envs/msbench/bin/pytest -v msbench/tests/test_exmesh.py
@@ -36,7 +30,7 @@
 /scratch/miniconda3/envs/msbench/bin/pytest -v msbench/tests/
 ```
 
-### 2.3 变更范围与脏文件核查
+### 2.2 变更范围与脏文件核查
 检查 `git status` 和 `git diff`：
 - 确认只有预期的代码和配置文件被修改。
 - 严禁将临时调试文件（如 `*.log`、`log.txt`、临时 dump 的 `.ply`/`.pt`/`.npy`）带入版本库。
