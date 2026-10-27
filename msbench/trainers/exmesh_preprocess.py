@@ -185,15 +185,21 @@ def prepare_2dgs(config, *, dataset_root):
     ).strip()
     if actual_revision != revision:
         raise ValueError(f"2DGS source revision mismatch: {actual_revision} != {revision}")
+    # 2DGS --eval holds out every 8th view by sorted name, matching dataset.eval_every: 8.
+    holdout = int(options.get("holdout", 0))
+    if holdout not in (0, 8):
+        raise ValueError(f"2DGS initialization supports holdout 0 or 8, got {holdout}")
     settings = dict(
         source_revision=revision,
         dataset=str(Path(dataset_root).resolve()),
         resolution=config["dataset"]["resolution"],
         iterations=7000,
         mesh_resolution=256,
-        lambda_dist=options["lambda_dist"],
+        holdout=holdout,
+        # Defaults from the official 2DGS DTU script (scripts/dtu_eval.py).
+        lambda_dist=options.get("lambda_dist", 1000.0),
         depth_ratio=1.0,
-        num_cluster=options["num_cluster"],
+        num_cluster=options.get("num_cluster", 1),
         background=background,
         rgba_compositing="baked_rgb_preserved_alpha_v1",
         seed=0,
@@ -260,6 +266,8 @@ def prepare_2dgs(config, *, dataset_root):
     )
     if background == "white":
         commands["train"].append("--white_background")
+    if holdout:
+        commands["train"].append("--eval")
     _record_effective_arguments(source, commands["train"], output)
     mesh_path = model / "train/ours_7000/fuse_post.ply"
     if (

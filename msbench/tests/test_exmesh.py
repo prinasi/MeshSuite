@@ -438,3 +438,33 @@ def test_exmesh_resume_matches_continuous_training_across_split(tmp_path, white_
     rendered = adapter.render(full.dataset.sample(0).camera.to("cuda"))
     outside = rendered.alpha == 0
     assert outside.any() and torch.all(rendered.rgb[outside] == float(white_background))
+
+
+def test_2dgs_initializer_holds_out_test_views_with_official_dtu_defaults(tmp_path, monkeypatch):
+    import json
+    import msbench.trainers.exmesh_preprocess as pp
+    from msbench.core.config import load_config
+
+    class Captured(Exception):
+        pass
+
+    def capture(source, command, output):
+        raise Captured(command)
+
+    monkeypatch.setattr(pp.subprocess, "check_output", lambda *a, **k: pp.TWO_DGS_REVISION)
+    monkeypatch.setattr(pp, "stage_colmap", lambda *a, **k: {"views": []})
+    monkeypatch.setattr(pp, "_record_effective_arguments", capture)
+    cfg = load_config("configs/exmesh/benchmark/dtu/scan24.yaml")
+    cfg["preprocess"].update(source_repo=str(tmp_path), output=str(tmp_path / "out"))
+
+    with pytest.raises(Captured) as captured:
+        pp.prepare_exmesh_initializer(cfg, dataset_root=str(tmp_path))
+    command = captured.value.args[0]
+    assert "--eval" in command
+    assert command[command.index("--lambda_dist") + 1] == "1000.0"
+    settings = json.loads((tmp_path / "out/settings.json").read_text())
+    assert settings["holdout"] == 8 and settings["num_cluster"] == 1
+
+    cfg["preprocess"].update(holdout=4, output=str(tmp_path / "out4"))
+    with pytest.raises(ValueError, match="holdout 0 or 8"):
+        pp.prepare_exmesh_initializer(cfg, dataset_root=str(tmp_path))
