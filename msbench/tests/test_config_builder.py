@@ -458,3 +458,38 @@ def test_max_primitives_retargets_output_paths_to_abl():
     data_2dts["trainer"]["max_primitives"] = 8000
     cfg_2dts_abl = Config(finalize_config(data_2dts))
     assert cfg_2dts_abl.output.dir == "outputs/abl/2dts-8000/mipnerf360/garden"
+
+
+# DiffSoup's official Mip-NeRF 360 setup reads images_4 on indoor scenes (GPU memory).
+_DATASET_PROTOCOL_EXCEPTIONS = {
+    ("diffsoup", "mipnerf360", scene, "image_dir")
+    for scene in ("bonsai", "counter", "kitchen", "room")
+}
+
+
+def test_all_methods_share_scene_dataset_protocol():
+    from collections import defaultdict
+
+    repo = Path(__file__).resolve().parents[2]
+    fields = ("name", "type", "root", "image_dir", "resolution", "eval_split", "eval_every",
+              "dtu_eval_mode", "background")
+    by_scene = defaultdict(dict)
+    for path in sorted((repo / "configs").glob("*/*/*.yaml")):
+        method, dataset = path.parts[-3], path.parts[-2]
+        if method == "base" or dataset == "native":
+            continue
+        cfg = load_config(path)
+        by_scene[(dataset, path.stem)][method] = {k: cfg["dataset"].get(k) for k in fields}
+
+    mismatches = []
+    for (dataset, scene), methods in by_scene.items():
+        for field in fields:
+            values = {
+                m: v[field]
+                for m, v in methods.items()
+                if (m, dataset, scene, field) not in _DATASET_PROTOCOL_EXCEPTIONS
+            }
+            if len({repr(v) for v in values.values()}) > 1:
+                mismatches.append((dataset, scene, field, values))
+    assert len(by_scene) >= 34
+    assert not mismatches

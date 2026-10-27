@@ -69,7 +69,7 @@ MeshSuite 中所有方法在同一数据集上使用**同一套数据集配置**
 1. **数据集协议只来自共享数据集基础配置**：
    - 每个场景配置按 `configs/<method>/<dataset>/<scene>.yaml` 组织，并依次继承 `configs/base/<dataset>.yaml`（数据集协议）与 `configs/base/<method>.yaml`（方法默认值），必要时再加 `configs/base/<method>-<dataset>.yaml`（方法在该数据集上的专属流程）。
    - 方法基础配置（`configs/base/<method>.yaml`、`<method>-<dataset>.yaml`）**禁止**设置数据集协议字段：分辨率、`image_dir`、背景、`dtu_eval_mode`、`eval_split`/`eval_every`、`render.split`/`eval.split`。
-   - 场景配置中的数据集字段（如 Mip-NeRF 360 每个场景的 `image_dir`/`resolution`）在所有方法间必须一致。
+   - 场景配置中的数据集字段（如 Mip-NeRF 360 每个场景的 `image_dir`/`resolution`）在所有方法间必须一致，由 `msbench/tests/test_config_builder.py::test_all_methods_share_scene_dataset_protocol` 检查。唯一允许的例外：DiffSoup 在 Mip-NeRF 360 室内场景（bonsai/counter/kitchen/room）使用 `images_4`（官方实现设置，受 GPU 显存限制）；新增例外须经用户确认并登记在该测试中。
    - `configs/base/<dataset>.yaml` 只放数据集协议，不放某个方法的训练超参数（例如 Triangle Splatting / MeshSplatting 的 DTU 训练参数位于 `configs/base/splatting-dtu.yaml`）。
    - 方法基础配置（`configs/base/<method>.yaml`）不继承 `_base_.yaml`，否则会以全局默认值覆盖数据集协议。
 
