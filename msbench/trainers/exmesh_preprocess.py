@@ -1,4 +1,4 @@
-"""Independent, versioned 2DGS initialization for the ExMesh paper protocol."""
+"""Independent, versioned 2DGS and PGSR initialization for ExMesh."""
 
 from __future__ import annotations
 
@@ -18,6 +18,9 @@ from PIL import Image
 
 TWO_DGS_URL = "https://github.com/hbb1/2d-gaussian-splatting.git"
 TWO_DGS_REVISION = "f3e3b9fa67bbd1c75e05167ff37391d8dab2a678"
+# The official ExMesh repository bundles the PGSR initializer its README recommends.
+EXMESH_URL = "https://github.com/Fan-Treasure/ExMesh.git"
+EXMESH_REVISION = "0bf121895ebd74642c1bab824a992c48f95296e8"
 
 
 def _sha256(path):
@@ -414,8 +417,29 @@ def prepare_2dgs(config, *, dataset_root):
     return status
 
 
+def _decimate_mesh(source, target, faces):
+    """Quadric-decimate ``source`` to at most ``faces`` triangles and clean it up."""
+    import open3d as o3d
+
+    mesh = o3d.io.read_triangle_mesh(str(source))
+    if len(mesh.triangles) > faces:
+        mesh = mesh.simplify_quadric_decimation(faces)
+        mesh.remove_degenerate_triangles()
+        mesh.remove_duplicated_triangles()
+        mesh.remove_duplicated_vertices()
+        mesh.remove_non_manifold_edges()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    o3d.io.write_triangle_mesh(str(target), mesh)
+    return mesh
+
+
 def prepare_pgsr(config, *, dataset_root):
-    """Run/cache independent PGSR initialization for ExMesh."""
+    """Run/cache the PGSR initializer bundled with the official ExMesh repository.
+
+    Training follows the official README (5k iterations, -r 2, --ncc_scale 0.5);
+    TSDF extraction exposes the official ``run_dtu_init.py`` options plus an
+    optional quadric decimation of the fused mesh to ``target_faces``.
+    """
     from msbench.core.config import Config
 
     config = Config(config).to_dict()
@@ -423,50 +447,53 @@ def prepare_pgsr(config, *, dataset_root):
     if options.get("type") != "exmesh_pgsr":
         raise ValueError(f"Unsupported preprocessing type: {options.get('type')}")
 
-    target = Path(config["trainer"]["initial_mesh"]).resolve()
-    if target.exists():
-        print(f"ExMesh coarse mesh already exists at {target}, reusing it.", flush=True)
-        return dict(mesh=dict(path=str(target)))
-
     dataset = Path(dataset_root).resolve()
-    output = Path(options.get("output", "outputs/exmesh-preprocess/pgsr")).resolve()
-    source = Path(options.get("source_repo", "../ExMesh/PGSR")).resolve()
-    if not source.exists():
-        source = Path("outputs/exmesh-preprocess/pgsr_source").resolve()
-    if not (source / "train.py").is_file():
-        candidate = Path("/scratch/Workspace/ExMesh/PGSR").resolve()
-        if (candidate / "train.py").is_file():
-            source = candidate
-        else:
-            raise FileNotFoundError(f"PGSR source not found: {source}")
+    output = Path(options["output"]).resolve()
+    target = Path(config["trainer"]["initial_mesh"]).resolve()
+    holdout = int(options.get("holdout", 0))
+    target_faces = options.get("target_faces")
+    white_bg = bool(config["trainer"].get("white_background", False))
+    train_settings = dict(
+        dataset=str(dataset),
+        holdout=holdout,
+        iterations=int(options.get("iterations", 5000)),
+        resolution=int(options.get("resolution", 2)),
+        ncc_scale=float(options.get("ncc_scale", 0.5)),
+        white_background=white_bg,
+    )
+    extract_settings = dict(
+        voxel_size=float(options.get("voxel_size", 0.01)),
+        max_depth=float(options.get("max_depth", 5.0)),
+        num_cluster=int(options.get("num_cluster", 1)),
+        use_depth_filter=bool(options.get("use_depth_filter", False)),
+        target_faces=None if target_faces is None else int(target_faces),
+    )
+    settings = dict(**train_settings, **extract_settings)
+
+    state_path = output / "pgsr_status.json"
+    state = json.loads(state_path.read_text()) if state_path.exists() else dict(stages={})
+    if target.exists() and state.get("settings") == settings:
+        print(f"ExMesh coarse mesh already exists at {target}, reusing it.", flush=True)
+        return state
+
+    source_repo = Path(options["source_repo"]).resolve()
+    revision = options.get("source_revision", EXMESH_REVISION)
+    if not source_repo.exists():
+        source_repo.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["git", "clone", EXMESH_URL, str(source_repo)], check=True)
+        subprocess.run(["git", "-C", str(source_repo), "checkout", "--detach", revision], check=True)
+    actual_revision = subprocess.check_output(
+        ["git", "-C", str(source_repo), "rev-parse", "HEAD"], text=True
+    ).strip()
+    if actual_revision != revision:
+        raise ValueError(f"ExMesh source revision mismatch: {actual_revision} != {revision}")
+    source = source_repo / options.get("source_subdir", "PGSR")
+    # Guards against inheriting another initializer's source (e.g. the 2DGS repo).
+    if not (source / "train.py").is_file() or not (source / "submodules/diff-plane-rasterization").is_dir():
+        raise FileNotFoundError(f"Not a PGSR source tree: {source}")
 
     output.mkdir(parents=True, exist_ok=True)
-    holdout = int(options.get("holdout", 0))
-    iterations = int(options.get("iterations", 5000))
-    resolution = int(options.get("resolution", 2))
-    ncc_scale = float(options.get("ncc_scale", 0.5))
-    voxel_size = float(options.get("voxel_size", 0.01))
-    max_depth = float(options.get("max_depth", 5.0))
-    num_cluster = int(options.get("num_cluster", 1))
-    white_bg = bool(config["trainer"].get("white_background", False))
-
-    settings = dict(
-        dataset=str(dataset),
-        source=str(source),
-        holdout=holdout,
-        iterations=iterations,
-        resolution=resolution,
-        ncc_scale=ncc_scale,
-        voxel_size=voxel_size,
-        max_depth=max_depth,
-        num_cluster=num_cluster,
-        use_depth_filter=False,
-    )
-    if white_bg:
-        settings["white_background"] = True
-
-    settings_path = output / "pgsr_settings.json"
-    settings_path.write_text(json.dumps(settings, indent=2) + "\n")
+    (output / "pgsr_settings.json").write_text(json.dumps(settings, indent=2) + "\n")
 
     work = output / "source"
     if not work.exists():
@@ -509,13 +536,8 @@ def prepare_pgsr(config, *, dataset_root):
     )
     (input_dir / "split.json").write_text(json.dumps(split, indent=2) + "\n")
 
-    state_path = output / "pgsr_status.json"
-    state = (
-        json.loads(state_path.read_text())
-        if state_path.exists()
-        else dict(settings=settings, split=split, stages={})
-    )
     model = output / "model"
+    iterations = train_settings["iterations"]
     commands = dict(
         train=[
             "train.py",
@@ -525,9 +547,9 @@ def prepare_pgsr(config, *, dataset_root):
             str(model),
             "--quiet",
             "-r",
-            str(resolution),
+            str(train_settings["resolution"]),
             "--ncc_scale",
-            str(ncc_scale),
+            str(train_settings["ncc_scale"]),
             "--iterations",
             str(iterations),
         ],
@@ -539,20 +561,28 @@ def prepare_pgsr(config, *, dataset_root):
             "--iteration",
             str(iterations),
             "--num_cluster",
-            str(num_cluster),
+            str(extract_settings["num_cluster"]),
             "--voxel_size",
-            str(voxel_size),
+            str(extract_settings["voxel_size"]),
             "--max_depth",
-            str(max_depth),
+            str(extract_settings["max_depth"]),
         ],
     )
     if white_bg:
         commands["train"].append("--white_background")
+    if extract_settings["use_depth_filter"]:
+        commands["extract"].append("--use_depth_filter")
+    stage_settings = dict(train=train_settings, extract=extract_settings)
 
     mesh_ply = model / "mesh/tsdf_fusion_post.ply"
+    state.update(settings=settings, split=split)
+    stale = False  # a retrained model invalidates its extracted mesh
     for name, command in commands.items():
-        if state.get("stages", {}).get(name, {}).get("status") == "complete" and mesh_ply.exists():
+        stage = state["stages"].get(name, {})
+        cached = stage.get("status") == "complete" and stage.get("settings") == stage_settings[name]
+        if not stale and cached and (name == "train" or mesh_ply.exists()):
             continue
+        stale = True
         log = output / f"{name}.log"
         print(
             f"PGSR {name}: {len(split['train'])} train / {len(split['test'])} held-out views; log={log}",
@@ -567,6 +597,7 @@ def prepare_pgsr(config, *, dataset_root):
             status="complete" if result.returncode == 0 else "failed",
             duration_seconds=time.monotonic() - start,
             command=command,
+            settings=stage_settings[name],
             log=str(log),
         )
         state_path.write_text(json.dumps(state, indent=2) + "\n")
@@ -574,15 +605,17 @@ def prepare_pgsr(config, *, dataset_root):
             print(log.read_text(errors="replace")[-6000:], flush=True)
             raise RuntimeError(f"PGSR {name} failed with exit code {result.returncode}")
 
-    import open3d as o3d
+    if extract_settings["target_faces"]:
+        mesh = _decimate_mesh(mesh_ply, target, extract_settings["target_faces"])
+    else:
+        import open3d as o3d
 
-    mesh = o3d.io.read_triangle_mesh(str(mesh_ply))
+        mesh = o3d.io.read_triangle_mesh(str(mesh_ply))
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target != mesh_ply:
+            shutil.copyfile(mesh_ply, target)
     if not mesh.has_triangles() or not np.isfinite(np.asarray(mesh.vertices)).all():
         raise RuntimeError("PGSR did not produce a valid nonempty mesh")
-
-    target.parent.mkdir(parents=True, exist_ok=True)
-    if target != mesh_ply:
-        shutil.copyfile(mesh_ply, target)
     state["mesh"] = dict(path=str(target), vertices=len(mesh.vertices), faces=len(mesh.triangles))
     state_path.write_text(json.dumps(state, indent=2) + "\n")
     print(

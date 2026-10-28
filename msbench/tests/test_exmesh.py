@@ -1,5 +1,8 @@
 """ExMesh contract, UV topology and real CUDA regression checks."""
 
+import subprocess
+from pathlib import Path
+
 import pytest
 import torch
 
@@ -511,3 +514,73 @@ def test_2dgs_initializer_holds_out_test_views_with_official_dtu_defaults(tmp_pa
     cfg["preprocess"].update(holdout=4, output=str(tmp_path / "out4"))
     with pytest.raises(ValueError, match="holdout 0 or 8"):
         pp.prepare_exmesh_initializer(cfg, dataset_root=str(tmp_path))
+
+
+def test_pgsr_initializer_pins_source_filters_depth_and_decimates(tmp_path, monkeypatch):
+    import json
+    import open3d as o3d
+    import msbench.trainers.exmesh_preprocess as pp
+
+    dataset = tmp_path / "scan24"
+    for name in ("images", "mask", "sparse/0"):
+        (dataset / name).mkdir(parents=True)
+    for i in range(3):
+        (dataset / f"images/{i:04d}.png").touch()
+    (dataset / "sparse/0/cameras.txt").touch()
+    repo = tmp_path / "exmesh"
+    (repo / "PGSR/submodules/diff-plane-rasterization").mkdir(parents=True)
+    (repo / "PGSR/train.py").touch()
+
+    commands = []
+
+    def run(command, cwd=None, **kwargs):
+        commands.append(command[2:])
+        if command[2] == "render.py":
+            mesh = o3d.geometry.TriangleMesh.create_sphere(resolution=40)
+            path = Path(command[command.index("-m") + 1]) / "mesh/tsdf_fusion_post.ply"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            o3d.io.write_triangle_mesh(str(path), mesh)
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(pp.subprocess, "run", run)
+    monkeypatch.setattr(pp.subprocess, "check_output", lambda *a, **k: pp.EXMESH_REVISION)
+    out = tmp_path / "out"
+    cfg = dict(
+        preprocess=dict(
+            type="exmesh_pgsr", source_repo=str(repo), output=str(out), holdout=0,
+            voxel_size=0.003, use_depth_filter=True, target_faces=500,
+        ),
+        trainer=dict(initial_mesh=str(out / "init_mesh.ply"), white_background=True),
+    )
+    state = pp.prepare_exmesh_initializer(cfg, dataset_root=str(dataset))
+
+    train, extract = commands
+    assert train[0] == "train.py" and "--white_background" in train
+    assert train[train.index("--iterations") + 1] == "5000" and train[train.index("-r") + 1] == "2"
+    assert extract[0] == "render.py" and "--use_depth_filter" in extract
+    assert extract[extract.index("--voxel_size") + 1] == "0.003"
+    assert 0 < state["mesh"]["faces"] <= 500
+    assert len(o3d.io.read_triangle_mesh(str(out / "init_mesh.ply")).triangles) <= 500
+    assert json.loads((out / "input/split.json").read_text())["test"] == []
+
+    # A cached initializer is reused only while its settings match; an extraction-only
+    # change re-extracts from the trained PGSR model without retraining.
+    commands.clear()
+    pp.prepare_exmesh_initializer(cfg, dataset_root=str(dataset))
+    assert commands == []
+    cfg["preprocess"]["voxel_size"] = 0.005
+    pp.prepare_exmesh_initializer(cfg, dataset_root=str(dataset))
+    assert [c[0] for c in commands] == ["render.py"]
+    commands.clear()
+    cfg["preprocess"]["iterations"] = 7000
+    pp.prepare_exmesh_initializer(cfg, dataset_root=str(dataset))
+    assert [c[0] for c in commands] == ["train.py", "render.py"]
+
+    # Inheriting another initializer's source (e.g. the 2DGS repo) fails loudly.
+    (repo / "PGSR/submodules/diff-plane-rasterization").rmdir()
+    cfg["preprocess"]["voxel_size"] = 0.004
+    with pytest.raises(FileNotFoundError, match="Not a PGSR source"):
+        pp.prepare_exmesh_initializer(cfg, dataset_root=str(dataset))
+    monkeypatch.setattr(pp.subprocess, "check_output", lambda *a, **k: "0" * 40)
+    with pytest.raises(ValueError, match="revision mismatch"):
+        pp.prepare_exmesh_initializer(cfg, dataset_root=str(dataset))
