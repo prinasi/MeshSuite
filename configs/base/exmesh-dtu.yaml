@@ -1,19 +1,31 @@
 # ExMesh on DTU. The dataset protocol comes from dtu.yaml like every other
 # method; this file only adds ExMesh's own pipeline on top of it.
+#
+# DTU uses the best-performing ExMesh settings we found rather than the paper's
+# Sec. 4.1 setup (2DGS init + 8k iterations gave mean CD 0.98 vs the paper's 0.58).
+# Each choice below was screened on the shared all-views protocol.
 
-# Paper Sec. 4.1: coarse mesh from 2DGS (7k iterations, TSDF at 256^3). 2DGS sees
-# the same views as ExMesh training: all of them (dataset.eval_split: false).
-# The official repo's README recommends a PGSR initializer instead; on DTU it gave
-# mean CD 0.69 vs 0.98 for 2DGS, but neither reached the paper's 0.58, so the
-# paper's 2DGS stays, pinned to the official 2DGS repository at a fixed commit.
+# Coarse mesh from the PGSR initializer bundled with the official ExMesh repo
+# (5k iterations, -r 2, --ncc_scale 0.5), seeing the same views as ExMesh training.
+# TSDF extraction uses the depth filter from the official PGSR/scripts/run_dtu_init.py
+# and a finer voxel (0.003 vs 0.01), which improves the init CD on every scan. ExMesh
+# degrades dense inits (blister-like bumps on flat walls), so the fused mesh is
+# quadric-decimated to 30k faces, which keeps the init CD.
 preprocess:
-  type: exmesh_2dgs
-  # Cloned from https://github.com/hbb1/2d-gaussian-splatting on first use.
-  source_repo: outputs/exmesh-preprocess/2dgs_source
-  source_revision: f3e3b9fa67bbd1c75e05167ff37391d8dab2a678
-  output: outputs/exmesh-preprocess/{dataset}/{scene}
+  type: exmesh_pgsr
+  # Cloned from https://github.com/Fan-Treasure/ExMesh on first use.
+  source_repo: outputs/exmesh-preprocess/exmesh_source
+  source_revision: 0bf121895ebd74642c1bab824a992c48f95296e8
+  output: outputs/exmesh-preprocess/pgsr/{dataset}/{scene}
   holdout: 0
+  use_depth_filter: true
+  voxel_size: 0.003
+  target_faces: 30000
 
 trainer:
   dataset_type: dtu
-  initial_mesh: outputs/exmesh-preprocess/{dataset}/{scene}/model/mesh/tsdf_fusion_post.ply
+  initial_mesh: outputs/exmesh-preprocess/pgsr/{dataset}/{scene}/init_mesh.ply
+  # The official repo's 10k schedule beats the paper's 8k.
+  max_steps: 10000
+  # 16x the repo's offset weight keeps ExMesh close to the accurate PGSR init.
+  lambda_deviation: 160000

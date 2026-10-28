@@ -141,7 +141,7 @@ def test_exmesh_dtu_configs_use_shared_protocol_with_published_parameters():
     from msbench.core.config import Config
     from msbench.core.builder import build_training_method
     from msbench.cli.train import inherit_dataset_defaults
-    from msbench.trainers.exmesh_preprocess import TWO_DGS_REVISION
+    from msbench.trainers.exmesh_preprocess import EXMESH_REVISION
 
     expected_params = {
         24: {"lambda_smooth": 3000, "lambda_depth": 0.1},
@@ -176,20 +176,24 @@ def test_exmesh_dtu_configs_use_shared_protocol_with_published_parameters():
         method = build_training_method(
             trainer, default_args=dict(dataset=cfg.dataset.root, output_dir=cfg.output.dir)
         )
-        # ExMesh paper Sec. 4.1 schedule; per-scene weights from the official run_dtu.py.
-        assert method.max_steps == 8000 and method.opt.split_until_iter == 7000
+        # Best-performing DTU schedule: the repo's 10k iterations, a 16x offset weight,
+        # and the per-scene weights from the official run_dtu.py.
+        assert method.max_steps == 10000 and method.opt.split_until_iter == 7000
         assert method.opt.lambda_depth == params["lambda_depth"]
         assert method.opt.lambda_smooth == params["lambda_smooth"]
-        assert method.opt.lambda_deviation == 10000
+        assert method.opt.lambda_deviation == 160000
         assert method.opt.lr_vertices_init == 0.0005 and method.opt.feature_lr == 0.0025
         assert method.background == float(cfg.trainer.white_background)
         assert not method.eval_split and method.resolution == cfg.dataset.resolution
-        # 2DGS initialization sees the same views as ExMesh training: all of them.
-        assert cfg.preprocess.type == "exmesh_2dgs"
+        # PGSR initialization sees the same views as ExMesh training: all of them.
+        assert cfg.preprocess.type == "exmesh_pgsr"
         assert cfg.preprocess.holdout == 0
-        # The paper's 2DGS initializer, explicitly pinned to the official 2DGS source.
-        assert cfg.preprocess.source_repo == "outputs/exmesh-preprocess/2dgs_source"
-        assert cfg.preprocess.source_revision == TWO_DGS_REVISION
+        # The PGSR bundled with the official ExMesh repo, pinned to a fixed commit, with
+        # depth-filtered fine TSDF extraction decimated to 30k faces.
+        assert cfg.preprocess.source_repo == "outputs/exmesh-preprocess/exmesh_source"
+        assert cfg.preprocess.source_revision == EXMESH_REVISION
+        assert cfg.preprocess.use_depth_filter is True
+        assert cfg.preprocess.voxel_size == 0.003 and cfg.preprocess.target_faces == 30000
         assert str(method.initial_mesh).startswith(cfg.preprocess.output)
         assert cfg.output.dir == other.output.dir.replace("triangle-splatting", "exmesh")
         assert cfg.mesh.output == cfg.output.mesh_file == cfg.output.dir + "/mesh/mesh.ply"
@@ -500,8 +504,11 @@ def test_2dgs_initializer_holds_out_test_views_with_official_dtu_defaults(tmp_pa
     monkeypatch.setattr(pp.subprocess, "check_output", lambda *a, **k: pp.TWO_DGS_REVISION)
     monkeypatch.setattr(pp, "stage_colmap", lambda *a, **k: {"views": []})
     monkeypatch.setattr(pp, "_record_effective_arguments", capture)
+    # The DTU configs default to PGSR; the 2DGS initializer keeps its DTU defaults.
     cfg = load_config("configs/exmesh/dtu/scan24.yaml")
-    cfg["preprocess"].update(source_repo=str(tmp_path), output=str(tmp_path / "out"))
+    cfg["preprocess"] = dict(
+        type="exmesh_2dgs", holdout=0, source_repo=str(tmp_path), output=str(tmp_path / "out")
+    )
 
     with pytest.raises(Captured) as captured:
         pp.prepare_exmesh_initializer(cfg, dataset_root=str(tmp_path))
