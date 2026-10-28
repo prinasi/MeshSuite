@@ -138,6 +138,7 @@ def test_exmesh_dtu_configs_use_shared_protocol_with_published_parameters():
     from msbench.core.config import Config
     from msbench.core.builder import build_training_method
     from msbench.cli.train import inherit_dataset_defaults
+    from msbench.trainers.exmesh_preprocess import TWO_DGS_REVISION
 
     expected_params = {
         24: {"lambda_smooth": 3000, "lambda_depth": 0.1},
@@ -183,6 +184,9 @@ def test_exmesh_dtu_configs_use_shared_protocol_with_published_parameters():
         # 2DGS initialization sees the same views as ExMesh training: all of them.
         assert cfg.preprocess.type == "exmesh_2dgs"
         assert cfg.preprocess.holdout == 0
+        # The paper's 2DGS initializer, explicitly pinned to the official 2DGS source.
+        assert cfg.preprocess.source_repo == "outputs/exmesh-preprocess/2dgs_source"
+        assert cfg.preprocess.source_revision == TWO_DGS_REVISION
         assert str(method.initial_mesh).startswith(cfg.preprocess.output)
         assert cfg.output.dir == other.output.dir.replace("triangle-splatting", "exmesh")
         assert cfg.mesh.output == cfg.output.mesh_file == cfg.output.dir + "/mesh/mesh.ply"

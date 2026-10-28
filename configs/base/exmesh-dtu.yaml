@@ -3,9 +3,14 @@
 
 # Paper Sec. 4.1: coarse mesh from 2DGS (7k iterations, TSDF at 256^3). 2DGS sees
 # the same views as ExMesh training: all of them (dataset.eval_split: false).
+# The official repo's README recommends a PGSR initializer instead; on DTU it gave
+# mean CD 0.69 vs 0.98 for 2DGS, but neither reached the paper's 0.58, so the
+# paper's 2DGS stays, pinned to the official 2DGS repository at a fixed commit.
 preprocess:
   type: exmesh_2dgs
+  # Cloned from https://github.com/hbb1/2d-gaussian-splatting on first use.
   source_repo: outputs/exmesh-preprocess/2dgs_source
+  source_revision: f3e3b9fa67bbd1c75e05167ff37391d8dab2a678
   output: outputs/exmesh-preprocess/{dataset}/{scene}
   holdout: 0
 
