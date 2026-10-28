@@ -1,16 +1,8 @@
 _base_:
   - ../../base/nerf_synthetic.yaml
   - ../../base/exmesh.yaml
+  - ../../base/exmesh-nerf_synthetic.yaml
 experiment:
   name: exmesh_nerf_synthetic_lego
 dataset:
   scene: lego
-trainer:
-  dataset_type: synthetic
-  lambda_depth: 0.01
-  lambda_smooth: 1000
-  lambda_deviation: 1000
-  # Precomputed: stage train-only inputs with tools/prepare_exmesh_synthetic.py,
-  # then run PGSR and DA3 on them into these paths (no automatic preprocessing).
-  initial_mesh: outputs/exmesh-preprocess/lego/pgsr/model/mesh/tsdf_fusion_post.ply
-  depth_dir: outputs/exmesh-preprocess/lego/da3

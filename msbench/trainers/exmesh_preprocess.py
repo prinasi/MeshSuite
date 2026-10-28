@@ -152,6 +152,56 @@ def stage_colmap(dataset, output, resolution, *, background=None):
     return manifest
 
 
+def stage_blender(dataset, output):
+    """Translate a Blender scene's training split into a COLMAP scene for 2DGS.
+
+    Uses the known Blender cameras (no SfM) and never reads transforms_test.json or
+    test images. The official 2DGS Blender loader cannot run on current Pillow, so
+    the scene then goes through stage_colmap and the 2DGS COLMAP loader like DTU.
+    """
+    from plyfile import PlyData
+    from scipy.spatial.transform import Rotation
+
+    dataset, output = Path(dataset), Path(output)
+    meta = json.loads((dataset / "transforms_train.json").read_text())
+    images, sparse = output / "images", output / "sparse/0"
+    images.mkdir(parents=True, exist_ok=True)
+    sparse.mkdir(parents=True, exist_ok=True)
+    camera_lines, image_lines = [], []
+    for index, frame in enumerate(meta["frames"], 1):
+        relative = Path(frame["file_path"]).with_suffix(".png")
+        target = images / relative.name
+        if target.exists() or target.is_symlink():
+            target.unlink()
+        target.symlink_to((dataset / relative).resolve())
+        with Image.open(target) as image:
+            width, height = image.size
+        focal = width / (2 * np.tan(meta["camera_angle_x"] / 2))
+        c2w = np.array(frame["transform_matrix"], dtype=np.float64)
+        c2w[:3, 1:3] *= -1
+        w2c = np.linalg.inv(c2w)
+        quat = Rotation.from_matrix(w2c[:3, :3]).as_quat()[[3, 0, 1, 2]]
+        camera_lines.append(
+            f"{index} PINHOLE {width} {height} {focal} {focal} {width / 2} {height / 2}"
+        )
+        pose = " ".join(map(str, [*quat, *w2c[:3, 3]]))
+        image_lines.append(f"{index} {pose} {index} {relative.name}\n\n")
+    if not image_lines:
+        raise ValueError("No training images for 2DGS initialization")
+    (sparse / "cameras.txt").write_text("\n".join(camera_lines) + "\n")
+    (sparse / "images.txt").write_text("".join(image_lines))
+    # The standard NeRF-Synthetic points3d.ply is a random initialization cloud, not
+    # ground truth; without it 2DGS would draw an unseeded one.
+    cloud = PlyData.read(dataset / "points3d.ply")["vertex"].data
+    with (sparse / "points3D.txt").open("w") as stream:
+        for i, row in enumerate(cloud, 1):
+            stream.write(
+                f"{i} {row['x']} {row['y']} {row['z']} "
+                f"{int(row['red'])} {int(row['green'])} {int(row['blue'])} 0\n"
+            )
+    return output
+
+
 def prepare_2dgs(config, *, dataset_root):
     """Run/cache the separate initializer before the native ExMesh training loop."""
     from msbench.core.config import Config
@@ -189,6 +239,9 @@ def prepare_2dgs(config, *, dataset_root):
     holdout = int(options.get("holdout", 0))
     if holdout not in (0, 8):
         raise ValueError(f"2DGS initialization supports holdout 0 or 8, got {holdout}")
+    synthetic = str(config["dataset"].get("type", "")).lower() == "synthetic"
+    if synthetic and holdout:
+        raise ValueError("NeRF-Synthetic 2DGS initialization uses the dataset's own train split")
     settings = dict(
         source_revision=revision,
         dataset=str(Path(dataset_root).resolve()),
@@ -205,6 +258,15 @@ def prepare_2dgs(config, *, dataset_root):
         seed=0,
         tsdf="official bounded: depth_trunc=2*estimated_radius; voxel=depth_trunc/256; sdf_trunc=5*voxel",
     )
+    if synthetic:
+        # Defaults from the official 2DGS NeRF-Synthetic script (scripts/nerf_eval.py):
+        # --white_background --lambda_normal 0.0, otherwise 2DGS defaults.
+        settings.update(
+            lambda_dist=options.get("lambda_dist", 0.0),
+            lambda_normal=0.0,
+            depth_ratio=0.0,
+            split="transforms_train",
+        )
     output.mkdir(parents=True, exist_ok=True)
     settings_path = output / "settings.json"
     if settings_path.exists() and json.loads(settings_path.read_text()) != settings:
@@ -212,6 +274,8 @@ def prepare_2dgs(config, *, dataset_root):
             "Cached 2DGS settings differ; use a separate preprocessing output directory"
         )
     settings_path.write_text(json.dumps(settings, indent=2) + "\n")
+    if synthetic:
+        dataset_root = stage_blender(dataset_root, output / "blender_train")
     manifest = stage_colmap(
         dataset_root, output / "input", settings["resolution"], background=background
     )
@@ -240,7 +304,7 @@ def prepare_2dgs(config, *, dataset_root):
             "--lambda_dist",
             str(settings["lambda_dist"]),
             "--depth_ratio",
-            "1.0",
+            str(settings["depth_ratio"]),
             "--test_iterations",
             "-1",
             "--save_iterations",
@@ -258,7 +322,7 @@ def prepare_2dgs(config, *, dataset_root):
             "--num_cluster",
             str(settings["num_cluster"]),
             "--depth_ratio",
-            "1.0",
+            str(settings["depth_ratio"]),
             "--skip_train",
             "--skip_test",
             "--quiet",
@@ -266,6 +330,8 @@ def prepare_2dgs(config, *, dataset_root):
     )
     if background == "white":
         commands["train"].append("--white_background")
+    if synthetic:
+        commands["train"] += ["--lambda_normal", str(settings["lambda_normal"])]
     if holdout:
         commands["train"].append("--eval")
     _record_effective_arguments(source, commands["train"], output)

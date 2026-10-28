@@ -1,0 +1,8 @@
+_base_:
+  - ../../base/nerf_synthetic.yaml
+  - ../../base/exmesh.yaml
+  - ../../base/exmesh-nerf_synthetic.yaml
+experiment:
+  name: exmesh_nerf_synthetic_chair
+dataset:
+  scene: chair

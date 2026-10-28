@@ -1,0 +1,23 @@
+# ExMesh on NeRF-Synthetic. The dataset protocol comes from nerf_synthetic.yaml like
+# every other method; this file only adds ExMesh's own pipeline on top of it.
+
+# Paper Sec. 4.1, confirmed by the authors for both DTU and NeRF-Synthetic: coarse mesh
+# from 2DGS (7k iterations, TSDF at 256^3), built from the training views only. 2DGS
+# flags the paper leaves open follow the official 2DGS NeRF-Synthetic script.
+preprocess:
+  type: exmesh_2dgs
+  # Cloned from https://github.com/hbb1/2d-gaussian-splatting on first use.
+  source_repo: outputs/exmesh-preprocess/2dgs_source
+  source_revision: f3e3b9fa67bbd1c75e05167ff37391d8dab2a678
+  output: outputs/exmesh-preprocess/{dataset}/{scene}
+  holdout: 0
+
+trainer:
+  dataset_type: synthetic
+  initial_mesh: outputs/exmesh-preprocess/{dataset}/{scene}/model/mesh/tsdf_fusion_post.ply
+  # The authors report NeRF-Synthetic without depth supervision: monocular depth is
+  # unreliable on the uniform synthetic backgrounds.
+  lambda_depth: 0.0
+  # Paper Table 6.
+  lambda_smooth: 1000
+  lambda_deviation: 1000

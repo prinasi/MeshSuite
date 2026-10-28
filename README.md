@@ -36,7 +36,7 @@ used for training), so its results are directly comparable:
 
 ```bash
 bash single_train.sh exmesh dtu/all 0
-bash single_train.sh exmesh nerf_synthetic/lego 0
+bash single_train.sh exmesh nerf_synthetic/all 0
 ```
 
 ExMesh is benchmarked only on the object-centric datasets (DTU and NeRF-Synthetic), as
@@ -45,14 +45,17 @@ object masks and a fixed face budget, so it does not apply to unbounded Mip-NeRF
 Tanks & Temples scenes; MeshSuite ships no ExMesh configs for them.
 
 Its method settings follow the ExMesh paper: 8k iterations and a coarse initial
-mesh from 2DGS (7k iterations, TSDF at 256³). Settings the paper leaves open
-(per-scene `lambda_smooth`/`lambda_depth`, LR schedule) come from the official
-ExMesh repo. On DTU the 2DGS initialization is built automatically before training,
-on the same views as ExMesh training, and cached under `outputs/exmesh-preprocess/`. The
-pinned 2DGS source is cloned to `outputs/exmesh-preprocess/2dgs_source` on first
-use, and its `diff_surfel_rasterization` extension must be installed. ExMesh also
-reads monocular depth priors from `data/dtu/<scan>/mono_priors/da3/` and needs the
-`exmesh` extra (`pip install -e ".[exmesh]"`).
+mesh from 2DGS (7k iterations, TSDF at 256³) on both DTU and NeRF-Synthetic, as the
+authors confirmed. Settings the paper leaves open (per-scene DTU `lambda_smooth`/
+`lambda_depth`, LR schedule) come from the official ExMesh repo. The 2DGS
+initialization is built automatically before training, on the same views as ExMesh
+training (on NeRF-Synthetic, the training split only), and cached under
+`outputs/exmesh-preprocess/`. The pinned 2DGS source is cloned to
+`outputs/exmesh-preprocess/2dgs_source` on first use, and its
+`diff_surfel_rasterization` extension must be installed. On DTU, ExMesh also reads
+monocular depth priors from `data/dtu/<scan>/mono_priors/da3/`; NeRF-Synthetic is
+trained without depth supervision, as in the paper. ExMesh needs the `exmesh` extra
+(`pip install -e ".[exmesh]"`).
 
 ## Installation
 

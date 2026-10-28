@@ -241,22 +241,92 @@ def test_synthetic_pgsr_stage_preserves_cameras_and_excludes_test(tmp_path):
     assert report["train_count"] == 1 and not report["test_images_used"]
     assert not report["initialization_cloud_is_ground_truth"]
 
-    from msbench.core.config import Config
-    from msbench.core.builder import build_training_method
 
+
+def test_exmesh_synthetic_configs_follow_the_authors_setup():
     from msbench.cli.train import inherit_dataset_defaults
+    from msbench.core.builder import build_training_method
+    from msbench.core.config import Config
+    from msbench.trainers.exmesh_preprocess import TWO_DGS_REVISION
 
-    cfg = Config.fromfile("configs/exmesh/nerf_synthetic/lego.yaml")
-    assert cfg.dataset.background == "white" and cfg.trainer.white_background
-    trainer = inherit_dataset_defaults(cfg.trainer.to_dict(), cfg.dataset.to_dict())
-    method = build_training_method(
-        trainer, default_args=dict(dataset=str(source), output_dir=str(target))
+    for scene in ("chair", "drums", "ficus", "hotdog", "lego", "materials", "mic", "ship"):
+        cfg = Config.fromfile(f"configs/exmesh/nerf_synthetic/{scene}.yaml")
+        other = Config.fromfile(f"configs/triangle-splatting/nerf_synthetic/{scene}.yaml")
+        assert cfg.dataset.to_dict() == other.dataset.to_dict()
+        assert cfg.dataset.background == "white" and cfg.trainer.white_background
+        trainer = inherit_dataset_defaults(cfg.trainer.to_dict(), cfg.dataset.to_dict())
+        method = build_training_method(
+            trainer, default_args=dict(dataset=cfg.dataset.root, output_dir=cfg.output.dir)
+        )
+        assert method.dataset_type == "synthetic" and method.eval_split
+        assert method.max_steps == 8000
+        # Authors: no depth supervision on NeRF-Synthetic; Table 6 regularizer weights.
+        assert method.opt.lambda_depth == 0
+        assert method.opt.lambda_smooth == method.opt.lambda_deviation == 1000
+        # Authors: the same 2DGS 7k + 256^3 TSDF initialization as on DTU.
+        assert cfg.preprocess.type == "exmesh_2dgs" and cfg.preprocess.holdout == 0
+        assert cfg.preprocess.source_revision == TWO_DGS_REVISION
+        assert str(method.initial_mesh).startswith(cfg.preprocess.output)
+        assert cfg.output.dir == f"outputs/exmesh/nerf_synthetic/{scene}"
+        assert cfg.mesh.output.startswith(cfg.output.dir)
+
+
+def test_2dgs_initializer_stages_only_synthetic_training_views(tmp_path, monkeypatch):
+    import json
+    import numpy as np
+    from PIL import Image
+    from plyfile import PlyData, PlyElement
+    import msbench.trainers.exmesh_preprocess as pp
+    from msbench.core.config import load_config
+    from msbench.core.datasets import load_dataset
+
+    source = tmp_path / "lego"
+    (source / "train").mkdir(parents=True)
+    Image.new("RGBA", (16, 12), (20, 60, 100, 0)).save(source / "train/r_0.png")
+    pose = np.eye(4)
+    pose[:3, :3] = [[0.8, 0, 0.6], [0, 1, 0], [-0.6, 0, 0.8]]
+    pose[:3, 3] = [0.3, -0.7, 2.4]
+    meta = dict(
+        camera_angle_x=0.7, frames=[dict(file_path="./train/r_0", transform_matrix=pose.tolist())]
     )
-    assert method.dataset_type == "synthetic" and method.eval_split
-    assert method.max_steps == 8000 and method.opt.lambda_depth == 0.01
-    assert method.opt.lambda_smooth == method.opt.lambda_deviation == 1000
-    assert cfg.mesh.output.startswith(cfg.output.dir)
-    assert cfg.output.dir == "outputs/exmesh/nerf_synthetic/lego"
+    (source / "transforms_train.json").write_text(json.dumps(meta))
+    (source / "transforms_test.json").write_text("must never be read")
+    points = np.array(
+        [(0.0, 0.0, 0.0, 100, 120, 140)],
+        dtype=[("x", "f4"), ("y", "f4"), ("z", "f4"), ("red", "u1"), ("green", "u1"), ("blue", "u1")],
+    )
+    PlyData([PlyElement.describe(points, "vertex")]).write(source / "points3d.ply")
+
+    class Captured(Exception):
+        pass
+
+    def capture(source_repo, command, output):
+        raise Captured(command)
+
+    monkeypatch.setattr(pp.subprocess, "check_output", lambda *a, **k: pp.TWO_DGS_REVISION)
+    monkeypatch.setattr(pp, "_record_effective_arguments", capture)
+    cfg = load_config("configs/exmesh/nerf_synthetic/lego.yaml")
+    cfg["preprocess"].update(source_repo=str(tmp_path), output=str(tmp_path / "out"))
+    with pytest.raises(Captured) as captured:
+        pp.prepare_exmesh_initializer(cfg, dataset_root=str(source))
+
+    # Training views only, with the known Blender cameras and a white baked background.
+    staged = tmp_path / "out/input"
+    actual = load_dataset(staged, dataset_type="colmap", split="all")
+    expected = load_dataset(source, dataset_type="synthetic", split="train").sample(0)
+    assert len(actual) == 1
+    torch.testing.assert_close(actual.sample(0).camera.viewmats, expected.camera.viewmats)
+    torch.testing.assert_close(actual.sample(0).camera.Ks, expected.camera.Ks)
+    assert actual.sample(0).image.min() == 1
+    assert (staged / "sparse/0/points3D.txt").is_file()
+    command = captured.value.args[0]
+    # Official 2DGS NeRF-Synthetic flags; nothing is held out of the training split.
+    assert "--eval" not in command and "--white_background" in command
+    assert command[command.index("--lambda_normal") + 1] == "0.0"
+    assert command[command.index("--lambda_dist") + 1] == "0.0"
+    assert command[command.index("--depth_ratio") + 1] == "0.0"
+    settings = json.loads((tmp_path / "out/settings.json").read_text())
+    assert settings["iterations"] == 7000 and settings["mesh_resolution"] == 256
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="ExMesh requires real CUDA")
