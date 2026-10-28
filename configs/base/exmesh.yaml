@@ -28,7 +28,8 @@ trainer:
 
 loop:
   log_interval: 100
-  save_interval: 1000
+  # Checkpoints are ~230 MB each on DTU; ckpt/final.pt is always written at the end.
+  save_interval: 5000
 
 # ExMesh trains the mesh directly and exports it at the end of training.
 mesh:
