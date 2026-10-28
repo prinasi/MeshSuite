@@ -44,18 +44,27 @@ in its paper. It refines one bounded, textured mesh from a coarse initialization
 object masks and a fixed face budget, so it does not apply to unbounded Mip-NeRF 360 and
 Tanks & Temples scenes; MeshSuite ships no ExMesh configs for them.
 
-Its method settings follow the ExMesh paper: 8k iterations and a coarse initial
-mesh from 2DGS (7k iterations, TSDF at 256³) on both DTU and NeRF-Synthetic, as the
-authors confirmed. Settings the paper leaves open (per-scene DTU `lambda_smooth`/
-`lambda_depth`, LR schedule) come from the official ExMesh repo. The 2DGS
-initialization is built automatically before training, on the same views as ExMesh
-training (on NeRF-Synthetic, the training split only), and cached under
-`outputs/exmesh-preprocess/`. The pinned 2DGS source is cloned to
+On NeRF-Synthetic its method settings follow the ExMesh paper: 8k iterations and a
+coarse initial mesh from 2DGS (7k iterations, TSDF at 256³) built on the training
+split, as the authors confirmed; the pinned 2DGS source is cloned to
 `outputs/exmesh-preprocess/2dgs_source` on first use, and its
-`diff_surfel_rasterization` extension must be installed. On DTU, ExMesh also reads
-monocular depth priors from `data/dtu/<scan>/mono_priors/da3/`; NeRF-Synthetic is
-trained without depth supervision, as in the paper. ExMesh needs the `exmesh` extra
-(`pip install -e ".[exmesh]"`).
+`diff_surfel_rasterization` extension must be installed. NeRF-Synthetic is trained
+without depth supervision, as in the paper.
+
+On DTU the paper's setup reaches only mean CD 0.98 on the shared protocol (paper:
+0.58), so MeshSuite uses the best-performing settings it found instead
+(`configs/base/exmesh-dtu.yaml`): the PGSR initializer bundled with the official
+ExMesh repo, extracted with its depth filter at TSDF voxel 0.003 and decimated to 30k
+faces; the repo's 10k iterations; and a 16x offset (`lambda_deviation`) weight.
+Per-scene `lambda_smooth`/`lambda_depth` and the LR schedule come from the official
+`scripts/run_dtu.py`. The pinned ExMesh source is cloned to
+`outputs/exmesh-preprocess/exmesh_source` on first use, and PGSR's
+`diff_plane_rasterization` extension must be installed. ExMesh on DTU also reads
+monocular depth priors from `data/dtu/<scan>/mono_priors/da3/`.
+
+The initialization is built automatically before training, on the same views as
+ExMesh training, and cached under `outputs/exmesh-preprocess/`. ExMesh needs the
+`exmesh` extra (`pip install -e ".[exmesh]"`).
 
 ## Installation
 
