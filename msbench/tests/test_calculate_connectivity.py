@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import json
+import subprocess
+import sys
+from pathlib import Path
+
 import numpy as np
 
 from tools.calculate_connectivity import MeshData, calculate_connectivity_metrics
@@ -102,3 +107,35 @@ def test_components_follow_shared_edges_on_larger_meshes():
     assert result["components"]["count"] == 2
     assert result["components"]["single_face_component_count"] == 0
     assert result["metrics"]["largest_component_ratio"] == 0.5
+
+
+def test_single_connectivity_reads_exmesh_exported_mesh(tmp_path):
+    import trimesh
+
+    # A closed tetrahedron: no boundary edges, one component.
+    out = tmp_path / "outputs/exmesh/dtu-fg/scan24"
+    (out / "mesh").mkdir(parents=True)
+    trimesh.Trimesh(
+        vertices=[[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        faces=[[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]],
+        process=False,
+    ).export(out / "mesh/mesh.ply")
+    config = tmp_path / "configs/exmesh/dtu/scan24.yaml"
+    config.parent.mkdir(parents=True)
+    config.write_text(
+        "dataset: {name: dtu, scene: scan24}\n"
+        "adapter: {type: exmesh, checkpoint: %s/ckpt/final.pt}\n"
+        "mesh: {output: %s/mesh/mesh.ply}\n"
+        "output: {dir: %s}\n" % (out, out, out)
+    )
+
+    root = Path(__file__).resolve().parents[2]
+    subprocess.run(
+        ["bash", str(root / "single_connectivity.sh"), "exmesh", "dtu/scan24",
+         "--config_root", str(tmp_path / "configs"), "--python", sys.executable,
+         "--connectivity_script", str(root / "tools/calculate_connectivity.py")],
+        cwd=tmp_path, check=True, capture_output=True, text=True,
+    )
+    result = json.loads((out / "connectivity_metrics.json").read_text())
+    assert result["counts"]["boundary_edges"] == 0
+    assert result["components"]["count"] == 1
