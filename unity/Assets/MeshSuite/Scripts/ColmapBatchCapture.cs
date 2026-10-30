@@ -130,7 +130,7 @@ namespace MeshSuite.UnityNative
             double loadStart = Time.realtimeSinceStartupAsDouble;
             string completionPath = Path.Combine(OutputRoot, ".unity_capture_complete");
             if (File.Exists(completionPath)) File.Delete(completionPath);
-            if (Renderer == null) Renderer = FindFirstObjectByType<TriAssetRenderer>();
+            if (Renderer == null) Renderer = FindAnyObjectByType<TriAssetRenderer>();
             if (CaptureCamera == null) CaptureCamera = Camera.main;
             if (Renderer == null || CaptureCamera == null)
             {

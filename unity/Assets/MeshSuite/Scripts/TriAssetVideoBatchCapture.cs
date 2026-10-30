@@ -107,7 +107,7 @@ namespace MeshSuite.UnityNative
             if (File.Exists(completionPath)) File.Delete(completionPath);
             if (File.Exists(legacyCompletionPath)) File.Delete(legacyCompletionPath);
 
-            if (Renderer == null) Renderer = FindFirstObjectByType<TriAssetRenderer>();
+            if (Renderer == null) Renderer = FindAnyObjectByType<TriAssetRenderer>();
             if (CaptureCamera == null) CaptureCamera = Camera.main;
             if (Renderer == null || CaptureCamera == null)
             {
