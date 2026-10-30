@@ -1,4 +1,4 @@
-Shader "MeshSplatBench/DiffSoupMetal"
+Shader "MeshSuite/DiffSoupMetal"
 {
  SubShader { Tags { "Queue"="Geometry" "RenderType"="Opaque" } Pass {
   Cull Off ZWrite On ZTest LEqual

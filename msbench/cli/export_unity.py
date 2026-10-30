@@ -35,7 +35,7 @@ def export_unity(
 ):
     """Export full renderer inputs for a Unity-native method renderer.
 
-    This does not produce a generic mesh.  Use it with the MeshSplatBench Unity
+    This does not produce a generic mesh.  Use it with the MeshSuite Unity
     package so view-dependent appearance, opacity, and neural features remain
     available to method-specific shaders.
     """

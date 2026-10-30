@@ -1,5 +1,5 @@
 using System.IO;
-using MeshSplatBench.UnityNative;
+using MeshSuite.UnityNative;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -7,17 +7,17 @@ using UnityEngine.Rendering;
 using UnityEngine.SceneManagement;
 
 [InitializeOnLoad]
-public static class MeshSplatBenchGardenSetup
+public static class MeshSuiteGardenSetup
 {
-    const string ScenePath = "Assets/Scenes/MeshSplatBenchGarden.unity";
+    const string ScenePath = "Assets/Scenes/MeshSuiteGarden.unity";
     const string AssetPath = "/Volumes/GLOWAY/Unity/unity_native/triangle-splatting.triasset";
 
-    static MeshSplatBenchGardenSetup()
+    static MeshSuiteGardenSetup()
     {
         EditorApplication.delayCall += EnsureScene;
     }
 
-    [MenuItem("MeshSplatBench/Setup Garden Triangle Splatting Scene")]
+    [MenuItem("MeshSuite/Setup Garden Triangle Splatting Scene")]
     public static void EnsureScene()
     {
         if (EditorApplication.isPlayingOrWillChangePlaymode) return;
@@ -35,7 +35,7 @@ public static class MeshSplatBenchGardenSetup
         QualitySettings.vSyncCount = 0;
 
         Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
-        scene.name = "MeshSplatBenchGarden";
+        scene.name = "MeshSuiteGarden";
 
         GameObject cameraObject = new GameObject("Main Camera");
         Camera camera = cameraObject.AddComponent<Camera>();
@@ -61,7 +61,7 @@ public static class MeshSplatBenchGardenSetup
         EditorSceneManager.SaveScene(scene, ScenePath);
         EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
         AssetDatabase.SaveAssets();
-        Debug.Log("[MeshSplatBench] Garden scene created. Press Play to load and render the complete .triasset.");
+        Debug.Log("[MeshSuite] Garden scene created. Press Play to load and render the complete .triasset.");
     }
 
     static void ConfigureCapture()

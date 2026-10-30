@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace MeshSplatBench.UnityNative
+namespace MeshSuite.UnityNative
 {
     /// <summary>
     /// Faithful Unity/Metal evaluation path for exported DiffSoup assets.  The
@@ -56,8 +56,8 @@ namespace MeshSplatBench.UnityNative
             b2 = Upload(ReadFloat(Path.Combine(buffers, "color_mlp__mlp_2_bias.bin")));
             w4 = Upload(ReadFloat(Path.Combine(buffers, "color_mlp__mlp_4_weight.bin")));
             b4 = Upload(ReadFloat(Path.Combine(buffers, "color_mlp__mlp_4_bias.bin")));
-            SplatShader = SplatShader != null ? SplatShader : Shader.Find("MeshSplatBench/DiffSoupMetal");
-            if (SplatShader == null) { Fail("MeshSplatBench/DiffSoupMetal shader was not found."); yield break; }
+            SplatShader = SplatShader != null ? SplatShader : Shader.Find("MeshSuite/DiffSoupMetal");
+            if (SplatShader == null) { Fail("MeshSuite/DiffSoupMetal shader was not found."); yield break; }
             material = new Material(SplatShader) { hideFlags = HideFlags.HideAndDontSave };
             material.SetBuffer("_Positions", positions); material.SetBuffer("_Indices", indices);
             material.SetBuffer("_Features", features); material.SetBuffer("_Alpha", alpha);
@@ -65,10 +65,10 @@ namespace MeshSplatBench.UnityNative
             material.SetInt("_PrimitiveCount", primitiveCount); material.SetInt("_FeatureSamples", featureSamples); material.SetInt("_FeatureDim", featureDim); material.SetInt("_Rmax", rmax);
             ready = true;
             status = $"DiffSoup renderer ready ({primitiveCount:N0} triangles, R{rmax}, {featureDim}D)";
-            Debug.Log("[MeshSplatBench] " + status);
+            Debug.Log("[MeshSuite] " + status);
         }
 
-        // MeshSplatBench explicit camera command-buffer patch. OnRenderObject is
+        // MeshSuite explicit camera command-buffer patch. OnRenderObject is
         // not a reliable callback for Camera.Render() on Linux Editor batch mode.
         bool InstallMsBenchCameraDraw()
         {
@@ -84,13 +84,13 @@ namespace MeshSplatBench.UnityNative
                     + (material.shader == null ? "<null>" : material.shader.name));
                 return false;
             }
-            msBenchDrawCommands = new CommandBuffer { name = "MeshSplatBench/DiffSoupTriAssetRenderer procedural draw" };
+            msBenchDrawCommands = new CommandBuffer { name = "MeshSuite/DiffSoupTriAssetRenderer procedural draw" };
             msBenchDrawCommands.DrawProcedural(
                 Matrix4x4.identity, material, 0, MeshTopology.Triangles,
                 primitiveCount * 3, 1);
             msBenchCommandCamera = TargetCamera;
             msBenchCommandCamera.AddCommandBuffer(CameraEvent.AfterForwardAlpha, msBenchDrawCommands);
-            Debug.Log("[MeshSplatBench] Installed explicit camera draw for DiffSoupTriAssetRenderer on "
+            Debug.Log("[MeshSuite] Installed explicit camera draw for DiffSoupTriAssetRenderer on "
                 + SystemInfo.graphicsDeviceType + ".");
             return true;
         }
@@ -119,7 +119,7 @@ namespace MeshSplatBench.UnityNative
             if (msBenchDrawCommands != null) return;
             if (Application.isBatchMode) return;
             if (!ready || material == null || Camera.current != TargetCamera) return;
-            if (!material.SetPass(0)) { Debug.LogError("[MeshSplatBench] Shader pass is unsupported on " + SystemInfo.graphicsDeviceType + ": " + material.shader.name); enabled = false; return; }
+            if (!material.SetPass(0)) { Debug.LogError("[MeshSuite] Shader pass is unsupported on " + SystemInfo.graphicsDeviceType + ": " + material.shader.name); enabled = false; return; }
             Graphics.DrawProceduralNow(MeshTopology.Triangles, primitiveCount * 3, 1);
         }
 
@@ -132,7 +132,7 @@ namespace MeshSplatBench.UnityNative
         static float[] ReadFloat(string p) { byte[] raw = File.ReadAllBytes(p); if ((raw.Length & 3) != 0) throw new InvalidDataException(p); float[] data = new float[raw.Length / 4]; Buffer.BlockCopy(raw, 0, data, 0, raw.Length); return data; }
         static int[] ReadIntArray(string p) { byte[] raw = File.ReadAllBytes(p); if ((raw.Length & 3) != 0) throw new InvalidDataException(p); int[] data = new int[raw.Length / 4]; Buffer.BlockCopy(raw, 0, data, 0, raw.Length); return data; }
         static ComputeBuffer Upload(Array data) { ComputeBuffer b = new ComputeBuffer(data.Length, 4, ComputeBufferType.Raw); b.SetData(data); return b; }
-        void Fail(string message) { status = "ERROR: " + message; Debug.LogError("[MeshSplatBench] " + message); }
+        void Fail(string message) { status = "ERROR: " + message; Debug.LogError("[MeshSuite] " + message); }
         void OnDestroy() { RemoveMsBenchCameraDraw(); ready = false; positions?.Release(); indices?.Release(); features?.Release(); alpha?.Release(); w0?.Release(); b0?.Release(); w2?.Release(); b2?.Release(); w4?.Release(); b4?.Release(); if (material != null) Destroy(material); }
     }
 }

@@ -3,7 +3,7 @@
 
 Each Unity process loads one asset, which avoids retaining multiple 0.5--1.2
 GiB triassets in unified memory.  PNGs and the no-I/O FPS CSV are written under
-the corresponding MeshSplatBench output directory.
+the corresponding MeshSuite output directory.
 """
 from __future__ import annotations
 
@@ -16,6 +16,8 @@ import time
 from pathlib import Path
 
 from PIL import Image
+
+from msbench.unity_video import unity_namespace
 
 
 SCENES = ("bicycle", "bonsai", "counter", "flowers", "garden", "kitchen", "room", "stump", "treehill")
@@ -68,7 +70,7 @@ def unity_failure_summary(log_path: Path, *, max_lines: int = 12) -> str:
     if not log_path.is_file():
         return f"Unity log was not created: {log_path}"
     needles = (
-        "[msbench]", "[meshsplatbench]", "error", "exception", "fatal", "crash", "sigsegv",
+        "[msbench]", "[meshsuite]", "[meshsplatbench]", "error", "exception", "fatal", "crash", "sigsegv",
         "missing vulkan framebuffer", "shader error", "compilation failed",
     )
 
@@ -221,7 +223,7 @@ def main() -> int:
             profile_path.unlink(missing_ok=True)
         command = [
             str(args.unity), "-batchmode", *unity_graphics_arguments(), "-projectPath", str(args.unity_project),
-            "-executeMethod", "MeshSplatBench.UnityNative.Editor.TriAssetBatchRunner.Run",
+            "-executeMethod", f"{unity_namespace(args.unity_project)}.UnityNative.Editor.TriAssetBatchRunner.Run",
             "-method", args.method, "-triasset", str(triasset), "-dataset", str(dataset), "-output", str(output),
             "-triasset-width", str(width), "-triasset-height", str(height),
             "-fps-warmup", str(args.fps_warmup), "-fps-frames", str(args.fps_frames),
@@ -245,7 +247,7 @@ def main() -> int:
             command.extend(("-indexed-mesh-method-aware", "1"))
         if args.method_aware:
             command.extend(("-method-specific", "1"))
-        print(f"[MeshSplatBench] Unity scene={scene}, reference={image_dir.name}, resolution={width}x{height}", flush=True)
+        print(f"[MeshSuite] Unity scene={scene}, reference={image_dir.name}, resolution={width}x{height}", flush=True)
         capture_started = time.time()
         process = subprocess.Popen(command)
         while process.poll() is None and not marker.is_file():

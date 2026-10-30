@@ -1,6 +1,6 @@
 using System;
 
-namespace MeshSplatBench.UnityNative
+namespace MeshSuite.UnityNative
 {
     /// <summary>Command-line options supplied by the batch Unity evaluator.</summary>
     internal static class TriAssetRuntimeOptions

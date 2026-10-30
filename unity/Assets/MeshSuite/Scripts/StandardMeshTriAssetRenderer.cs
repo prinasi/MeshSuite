@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace MeshSplatBench.UnityNative
+namespace MeshSuite.UnityNative
 {
     /// <summary>
     /// Unity MeshRenderer deployment path: by default this is a method-agnostic
@@ -133,7 +133,7 @@ namespace MeshSplatBench.UnityNative
 
             status = "Uploading standard " + (DeindexedSoup ? "triangle-soup" : "indexed") + " Unity Mesh";
             yield return null;
-            mesh = new Mesh { name = "MeshSplatBench standard mesh compatibility baseline", indexFormat = IndexFormat.UInt32 };
+            mesh = new Mesh { name = "MeshSuite standard mesh compatibility baseline", indexFormat = IndexFormat.UInt32 };
             mesh.vertices = vertices;
             if (colors != null) mesh.colors32 = colors;
             mesh.SetIndices(indices, MeshTopology.Triangles, 0, false);
@@ -143,7 +143,7 @@ namespace MeshSplatBench.UnityNative
             indices = null;
             GC.Collect();
 
-            string shaderName = indexedMeshMethodAware ? "MeshSplatBench/MeshSplatIndexedMesh" : "MeshSplatBench/StandardVertexColorRaw";
+            string shaderName = indexedMeshMethodAware ? "MeshSuite/MeshSplatIndexedMesh" : "MeshSuite/StandardVertexColorRaw";
             VertexColorShader = indexedMeshMethodAware ? (Resources.Load<Shader>("MeshSplatIndexedMesh") ?? Shader.Find(shaderName)) : (VertexColorShader != null ? VertexColorShader : Shader.Find(shaderName));
             if (VertexColorShader == null) { Fail(shaderName + " shader was not found."); yield break; }
             material = new Material(VertexColorShader) { hideFlags = HideFlags.HideAndDontSave };
@@ -156,7 +156,7 @@ namespace MeshSplatBench.UnityNative
                 material.SetInt("_ShDegree", activeShDegree);
                 material.SetInt("_RawCode", rawCode ? 1 : 0);
                 material.SetVector("_CameraWorldPos", TargetCamera != null ? TargetCamera.transform.position : Vector3.zero);
-                Debug.Log("[MeshSplatBench] Using true indexed MeshSplatting method-aware MeshRenderer path.");
+                Debug.Log("[MeshSuite] Using true indexed MeshSplatting method-aware MeshRenderer path.");
             }
             meshFilter = GetComponent<MeshFilter>();
             if (meshFilter == null) meshFilter = gameObject.AddComponent<MeshFilter>();
@@ -170,7 +170,7 @@ namespace MeshSplatBench.UnityNative
             meshRenderer.reflectionProbeUsage = ReflectionProbeUsage.Off;
             ready = true;
             status = $"Standard {(DeindexedSoup ? "triangle-soup" : "indexed Mesh")} ready: {vertexCount:N0} vertices, {triangleCount:N0} triangles" + (indexedMeshMethodAware ? "; full SH indexed MeshSplatting shader" : (File.Exists(dcPath) ? "; DC vertex color" : "; default white (no standard appearance field)"));
-            Debug.Log("[MeshSplatBench] " + status);
+            Debug.Log("[MeshSuite] " + status);
         }
 
         static int ReadInt(string json, string key, int fallback) { Match m=Regex.Match(json,"\\\""+key+"\\\"\\s*:\\s*(\\d+)"); return m.Success && Int32.TryParse(m.Groups[1].Value,out int v) ? v : fallback; }
@@ -215,7 +215,7 @@ namespace MeshSplatBench.UnityNative
         void Fail(string message)
         {
             status = "ERROR: " + message;
-            Debug.LogError("[MeshSplatBench] " + message);
+            Debug.LogError("[MeshSuite] " + message);
         }
 
         void OnDestroy()

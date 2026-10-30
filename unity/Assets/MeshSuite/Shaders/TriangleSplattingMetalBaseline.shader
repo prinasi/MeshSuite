@@ -1,4 +1,4 @@
-Shader "MeshSplatBench/TriangleSplattingMetalBaseline"
+Shader "MeshSuite/TriangleSplattingMetalBaseline"
 {
     SubShader
     {

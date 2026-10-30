@@ -1,4 +1,4 @@
-"""Unity video trajectory rendering utilities for MeshSplatBench.
+"""Unity video trajectory rendering utilities for MeshSuite.
 
 Handles PCA ellipse camera trajectory generation, Unity batch invocation,
 direct frame streaming, and MP4 video encoding for both method-aware and
@@ -62,7 +62,7 @@ def find_unity_executable() -> Path | None:
 
 
 def find_unity_project() -> Path | None:
-    """Locate the MeshSplatBench Unity project root."""
+    """Locate the MeshSuite Unity project root."""
     env_proj = os.environ.get("PROJECT") or os.environ.get("UNITY_PROJECT")
     if env_proj and Path(env_proj).is_dir():
         return Path(env_proj).resolve()
@@ -77,6 +77,19 @@ def find_unity_project() -> Path | None:
     if (pkg_candidate / "Assets").is_dir() and (pkg_candidate / "ProjectSettings").is_dir():
         return pkg_candidate.resolve()
     return None
+
+
+UNITY_NAMESPACE = "MeshSuite"
+# Unity projects set up before the rename to MeshSuite keep their old names.
+LEGACY_UNITY_NAMESPACE = "MeshSplatBench"
+
+
+def unity_namespace(project: Path | str) -> str:
+    """Return the C# namespace, asset folder and shader prefix a Unity project uses."""
+    assets = Path(project) / "Assets"
+    if not (assets / UNITY_NAMESPACE).is_dir() and (assets / LEGACY_UNITY_NAMESPACE).is_dir():
+        return LEGACY_UNITY_NAMESPACE
+    return UNITY_NAMESPACE
 
 
 def reference_image_directory(scene: str) -> str:
@@ -102,7 +115,7 @@ def unity_failure_summary(
     """Return the useful tail of a Unity failure without dumping its crash trace."""
     matches = []
     needles = (
-        "[msbench]", "[meshsplatbench]", "error", "exception", "fatal", "crash", "sigsegv",
+        "[msbench]", "[meshsuite]", "[meshsplatbench]", "error", "exception", "fatal", "crash", "sigsegv",
         "missing vulkan framebuffer", "shader error", "compilation failed",
         "another unity instance", "multiple unity instances", "aborting batchmode",
     )
@@ -398,7 +411,7 @@ def decode_stream_to_video(
             if show_progress and ((idx + 1) % 15 == 0 or idx == total_frames - 1):
                 pct = (idx + 1) / total_frames * 100.0
                 print(
-                    f"[MeshSplatBench] Synthesized video frame {idx + 1}/{total_frames} ({pct:.1f}%)",
+                    f"[MeshSuite] Synthesized video frame {idx + 1}/{total_frames} ({pct:.1f}%)",
                     flush=True,
                 )
     finally:
@@ -628,7 +641,7 @@ def run_unity_video_for_scene(
     if force_unity:
         killed = terminate_existing_unity_processes(unity_project)
         if killed:
-            print(f"[MeshSplatBench] Terminated existing Unity process(es): {killed}", flush=True)
+            print(f"[MeshSuite] Terminated existing Unity process(es): {killed}", flush=True)
             time.sleep(1.0)
             clear_stale_unity_locks(unity_project)
     else:
@@ -708,7 +721,7 @@ def run_unity_video_for_scene(
         "-batchmode",
         *unity_graphics_arguments(),
         "-projectPath", str(unity_project),
-        "-executeMethod", "MeshSplatBench.UnityNative.Editor.TriAssetBatchRunner.RunVideo",
+        "-executeMethod", f"{unity_namespace(unity_project)}.UnityNative.Editor.TriAssetBatchRunner.RunVideo",
         "-method", method,
         "-triasset", str(triasset_path),
         "-video-trajectory", str(target_traj_json),
@@ -780,7 +793,7 @@ def run_unity_video_for_scene(
     receiver_thread.start()
 
     print(
-        f"[MeshSplatBench] Launching Unity video render: method={method}, "
+        f"[MeshSuite] Launching Unity video render: method={method}, "
         f"condition={condition}, frames={total_frames}, fps={fps}, stream_port={stream_port}, output={output_dir}",
         flush=True,
     )
@@ -833,7 +846,7 @@ def run_unity_video_for_scene(
                 process.kill()
                 exit_code = process.wait(timeout=10)
     except KeyboardInterrupt:
-        print("\n[MeshSplatBench] Interrupted by user. Terminating Unity process...", flush=True)
+        print("\n[MeshSuite] Interrupted by user. Terminating Unity process...", flush=True)
         if process is not None and process.poll() is None:
             process.terminate()
             try:
@@ -852,7 +865,7 @@ def run_unity_video_for_scene(
 
     # 5. Handle fallbacks if direct TCP streaming did not complete
     if not stream_result["success"] and raw_stream_path.is_file() and raw_stream_path.stat().st_size > 20:
-        print(f"[MeshSplatBench] Synthesizing video from raw stream fallback: {raw_stream_path}...", flush=True)
+        print(f"[MeshSuite] Synthesizing video from raw stream fallback: {raw_stream_path}...", flush=True)
         decode_raw_stream_file(
             raw_stream_path,
             video_path,
@@ -867,7 +880,7 @@ def run_unity_video_for_scene(
     if not stream_result["success"] and frames_dir.is_dir():
         png_count = len(list(frames_dir.glob("*.png")))
         if png_count >= total_frames:
-            print(f"[MeshSplatBench] Synthesizing video from PNG frames in {frames_dir}...", flush=True)
+            print(f"[MeshSuite] Synthesizing video from PNG frames in {frames_dir}...", flush=True)
             validate_captured_frames(frames_dir, total_frames, newer_than=started)
             encode_video_from_frames(frames_dir, video_path, fps=fps)
             stream_result["success"] = True
@@ -900,5 +913,5 @@ def run_unity_video_for_scene(
     if not video_path.is_file() or video_path.stat().st_size == 0:
         raise RuntimeError(f"Video file was not created or is empty: {video_path}")
 
-    print(f"[MeshSplatBench] Unity video saved: {video_path}", flush=True)
+    print(f"[MeshSuite] Unity video saved: {video_path}", flush=True)
     return video_path

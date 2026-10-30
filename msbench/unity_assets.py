@@ -3,7 +3,7 @@
 ``.triasset`` is deliberately a directory instead of a generic mesh format.
 It keeps the renderer inputs that are not representable by OFF/COFF or GLB
 (SH coefficients, opacity, splat widths, neural features, and MLP weights).
-The package is consumed by the Unity MeshSplatBench package; standard CG previews
+The package is consumed by the Unity MeshSuite package; standard CG previews
 remain a separate, explicitly lossy export path.
 """
 
@@ -500,7 +500,7 @@ def _export_d2ts(
         gamma_rescale = bool(checkpoint_gamma_rescale)
         gamma_rescale_source = "checkpoint"
     else:
-        # Native MeshSplatBench 2DTS configs enable gamma_rescale when gamma is
+        # Native MeshSuite 2DTS configs enable gamma_rescale when gamma is
         # annealed.  Old tuple checkpoints did not serialize the flag.
         gamma_rescale = gamma > 1.0
         gamma_rescale_source = "legacy_inferred_from_gamma"

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Repeated no-I/O Unity deployment profiling for MeshSplatBench assets.
+"""Repeated no-I/O Unity deployment profiling for MeshSuite assets.
 
 The Unity-side profiler measures three evenly spaced LLFF held-out cameras per
 scene by default.  Each independent run is a fresh Editor process so that load
@@ -15,6 +15,8 @@ import time
 from pathlib import Path
 
 from PIL import Image
+
+from msbench.unity_video import unity_namespace
 
 
 SCENES = ("bicycle", "bonsai", "counter", "flowers", "garden", "kitchen", "room", "stump", "treehill")
@@ -34,7 +36,7 @@ def run_one(args: argparse.Namespace, method: str, mode: str, scene: str, run_id
     profile = output / f"runtime_profile_run_{run_id:02d}.json"
     marker = output / ".unity_capture_complete"
     if profile.is_file() and not args.force:
-        print(f"[MeshSplatBench] reuse {profile}", flush=True)
+        print(f"[MeshSuite] reuse {profile}", flush=True)
         return
     if args.force:
         profile.unlink(missing_ok=True)
@@ -54,7 +56,7 @@ def run_one(args: argparse.Namespace, method: str, mode: str, scene: str, run_id
     command = [str(args.player if args.player else args.unity), "-force-metal"]
     if not args.player:
         command.insert(1, "-batchmode")
-        command.extend(("-projectPath", str(args.unity_project), "-executeMethod", "MeshSplatBench.UnityNative.Editor.TriAssetBatchRunner.Run"))
+        command.extend(("-projectPath", str(args.unity_project), "-executeMethod", f"{unity_namespace(args.unity_project)}.UnityNative.Editor.TriAssetBatchRunner.Run"))
     command.extend((
         "-method", method, "-triasset", str(triasset), "-dataset", str(dataset), "-output", str(output),
         "-triasset-width", str(width), "-triasset-height", str(height),
@@ -66,7 +68,7 @@ def run_one(args: argparse.Namespace, method: str, mode: str, scene: str, run_id
         command.extend(("-standard-mesh", "1"))
     elif method != "triangle-splatting":
         command.extend(("-method-specific", "1"))
-    print(f"[MeshSplatBench] {method}/{mode}/{scene} run={run_id}", flush=True)
+    print(f"[MeshSuite] {method}/{mode}/{scene} run={run_id}", flush=True)
     process = subprocess.Popen(command)
     deadline = time.monotonic() + args.timeout_seconds
     while process.poll() is None and not marker.is_file():

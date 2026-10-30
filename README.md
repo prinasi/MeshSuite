@@ -359,7 +359,7 @@ export UNITY=/path/to/Unity/Editor/Unity
 Linux. It also builds or reuses a Linux standalone Development Player at:
 
 ```text
-outputs/unity_player/linux/MeshSplatBenchProfilePlayer.x86_64
+outputs/unity_player/linux/MeshSuiteProfilePlayer.x86_64
 ```
 
 ### Export Unity assets only

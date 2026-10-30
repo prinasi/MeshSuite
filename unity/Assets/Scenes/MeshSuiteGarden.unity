@@ -232,7 +232,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: ec0305137dcf7465d8e0fc868f5b5b9a, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::MeshSplatBench.UnityNative.TriangleSplattingTriAssetRenderer
+  m_EditorClassIdentifier: Assembly-CSharp::MeshSuite.UnityNative.TriangleSplattingTriAssetRenderer
   AssetDirectory: /Volumes/GLOWAY/Unity/unity_native/triangle-splatting.triasset
   TargetCamera: {fileID: 462891931}
   SplatShader: {fileID: 0}
@@ -265,7 +265,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4e42c1b22b3b4ea4a61ef51e00ae51aa, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::MeshSplatBench.UnityNative.TriAssetRuntimeBatchBootstrap
+  m_EditorClassIdentifier: Assembly-CSharp::MeshSuite.UnityNative.TriAssetRuntimeBatchBootstrap
 --- !u!114 &1821898732
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -277,12 +277,12 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a4166cc92371a443f83ab34f1bef51cf, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::MeshSplatBench.UnityNative.ColmapBatchCapture
+  m_EditorClassIdentifier: Assembly-CSharp::MeshSuite.UnityNative.ColmapBatchCapture
   Renderer: {fileID: 1821898730}
   CaptureCamera: {fileID: 462891931}
   AutoStart: 1
   DatasetRoot: /Volumes/GLOWAY/Datasets/MipNeRF360/garden
-  OutputRoot: /Volumes/GLOWAY/Unity/unity_native/MeshSplatBenchUnity/renders/garden_colmap_images_4
+  OutputRoot: /Volumes/GLOWAY/Unity/unity_native/MeshSuiteUnity/renders/garden_colmap_images_4
   OutputWidth: 1297
   OutputHeight: 840
   Holdout: 8

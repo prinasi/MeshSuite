@@ -8,7 +8,7 @@ using Unity.Collections;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace MeshSplatBench.UnityNative
+namespace MeshSuite.UnityNative
 {
     /// <summary>
     /// Renders video frames along a camera trajectory directly into video synthesis
@@ -29,7 +29,7 @@ namespace MeshSplatBench.UnityNative
         public int StreamPort = 0;
         public bool WritePngFrames = false;
 
-        const uint StreamMagic = 0x4D534256; // "MSBV" (MeshSplatBench Video)
+        const uint StreamMagic = 0x4D534256; // "MSBV" (MeshSuite Video)
 
         [Serializable]
         public sealed class TrajectoryFrame
@@ -90,14 +90,14 @@ namespace MeshSplatBench.UnityNative
             running = true;
             if (string.IsNullOrEmpty(TrajectoryPath) || !File.Exists(TrajectoryPath))
             {
-                Debug.LogError($"[MeshSplatBench] Trajectory file not found: {TrajectoryPath}");
+                Debug.LogError($"[MeshSuite] Trajectory file not found: {TrajectoryPath}");
                 running = false;
                 yield break;
             }
 
             if (string.IsNullOrEmpty(OutputRoot))
             {
-                Debug.LogError("[MeshSplatBench] -output root directory is required for video rendering.");
+                Debug.LogError("[MeshSuite] -output root directory is required for video rendering.");
                 running = false;
                 yield break;
             }
@@ -111,7 +111,7 @@ namespace MeshSplatBench.UnityNative
             if (CaptureCamera == null) CaptureCamera = Camera.main;
             if (Renderer == null || CaptureCamera == null)
             {
-                Debug.LogError("[MeshSplatBench] Video capture requires the renderer and its target camera.");
+                Debug.LogError("[MeshSuite] Video capture requires the renderer and its target camera.");
                 running = false;
                 yield break;
             }
@@ -127,7 +127,7 @@ namespace MeshSplatBench.UnityNative
 
             if (trajectory == null || trajectory.frames == null || trajectory.frames.Count == 0)
             {
-                Debug.LogError($"[MeshSplatBench] Failed to parse any frames from trajectory: {TrajectoryPath}");
+                Debug.LogError($"[MeshSuite] Failed to parse any frames from trajectory: {TrajectoryPath}");
                 running = false;
                 yield break;
             }
@@ -150,11 +150,11 @@ namespace MeshSplatBench.UnityNative
                     tcpClient.NoDelay = true;
                     tcpClient.Connect("127.0.0.1", StreamPort);
                     netStream = tcpClient.GetStream();
-                    Debug.Log($"[MeshSplatBench] Connected to video synthesizer on 127.0.0.1:{StreamPort}");
+                    Debug.Log($"[MeshSuite] Connected to video synthesizer on 127.0.0.1:{StreamPort}");
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogWarning($"[MeshSplatBench] Could not connect to socket on port {StreamPort}: {ex.Message}. Falling back to raw stream file.");
+                    Debug.LogWarning($"[MeshSuite] Could not connect to socket on port {StreamPort}: {ex.Message}. Falling back to raw stream file.");
                 }
             }
 
@@ -162,7 +162,7 @@ namespace MeshSplatBench.UnityNative
             {
                 string rawPath = Path.Combine(OutputRoot, "render_traj.raw");
                 rawFileStream = new FileStream(rawPath, FileMode.Create, FileAccess.Write, FileShare.Read, 65536);
-                Debug.Log($"[MeshSplatBench] Streaming raw frames directly to {rawPath}");
+                Debug.Log($"[MeshSuite] Streaming raw frames directly to {rawPath}");
             }
 
             // Send 20-byte stream header: magic (4), width (4), height (4), total_frames (4), fps (4)
@@ -205,7 +205,7 @@ namespace MeshSplatBench.UnityNative
                 new Queue<KeyValuePair<int, AsyncGPUReadbackRequest>>();
             int processedCount = 0;
 
-            Debug.Log($"[MeshSplatBench] Direct Unity video rendering: {frameCount} frames at {defaultWidth}x{defaultHeight}, {fps} FPS (AsyncGPUReadback pipeline, depth={MAX_IN_FLIGHT}).");
+            Debug.Log($"[MeshSuite] Direct Unity video rendering: {frameCount} frames at {defaultWidth}x{defaultHeight}, {fps} FPS (AsyncGPUReadback pipeline, depth={MAX_IN_FLIGHT}).");
 
             try
             {
@@ -267,7 +267,7 @@ namespace MeshSplatBench.UnityNative
                         }
                         else
                         {
-                            Debug.LogWarning($"[MeshSplatBench] AsyncGPUReadback failed for frame {completed.Key}");
+                            Debug.LogWarning($"[MeshSuite] AsyncGPUReadback failed for frame {completed.Key}");
                         }
                     }
 
@@ -338,7 +338,7 @@ namespace MeshSplatBench.UnityNative
             File.WriteAllText(completionPath, "complete\n");
             File.WriteAllText(legacyCompletionPath, "complete\n");
 
-            Debug.Log($"[MeshSplatBench] Unity video trajectory streaming complete: {processedCount}/{frameCount} frames directly synthesized.");
+            Debug.Log($"[MeshSuite] Unity video trajectory streaming complete: {processedCount}/{frameCount} frames directly synthesized.");
             running = false;
             if (!Application.isEditor) Application.Quit(0);
         }
@@ -363,7 +363,7 @@ namespace MeshSplatBench.UnityNative
         {
             if (processedCount % 15 == 0 || processedCount == frameCount)
             {
-                Debug.Log($"[MeshSplatBench] Rendered & streamed video frame {processedCount}/{frameCount} ({100f * processedCount / frameCount:F1}%)");
+                Debug.Log($"[MeshSuite] Rendered & streamed video frame {processedCount}/{frameCount} ({100f * processedCount / frameCount:F1}%)");
             }
         }
 
@@ -417,7 +417,7 @@ namespace MeshSplatBench.UnityNative
             List<float> pose = frame.pose;
             if (pose == null || (pose.Count != 12 && pose.Count != 16))
             {
-                Debug.LogError("[MeshSplatBench] Invalid pose matrix in trajectory frame; must be 12 or 16 floats.");
+                Debug.LogError("[MeshSuite] Invalid pose matrix in trajectory frame; must be 12 or 16 floats.");
                 return;
             }
 
@@ -522,7 +522,7 @@ namespace MeshSplatBench.UnityNative
             }
             catch (Exception ex)
             {
-                Debug.LogWarning($"[MeshSplatBench] Manual trajectory parse warning: {ex.Message}");
+                Debug.LogWarning($"[MeshSuite] Manual trajectory parse warning: {ex.Message}");
             }
             return data;
         }

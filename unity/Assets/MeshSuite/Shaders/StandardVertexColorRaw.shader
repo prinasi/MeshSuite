@@ -1,4 +1,4 @@
-Shader "MeshSplatBench/StandardVertexColorRaw"
+Shader "MeshSuite/StandardVertexColorRaw"
 {
     SubShader
     {

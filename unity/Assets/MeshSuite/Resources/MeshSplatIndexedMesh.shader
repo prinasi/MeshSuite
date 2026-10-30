@@ -1,5 +1,5 @@
 // True Unity indexed MeshRenderer path for MeshSplatting topology ablations.
-Shader "MeshSplatBench/MeshSplatIndexedMesh"
+Shader "MeshSuite/MeshSplatIndexedMesh"
 {
  SubShader { Tags { "Queue"="Geometry" "RenderType"="Opaque" } Pass {
   Cull Off ZWrite On ZTest LEqual Blend Off

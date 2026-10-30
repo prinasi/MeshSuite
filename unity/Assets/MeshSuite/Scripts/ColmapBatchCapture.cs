@@ -7,7 +7,7 @@ using UnityEngine;
 using UnityEngine.Profiling;
 using Unity.Profiling;
 
-namespace MeshSplatBench.UnityNative
+namespace MeshSuite.UnityNative
 {
     /// <summary>
     /// Captures COLMAP views using the same ordering and LLFF holdout
@@ -21,7 +21,7 @@ namespace MeshSplatBench.UnityNative
         public Camera CaptureCamera;
         public bool AutoStart = true;
         public string DatasetRoot = "/Volumes/GLOWAY/Datasets/MipNeRF360/garden";
-        public string OutputRoot = "/Volumes/GLOWAY/Unity/unity_native/MeshSplatBenchUnity/renders/garden_colmap_images_4";
+        public string OutputRoot = "/Volumes/GLOWAY/Unity/unity_native/MeshSuiteUnity/renders/garden_colmap_images_4";
         public int OutputWidth = 1297;
         public int OutputHeight = 840;
         public int Holdout = 8;
@@ -134,7 +134,7 @@ namespace MeshSplatBench.UnityNative
             if (CaptureCamera == null) CaptureCamera = Camera.main;
             if (Renderer == null || CaptureCamera == null)
             {
-                Debug.LogError("[MeshSplatBench] Batch capture requires the renderer and its target camera.");
+                Debug.LogError("[MeshSuite] Batch capture requires the renderer and its target camera.");
                 yield break;
             }
 
@@ -188,7 +188,7 @@ namespace MeshSplatBench.UnityNative
                 View view = views[i];
                 if (!intrinsics.TryGetValue(view.CameraId, out Intrinsics intr))
                 {
-                    Debug.LogError("[MeshSplatBench] Missing intrinsics for camera " + view.CameraId);
+                    Debug.LogError("[MeshSuite] Missing intrinsics for camera " + view.CameraId);
                     continue;
                 }
                 ApplyColmapPose(CaptureCamera, view, intr);
@@ -209,7 +209,7 @@ namespace MeshSplatBench.UnityNative
 
                 File.WriteAllBytes(Path.Combine(OutputRoot, split, renderName), ImageConversion.EncodeToPNG(encoded));
                 manifest.Append(split).Append(',').Append(i).Append(',').Append(view.Name).Append(',').Append(split).Append('/').Append(renderName).Append('\n');
-                Debug.Log($"[MeshSplatBench] Captured {i + 1}/{views.Count}: {split}/{renderName}");
+                Debug.Log($"[MeshSuite] Captured {i + 1}/{views.Count}: {split}/{renderName}");
                 yield return null;
             }
 
@@ -226,7 +226,7 @@ namespace MeshSplatBench.UnityNative
             File.WriteAllText(Path.Combine(OutputRoot, "manifest.csv"), manifest.ToString());
             File.WriteAllText(Path.Combine(OutputRoot, "fps_per_test_view.csv"), fpsCsv.ToString());
             File.WriteAllText(completionPath, "complete\n");
-            Debug.Log($"[MeshSplatBench] COLMAP capture complete: {views.Count} views at {OutputWidth}x{OutputHeight}; output={OutputRoot}");
+            Debug.Log($"[MeshSuite] COLMAP capture complete: {views.Count} views at {OutputWidth}x{OutputHeight}; output={OutputRoot}");
             running = false;
             if (!Application.isEditor) Application.Quit(0);
         }
@@ -296,7 +296,7 @@ namespace MeshSplatBench.UnityNative
             Renderer.SetOutputRawCodeValues(false);
             string path = Path.Combine(OutputRoot, $"runtime_profile_run_{ProfileRunId:D2}.json");
             File.WriteAllText(path, JsonUtility.ToJson(report, true));
-            Debug.Log($"[MeshSplatBench] Runtime profile saved: {path}; GPU FrameTiming={report.frame_timing_available}.");
+            Debug.Log($"[MeshSuite] Runtime profile saved: {path}; GPU FrameTiming={report.frame_timing_available}.");
         }
 
         IEnumerator ProfileView(View view, Intrinsics intr, int colmapIndex, RenderTexture target, ProfilerRecorder drawCalls, Action<ViewProfile> done)
@@ -347,7 +347,7 @@ namespace MeshSplatBench.UnityNative
             List<float> selectedCpu = cpu.Count > 0 ? cpu : engine;
             bool profiledDrawCalls = draws.Count > 0;
             // Unity's draw-call counter is unavailable for macOS Metal. All
-            // MeshSplatBench evaluation renderers submit exactly one material/pass
+            // MeshSuite evaluation renderers submit exactly one material/pass
             // draw per frame (MeshRenderer or DrawProceduralNow); retain this
             // separately labelled deterministic count rather than pretending
             // it was a GPU-profiler sample.
@@ -403,7 +403,7 @@ namespace MeshSplatBench.UnityNative
                 .Append(p50.ToString("F6", System.Globalization.CultureInfo.InvariantCulture)).Append(',')
                 .Append(p95.ToString("F6", System.Globalization.CultureInfo.InvariantCulture)).Append(',')
                 .Append(fps.ToString("F6", System.Globalization.CultureInfo.InvariantCulture)).Append('\n');
-            Debug.Log($"[MeshSplatBench] FPS sample {view.Name}: {fps:F2} FPS, {mean:F2} ms; capture IO excluded.");
+            Debug.Log($"[MeshSuite] FPS sample {view.Name}: {fps:F2} FPS, {mean:F2} ms; capture IO excluded.");
         }
 
         static float Percentile(float[] sorted, float percentile)
@@ -524,7 +524,7 @@ namespace MeshSplatBench.UnityNative
             if (model < 0 || model >= counts.Length) throw new InvalidDataException("Unknown COLMAP model " + model);
             return counts[model];
         }
-        // MeshSplatBench Vulkan premultiplied-capture patch. The method-aware shaders
+        // MeshSuite Vulkan premultiplied-capture patch. The method-aware shaders
         // use front-to-back premultiplied accumulation. Destination alpha must
         // start at zero; Color.black/white both carry alpha one in Unity. Keep
         // the intermediate accumulation in float precision because the native
@@ -560,9 +560,9 @@ namespace MeshSplatBench.UnityNative
             encoded.SetPixels32(output);
             encoded.Apply(false, false);
             if (coveredPixels == 0)
-                Debug.LogError("[MeshSplatBench] Capture target has zero alpha coverage; no procedural geometry reached the camera.");
+                Debug.LogError("[MeshSuite] Capture target has zero alpha coverage; no procedural geometry reached the camera.");
             else
-                Debug.Log($"[MeshSplatBench] Capture alpha coverage: {coveredPixels}/{pixels.Length} pixels.");
+                Debug.Log($"[MeshSuite] Capture alpha coverage: {coveredPixels}/{pixels.Length} pixels.");
         }
     }
 }

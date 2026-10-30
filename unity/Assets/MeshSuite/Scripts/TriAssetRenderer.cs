@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace MeshSplatBench.UnityNative
+namespace MeshSuite.UnityNative
 {
     public abstract class TriAssetRenderer : MonoBehaviour
     {

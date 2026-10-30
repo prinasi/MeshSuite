@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace MeshSplatBench.UnityNative
+namespace MeshSuite.UnityNative
 {
     /// <summary>
     /// Unity Metal portability renderer for mesh-splatting and 2DTS.  It binds
@@ -68,7 +68,7 @@ namespace MeshSplatBench.UnityNative
                 // source vertex attributes through _Indices in the shader.  This
                 // disables hardware vertex sharing in the draw path without
                 // materializing multi-GiB duplicate SH buffers on the CPU/GPU.
-                Debug.Log("[MeshSplatBench] MeshSplatting shader-level soup topology: retaining indexed buffers; procedural corners fetch via _Indices.");
+                Debug.Log("[MeshSuite] MeshSplatting shader-level soup topology: retaining indexed buffers; procedural corners fetch via _Indices.");
             }
             positions = Upload(sourcePositions);
             indices = Upload(sourceIndices);
@@ -91,15 +91,15 @@ namespace MeshSplatBench.UnityNative
             // intentionally collapsed to hardware visibility.  Do not route
             // 2DTS here: its learned coverage remains genuinely transparent.
             string shaderName = mode == 1 && ablation == "full"
-                ? "MeshSplatBench/MeshSplatTerminalSolid"
+                ? "MeshSuite/MeshSplatTerminalSolid"
                 : mode == 1 && ablation == "alpha-test-depth"
-                    ? "MeshSplatBench/MeshSplatAlphaTestDepth"
+                    ? "MeshSuite/MeshSplatAlphaTestDepth"
                     : mode == 1 && ablation == "opaque-depth"
-                        ? "MeshSplatBench/MeshSplatOpaqueDepth"
-                        : "MeshSplatBench/MethodSpecificSplat";
-            usesSortedTriangleOrder = shaderName == "MeshSplatBench/MethodSpecificSplat";
+                        ? "MeshSuite/MeshSplatOpaqueDepth"
+                        : "MeshSuite/MethodSpecificSplat";
+            usesSortedTriangleOrder = shaderName == "MeshSuite/MethodSpecificSplat";
             SplatShader = SplatShader != null ? SplatShader : Shader.Find(shaderName);
-            if (SplatShader == null) { Fail("MeshSplatBench/MethodSpecificSplat shader was not found."); yield break; }
+            if (SplatShader == null) { Fail("MeshSuite/MethodSpecificSplat shader was not found."); yield break; }
             material = new Material(SplatShader) { hideFlags = HideFlags.HideAndDontSave };
             material.SetBuffer("_Positions", positions); material.SetBuffer("_Indices", indices);
             if (usesSortedTriangleOrder) material.SetBuffer("_TriangleOrder", triangleOrderBuffer);
@@ -118,8 +118,8 @@ namespace MeshSplatBench.UnityNative
             material.SetInt("_RawCode", 1);
             RefreshTriangleOrder(TargetCamera, force: true);
             ready = true; status = $"Method-specific {method} renderer ready ({primitiveCount:N0} primitives; {(deindexedSoup ? "shader-level triangle soup" : "indexed mesh")})";
-            if (mode == 1) Debug.Log($"[MeshSplatBench] MeshSplatting layout={(deindexedSoup ? "soup(shader-indexed)" : "indexed")}, ablation={ablation}, code={meshAblation}, opacityFloor={opacityFloor:F6}.");
-            Debug.Log("[MeshSplatBench] " + status);
+            if (mode == 1) Debug.Log($"[MeshSuite] MeshSplatting layout={(deindexedSoup ? "soup(shader-indexed)" : "indexed")}, ablation={ablation}, code={meshAblation}, opacityFloor={opacityFloor:F6}.");
+            Debug.Log("[MeshSuite] " + status);
         }
 
         void InitializeTriangleOrder(float[] positionsData, int[] sourceIndices)
@@ -168,7 +168,7 @@ namespace MeshSplatBench.UnityNative
             lastSortCameraForward = forward;
         }
 
-        // MeshSplatBench explicit camera command-buffer patch. OnRenderObject is
+        // MeshSuite explicit camera command-buffer patch. OnRenderObject is
         // not a reliable callback for Camera.Render() on Linux Editor batch mode.
         bool InstallMsBenchCameraDraw()
         {
@@ -184,13 +184,13 @@ namespace MeshSplatBench.UnityNative
                     + (material.shader == null ? "<null>" : material.shader.name));
                 return false;
             }
-            msBenchDrawCommands = new CommandBuffer { name = "MeshSplatBench/MethodSpecificSplatRenderer procedural draw" };
+            msBenchDrawCommands = new CommandBuffer { name = "MeshSuite/MethodSpecificSplatRenderer procedural draw" };
             msBenchDrawCommands.DrawProcedural(
                 Matrix4x4.identity, material, 0, MeshTopology.Triangles,
                 primitiveCount * 3, 1);
             msBenchCommandCamera = TargetCamera;
             msBenchCommandCamera.AddCommandBuffer(CameraEvent.AfterForwardAlpha, msBenchDrawCommands);
-            Debug.Log("[MeshSplatBench] Installed explicit camera draw for MethodSpecificSplatRenderer on "
+            Debug.Log("[MeshSuite] Installed explicit camera draw for MethodSpecificSplatRenderer on "
                 + SystemInfo.graphicsDeviceType + ".");
             return true;
         }
@@ -242,7 +242,7 @@ namespace MeshSplatBench.UnityNative
                 material.SetInt("_MeshAblation", meshAblation);
                 material.SetInt("_UseSh", (meshAblation == 1 || meshAblation == 4) ? 0 : 1);
             }
-            if (!material.SetPass(0)) { Debug.LogError("[MeshSplatBench] Shader pass is unsupported on " + SystemInfo.graphicsDeviceType + ": " + material.shader.name); enabled = false; return; } Graphics.DrawProceduralNow(MeshTopology.Triangles, primitiveCount * 3, 1);
+            if (!material.SetPass(0)) { Debug.LogError("[MeshSuite] Shader pass is unsupported on " + SystemInfo.graphicsDeviceType + ": " + material.shader.name); enabled = false; return; } Graphics.DrawProceduralNow(MeshTopology.Triangles, primitiveCount * 3, 1);
         }
         public override void SetOutputRawCodeValues(bool enabled) { rawCode = enabled; }
 
@@ -266,7 +266,7 @@ namespace MeshSplatBench.UnityNative
             return output;
         }
         static ComputeBuffer Upload(Array values) { ComputeBuffer b=new ComputeBuffer(values.Length,4,ComputeBufferType.Raw); b.SetData(values); return b; }
-        void Fail(string msg) { status="ERROR: "+msg; Debug.LogError("[MeshSplatBench] "+msg); }
+        void Fail(string msg) { status="ERROR: "+msg; Debug.LogError("[MeshSuite] "+msg); }
         void OnDestroy() { RemoveMsBenchCameraDraw(); ready=false; positions?.Release(); indices?.Release(); triangleOrderBuffer?.Release(); opacity?.Release(); sigma?.Release(); dc?.Release(); rest?.Release(); if(material!=null) Destroy(material); }
     }
 }

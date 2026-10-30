@@ -233,18 +233,18 @@ def test_unity_bootstrap_installs_compute_and_method_renderers(tmp_path: Path):
     )
     assert "Metal procedural renderer" in result.stdout
 
-    assert (project / "Assets" / "MeshSplatBench" / "Scripts" / "TriAssetSplatRenderer.cs").is_file()
-    assert (project / "Assets" / "MeshSplatBench" / "Scripts" / "GeneralPurposeMeshTriAssetRenderer.cs").is_file()
-    assert (project / "Assets" / "MeshSplatBench" / "Shaders" / "TriAssetSplat.shader").is_file()
-    assert (project / "Assets" / "MeshSplatBench" / "Shaders" / "MeshSplatTerminalSolid.shader").is_file()
-    assert (project / "Assets" / "MeshSplatBench" / "Shaders" / "GeneralPurposeVertexColor.shader").is_file()
-    assert (project / "Assets" / "Resources" / "MeshSplatBench" / "TriAssetCull.compute").is_file()
-    shader = (project / "Assets" / "MeshSplatBench" / "Shaders" / "TriAssetSplat.shader").read_text()
-    renderer = (project / "Assets" / "MeshSplatBench" / "Scripts" / "TriAssetSplatRenderer.cs").read_text()
+    assert (project / "Assets" / "MeshSuite" / "Scripts" / "TriAssetSplatRenderer.cs").is_file()
+    assert (project / "Assets" / "MeshSuite" / "Scripts" / "GeneralPurposeMeshTriAssetRenderer.cs").is_file()
+    assert (project / "Assets" / "MeshSuite" / "Shaders" / "TriAssetSplat.shader").is_file()
+    assert (project / "Assets" / "MeshSuite" / "Shaders" / "MeshSplatTerminalSolid.shader").is_file()
+    assert (project / "Assets" / "MeshSuite" / "Shaders" / "GeneralPurposeVertexColor.shader").is_file()
+    assert (project / "Assets" / "Resources" / "MeshSuite" / "TriAssetCull.compute").is_file()
+    shader = (project / "Assets" / "MeshSuite" / "Shaders" / "TriAssetSplat.shader").read_text()
+    renderer = (project / "Assets" / "MeshSuite" / "Scripts" / "TriAssetSplatRenderer.cs").read_text()
     assert "nointerpolation float flatAlpha" in shader
     assert "_Opacity[face]" in shader
     assert "_ScreenParams.xy" in shader
     assert 'OpacityBuffer { get { return "triangle_opacity"; } }' in renderer
-    general = (project / "Assets" / "MeshSplatBench" / "Scripts" / "GeneralPurposeMeshTriAssetRenderer.cs").read_text()
+    general = (project / "Assets" / "MeshSuite" / "Scripts" / "GeneralPurposeMeshTriAssetRenderer.cs").read_text()
     assert "Per-face colour cannot be stored on shared vertices" in general
     assert "fixed-budget appearance bake is required" in general

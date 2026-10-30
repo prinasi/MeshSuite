@@ -34,11 +34,11 @@ from msbench.unity_video import (
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Render video trajectories in Unity for MeshSplatBench assets.",
+        description="Render video trajectories in Unity for MeshSuite assets.",
     )
     parser.add_argument("--unity", type=Path, help="Path to Unity Editor binary.")
-    parser.add_argument("--unity-project", type=Path, help="Path to MeshSplatBench Unity project.")
-    parser.add_argument("--config", type=Path, help="MeshSplatBench render/training config YAML.")
+    parser.add_argument("--unity-project", type=Path, help="Path to MeshSuite Unity project.")
+    parser.add_argument("--config", type=Path, help="MeshSuite render/training config YAML.")
     parser.add_argument("--method", "-m", help="Method name (e.g. triangle-splatting, mesh-splatting, 2dts, diffsoup).")
     parser.add_argument("--triasset", type=Path, help="Path to source .triasset directory.")
     parser.add_argument("--dataset", "-d", type=Path, help="Path to dataset directory.")
@@ -113,7 +113,7 @@ def main() -> int:
             from msbench.unity_assets import export_triasset
             ckpt = adapter_cfg.get("checkpoint")
             if ckpt:
-                print(f"[MeshSplatBench] Exporting triasset for {method} to {triasset_path}...")
+                print(f"[MeshSuite] Exporting triasset for {method} to {triasset_path}...")
                 export_triasset(method=method, checkpoint=ckpt, output_dir=triasset_path)
 
         run_unity_video_for_scene(

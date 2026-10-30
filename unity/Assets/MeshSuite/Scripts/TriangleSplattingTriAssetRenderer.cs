@@ -5,10 +5,10 @@ using System.Text.RegularExpressions;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace MeshSplatBench.UnityNative
+namespace MeshSuite.UnityNative
 {
     /// <summary>
-    /// Metal/Unity baseline for the MeshSplatBench triangle-splatting export contract.
+    /// Metal/Unity baseline for the MeshSuite triangle-splatting export contract.
     /// It consumes every exported buffer, evaluates degree-3 SH, applies the
     /// exported opacity/sigma activations, sorts triangle centroids front-to-back,
     /// and uses premultiplied front-to-back blending. The CUDA renderer still has
@@ -79,10 +79,10 @@ namespace MeshSplatBench.UnityNative
             }
             PrimitiveCount = ReadPrimitiveCount(manifest, PrimitiveCount);
 
-            SplatShader = SplatShader != null ? SplatShader : Shader.Find("MeshSplatBench/TriangleSplattingMetalBaseline");
+            SplatShader = SplatShader != null ? SplatShader : Shader.Find("MeshSuite/TriangleSplattingMetalBaseline");
             if (SplatShader == null)
             {
-                Fail("MeshSplatBench/TriangleSplattingMetalBaseline shader was not found.");
+                Fail("MeshSuite/TriangleSplattingMetalBaseline shader was not found.");
                 yield break;
             }
             material = new Material(SplatShader) { hideFlags = HideFlags.HideAndDontSave };
@@ -138,7 +138,7 @@ namespace MeshSplatBench.UnityNative
 
             ready = true;
             status = "Rendering all 4,517,295 primitives (Unity 6 Metal baseline)";
-            Debug.Log("[MeshSplatBench] " + status);
+            Debug.Log("[MeshSuite] " + status);
         }
 
         static int ReadPrimitiveCount(string manifestPath, int fallback)
@@ -195,7 +195,7 @@ namespace MeshSplatBench.UnityNative
             lastSortCameraForward = forward;
         }
 
-        // MeshSplatBench explicit camera command-buffer patch. OnRenderObject is
+        // MeshSuite explicit camera command-buffer patch. OnRenderObject is
         // not a reliable callback for Camera.Render() on Linux Editor batch mode.
         bool InstallMsBenchCameraDraw()
         {
@@ -211,13 +211,13 @@ namespace MeshSplatBench.UnityNative
                     + (material.shader == null ? "<null>" : material.shader.name));
                 return false;
             }
-            msBenchDrawCommands = new CommandBuffer { name = "MeshSplatBench/TriangleSplattingTriAssetRenderer procedural draw" };
+            msBenchDrawCommands = new CommandBuffer { name = "MeshSuite/TriangleSplattingTriAssetRenderer procedural draw" };
             msBenchDrawCommands.DrawProcedural(
                 Matrix4x4.identity, material, 0, MeshTopology.Triangles,
                 PrimitiveCount * 3, 1);
             msBenchCommandCamera = TargetCamera;
             msBenchCommandCamera.AddCommandBuffer(CameraEvent.AfterForwardAlpha, msBenchDrawCommands);
-            Debug.Log("[MeshSplatBench] Installed explicit camera draw for TriangleSplattingTriAssetRenderer on "
+            Debug.Log("[MeshSuite] Installed explicit camera draw for TriangleSplattingTriAssetRenderer on "
                 + SystemInfo.graphicsDeviceType + ".");
             return true;
         }
@@ -252,7 +252,7 @@ namespace MeshSplatBench.UnityNative
             if (Application.isBatchMode) return;
             if (!ready || Camera.current != TargetCamera || material == null) return;
             RefreshTriangleOrder(TargetCamera);
-            if (!material.SetPass(0)) { Debug.LogError("[MeshSplatBench] Shader pass is unsupported on " + SystemInfo.graphicsDeviceType + ": " + material.shader.name); enabled = false; return; }
+            if (!material.SetPass(0)) { Debug.LogError("[MeshSuite] Shader pass is unsupported on " + SystemInfo.graphicsDeviceType + ": " + material.shader.name); enabled = false; return; }
             Graphics.DrawProceduralNow(MeshTopology.Triangles, PrimitiveCount * 3, 1);
         }
 
@@ -273,7 +273,7 @@ namespace MeshSplatBench.UnityNative
                 displayedFps = fpsFrames / fpsTimer;
                 fpsTimer = 0f;
                 fpsFrames = 0;
-                Debug.Log($"[MeshSplatBench] Metal baseline FPS: {displayedFps:F1}");
+                Debug.Log($"[MeshSuite] Metal baseline FPS: {displayedFps:F1}");
             }
         }
 
@@ -323,7 +323,7 @@ namespace MeshSplatBench.UnityNative
         void Fail(string message)
         {
             status = "ERROR: " + message;
-            Debug.LogError("[MeshSplatBench] " + message);
+            Debug.LogError("[MeshSuite] " + message);
         }
 
         void OnDestroy()

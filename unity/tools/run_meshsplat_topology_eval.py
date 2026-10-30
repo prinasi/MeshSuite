@@ -16,6 +16,8 @@ from pathlib import Path
 
 from PIL import Image
 
+from msbench.unity_video import unity_namespace
+
 SCENES = ("bicycle", "bonsai", "counter", "flowers", "garden", "kitchen", "room", "stump", "treehill")
 INDOOR = {"bonsai", "counter", "kitchen", "room"}
 
@@ -45,7 +47,7 @@ def main() -> int:
         output.mkdir(parents=True, exist_ok=True)
         marker = output / ".unity_capture_complete"; marker.unlink(missing_ok=True)
         command = [str(unity), "-batchmode", "-force-metal", "-projectPath", str(project),
-                   "-executeMethod", "MeshSplatBench.UnityNative.Editor.TriAssetBatchRunner.Run",
+                   "-executeMethod", f"{unity_namespace(project)}.UnityNative.Editor.TriAssetBatchRunner.Run",
                    "-method", "mesh-splatting", "-triasset", str(triasset), "-dataset", str(data / scene),
                    "-output", str(output), "-triasset-width", str(width), "-triasset-height", str(height),
                    "-fps-warmup", str(args.fps_warmup), "-fps-frames", str(args.fps_frames),

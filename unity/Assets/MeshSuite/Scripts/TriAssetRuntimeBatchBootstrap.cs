@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace MeshSplatBench.UnityNative
+namespace MeshSuite.UnityNative
 {
     /// <summary>
     /// Configures the fixed evaluation scene when it is launched as a Metal

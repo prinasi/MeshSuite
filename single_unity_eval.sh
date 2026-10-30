@@ -15,7 +15,7 @@ GPU_ID=""
 UNITY_BIN="${UNITY:-}"
 UNITY_PROJECT_DIR="${PROJECT:-${UNITY_PROJECT:-}}"
 UNITY_PLAYER_BIN="${UNITY_PLAYER:-}"
-UNITY_PLAYER_OUTPUT="${UNITY_PLAYER_OUTPUT:-outputs/unity_player/linux/MeshSplatBenchProfilePlayer.x86_64}"
+UNITY_PLAYER_OUTPUT="${UNITY_PLAYER_OUTPUT:-outputs/unity_player/linux/MeshSuiteProfilePlayer.x86_64}"
 UNITY_PLAYER_TARGET="${UNITY_PLAYER_TARGET:-linux64}"
 UNITY_DISPLAY="${UNITY_DISPLAY:-}"
 PROFILE_RUNTIME="${UNITY_PROFILE_RUNTIME:-player}"
@@ -651,18 +651,23 @@ if [[ "${SKIP_PROFILE}" -eq 0 && "${PROFILE_RUNTIME}" == "player" ]]; then
     REQUIRES_CURRENT_PLAYER_BUILD=0
     PLAYER_REBUILD_REASON=""
     PLAYER_REBUILD_SOURCES=()
+    # Unity projects set up before the rename to MeshSuite keep their old asset folder.
+    UNITY_ASSETS_DIR="${UNITY_PROJECT_DIR}/Assets/MeshSuite"
+    if [[ ! -d "${UNITY_ASSETS_DIR}" && -d "${UNITY_PROJECT_DIR}/Assets/MeshSplatBench" ]]; then
+        UNITY_ASSETS_DIR="${UNITY_PROJECT_DIR}/Assets/MeshSplatBench"
+    fi
     if [[ "${METHOD_ID}" == "mesh-splatting" && "${TOPOLOGY}" == "soup" && "${SKIP_PLAYER_BUILD}" -eq 0 ]]; then
         REQUIRES_CURRENT_PLAYER_BUILD=1
         PLAYER_REBUILD_REASON="MeshSplatting shader-level soup topology"
-        PLAYER_REBUILD_SOURCES+=("${UNITY_PROJECT_DIR}/Assets/MeshSplatBench/Scripts/MethodSpecificSplatRenderer.cs")
+        PLAYER_REBUILD_SOURCES+=("${UNITY_ASSETS_DIR}/Scripts/MethodSpecificSplatRenderer.cs")
     fi
     if [[ "${METHOD_ID}" == "mesh-splatting" && "${INDEXED_MESH_METHOD_AWARE}" -eq 1 && "${SKIP_PLAYER_BUILD}" -eq 0 ]]; then
         REQUIRES_CURRENT_PLAYER_BUILD=1
         PLAYER_REBUILD_REASON="MeshSplatting indexed MeshRenderer path"
         PLAYER_REBUILD_SOURCES+=(
-            "${UNITY_PROJECT_DIR}/Assets/MeshSplatBench/Scripts/StandardMeshTriAssetRenderer.cs"
-            "${UNITY_PROJECT_DIR}/Assets/MeshSplatBench/Shaders/MeshSplatIndexedMesh.shader"
-            "${UNITY_PROJECT_DIR}/Assets/MeshSplatBench/Resources/MeshSplatIndexedMesh.shader"
+            "${UNITY_ASSETS_DIR}/Scripts/StandardMeshTriAssetRenderer.cs"
+            "${UNITY_ASSETS_DIR}/Shaders/MeshSplatIndexedMesh.shader"
+            "${UNITY_ASSETS_DIR}/Resources/MeshSplatIndexedMesh.shader"
         )
     fi
     if [[ -n "${UNITY_PLAYER_BIN}" ]]; then

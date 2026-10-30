@@ -204,7 +204,7 @@ for t in "${TARGETS[@]}"; do
 done
 
 echo "==============================================================================="
-echo "MeshSplatBench Unity Video Trajectory Renderer"
+echo "MeshSuite Unity Video Trajectory Renderer"
 echo "Method:     ${METHOD_ID}"
 echo "Condition:  ${CONDITION} (topology=${TOPOLOGY})"
 echo "Targets:    ${#RESOLVED_TARGETS[@]} scene(s)"
@@ -269,10 +269,10 @@ done
 
 if [[ "${FAILED}" -ne 0 ]]; then
     echo ""
-    echo "[MeshSplatBench] Finished with errors." >&2
+    echo "[MeshSuite] Finished with errors." >&2
     exit 1
 fi
 
 echo ""
-echo "[MeshSplatBench] All video trajectories successfully rendered!"
+echo "[MeshSuite] All video trajectories successfully rendered!"
 exit 0

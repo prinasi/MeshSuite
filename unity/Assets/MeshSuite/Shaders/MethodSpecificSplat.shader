@@ -1,4 +1,4 @@
-Shader "MeshSplatBench/MethodSpecificSplat"
+Shader "MeshSuite/MethodSpecificSplat"
 {
  Properties { _MeshAblation ("Mesh ablation", Int) = 0 }
  SubShader { Tags { "Queue"="Transparent" "RenderType"="Transparent" } Pass {

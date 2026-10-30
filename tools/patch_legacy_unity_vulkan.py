@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Patch the legacy MeshSplatBenchUnity Metal renderer for safe Vulkan capture.
+"""Patch a MeshSuite Unity project's Metal renderer for safe Vulkan capture.
 
 The older standalone Unity project uses premultiplied front-to-back blending:
 ``Blend OneMinusDstAlpha One``.  That blend must start from transparent black;
@@ -15,7 +15,8 @@ those draws into camera command buffers, which execute for both normal frames
 and explicit capture renders.
 
 The operation is idempotent and preserves one ``.msbench-vulkan.bak`` copy of
-every modified source file.
+every modified source file. Projects set up before the rename to MeshSuite
+(``Assets/MeshSplatBench``) are patched the same way.
 """
 from __future__ import annotations
 
@@ -23,6 +24,8 @@ import argparse
 import re
 import shutil
 from pathlib import Path
+
+from msbench.unity_video import LEGACY_UNITY_NAMESPACE, unity_namespace
 
 
 BACKUP_SUFFIX = ".msbench-vulkan.bak"
@@ -1286,19 +1289,34 @@ def _patch_profile_player_build(source: str) -> str:
 
 
 def patch_unity_project(project: Path) -> list[Path]:
-    assets = project.expanduser().resolve() / "Assets" / "MeshSplatBench"
+    project = project.expanduser().resolve()
+    namespace = unity_namespace(project)
+    assets = project / "Assets" / namespace
     if not assets.is_dir():
-        raise FileNotFoundError(f"legacy MeshSplatBench Unity assets not found: {assets}")
+        raise FileNotFoundError(f"MeshSuite Unity assets not found: {assets}")
+    # The patches match and emit the legacy MeshSplatBench names. A project renamed
+    # to MeshSuite is mapped onto them for patching and back when written.
+    renamed = namespace != LEGACY_UNITY_NAMESPACE
+
+    def read(path: Path) -> str:
+        text = path.read_text(encoding="utf-8")
+        return text.replace(namespace, LEGACY_UNITY_NAMESPACE) if renamed else text
+
+    def write_if_changed(path: Path, original: str, updated: str) -> bool:
+        if renamed:
+            original = original.replace(LEGACY_UNITY_NAMESPACE, namespace)
+            updated = updated.replace(LEGACY_UNITY_NAMESPACE, namespace)
+        return _write_if_changed(path, original, updated)
 
     changed: list[Path] = []
     shader_root = assets / "Shaders"
     for path in sorted(shader_root.glob("*.shader")):
-        original = path.read_text(encoding="utf-8")
-        if _write_if_changed(path, original, _patch_shader(original)):
+        original = read(path)
+        if write_if_changed(path, original, _patch_shader(original)):
             changed.append(path)
     indexed_mesh_shader = shader_root / "MeshSplatIndexedMesh.shader"
-    original = indexed_mesh_shader.read_text(encoding="utf-8") if indexed_mesh_shader.is_file() else ""
-    if _write_if_changed(indexed_mesh_shader, original, _indexed_mesh_splat_shader()):
+    original = read(indexed_mesh_shader) if indexed_mesh_shader.is_file() else ""
+    if write_if_changed(indexed_mesh_shader, original, _indexed_mesh_splat_shader()):
         changed.append(indexed_mesh_shader)
     # Standalone players strip shaders that are not referenced by scenes,
     # materials, Resources, or Always Included Shaders.  Keep a Resources copy
@@ -1306,26 +1324,26 @@ def patch_unity_project(project: Path) -> list[Path]:
     resources_root = assets / "Resources"
     indexed_mesh_resource_shader = resources_root / "MeshSplatIndexedMesh.shader"
     original = (
-        indexed_mesh_resource_shader.read_text(encoding="utf-8")
+        read(indexed_mesh_resource_shader)
         if indexed_mesh_resource_shader.is_file()
         else ""
     )
-    if _write_if_changed(indexed_mesh_resource_shader, original, _indexed_mesh_splat_shader()):
+    if write_if_changed(indexed_mesh_resource_shader, original, _indexed_mesh_splat_shader()):
         changed.append(indexed_mesh_resource_shader)
 
     script_root = assets / "Scripts"
     renderer_base = script_root / "TriAssetRenderer.cs"
     if not renderer_base.is_file():
         raise FileNotFoundError(f"legacy renderer base source not found: {renderer_base}")
-    original = renderer_base.read_text(encoding="utf-8")
-    if _write_if_changed(renderer_base, original, _patch_renderer_base(original)):
+    original = read(renderer_base)
+    if write_if_changed(renderer_base, original, _patch_renderer_base(original)):
         changed.append(renderer_base)
 
     capture = script_root / "ColmapBatchCapture.cs"
     if not capture.is_file():
         raise FileNotFoundError(f"legacy capture source not found: {capture}")
-    original = capture.read_text(encoding="utf-8")
-    if _write_if_changed(capture, original, _patch_capture(original)):
+    original = read(capture)
+    if write_if_changed(capture, original, _patch_capture(original)):
         changed.append(capture)
 
     renderer_counts = {
@@ -1338,7 +1356,7 @@ def patch_unity_project(project: Path) -> list[Path]:
         path = script_root / name
         if not path.is_file():
             continue
-        original = path.read_text(encoding="utf-8")
+        original = read(path)
         updated = _patch_renderer(original)
         if name == "StandardMeshTriAssetRenderer.cs":
             updated = _patch_standard_mesh_indexed_method_aware(updated)
@@ -1353,30 +1371,30 @@ def patch_unity_project(project: Path) -> list[Path]:
             updated = _patch_triangle_splatting_camera_sort(updated)
         elif name != "StandardMeshTriAssetRenderer.cs":
             updated = _patch_generic_prepare_camera(updated, path.stem)
-        if _write_if_changed(path, original, updated):
+        if write_if_changed(path, original, updated):
             changed.append(path)
 
-    build = assets / "Editor" / "MeshSplatBenchProfilePlayerBuild.cs"
+    build = assets / "Editor" / f"{namespace}ProfilePlayerBuild.cs"
     if build.is_file():
-        original = build.read_text(encoding="utf-8")
-        if _write_if_changed(build, original, _patch_profile_player_build(original)):
+        original = read(build)
+        if write_if_changed(build, original, _patch_profile_player_build(original)):
             changed.append(build)
     return changed
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Patch a legacy MeshSplatBenchUnity Metal project for Vulkan capture."
+        description="Patch a MeshSuite Unity Metal project for Vulkan capture."
     )
     parser.add_argument("--unity-project", type=Path, required=True)
     args = parser.parse_args()
     changed = patch_unity_project(args.unity_project)
     if changed:
-        print("Patched legacy MeshSplatBench Unity project:")
+        print("Patched MeshSuite Unity project:")
         for path in changed:
             print(f"  {path}")
     else:
-        print("Legacy MeshSplatBench Unity project is already patched.")
+        print("MeshSuite Unity project is already patched.")
     return 0
 
 

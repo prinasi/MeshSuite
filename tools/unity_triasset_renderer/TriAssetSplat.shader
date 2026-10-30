@@ -1,4 +1,4 @@
-Shader "MeshSplatBench/TriAssetSplat"
+Shader "MeshSuite/TriAssetSplat"
 {
     SubShader
     {
