@@ -46,6 +46,9 @@ unity_metrics_report.md
 
 # Unity project/build caches.
 # Keep ProjectSettings, Packages, and Assets committed; ignore generated caches.
+# tools/patch_legacy_unity_vulkan.py backups, and the .meta files Unity makes for them.
+*.msbench-vulkan.bak
+*.msbench-vulkan.bak.meta
 [Ll]ibrary/
 [Tt]emp/
 [Oo]bj/
