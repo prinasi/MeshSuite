@@ -1,4 +1,4 @@
-"""Tests for MeshSplatBench config-driven construction."""
+"""Tests for MeshSuite config-driven construction."""
 
 from __future__ import annotations
 

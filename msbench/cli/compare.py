@@ -14,7 +14,7 @@ compare_app = typer.Typer(no_args_is_help=True)
 @compare_app.callback(invoke_without_command=True)
 def compare(
     inputs: Optional[list[str]] = typer.Option(None, "--inputs", "-i", help="Paths to JSON files (metrics/profile/stats)"),
-    config: Optional[Path] = typer.Option(None, "--config", help="MeshSplatBench comparison config YAML"),
+    config: Optional[Path] = typer.Option(None, "--config", help="MeshSuite comparison config YAML"),
     output: str = typer.Option("report.md", "--output", "-o", help="Output report file path"),
 ):
     """Compare results across multiple methods.
@@ -60,7 +60,7 @@ def compare(
             all_metrics.append(data)
 
     # Generate comparison tables
-    lines = ["# MeshSplatBench Comparison Report", ""]
+    lines = ["# MeshSuite Comparison Report", ""]
 
     if all_stats:
         lines.extend(_generate_stats_table(all_stats))

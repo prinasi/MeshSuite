@@ -47,13 +47,13 @@ if _should_build_cuda():
     backends = os.environ.get("MSBENCH_CUDA_BACKENDS", "all")
     ccache = "yes" if os.environ.get("MSBENCH_CCACHE", "").lower() in ("1", "true", "yes") else "no"
     print(
-        f"[MeshSplatBench] Building CUDA extensions (backends={backends}, ccache={ccache}).\n"
+        f"[MeshSuite] Building CUDA extensions (backends={backends}, ccache={ccache}).\n"
         "  Tip: set MSBENCH_SKIP_CUDA=1 to skip CUDA compilation for faster\n"
         "       editable installs when you only changed Python code."
     )
 else:
     print(
-        "[MeshSplatBench] Skipping CUDA extension build.\n"
+        "[MeshSuite] Skipping CUDA extension build.\n"
         "  Python-only toolkit installed. To build CUDA extensions:\n"
         "    export CUDA_HOME=/usr/local/cuda\n"
         "    python setup.py build_ext --inplace     # build & install in-place\n"

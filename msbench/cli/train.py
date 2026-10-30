@@ -1,4 +1,4 @@
-"""Generic train command for MeshSplatBench.
+"""Generic train command for MeshSuite.
 
 Dispatches to method-specific ``TrainingMethod`` implementations via the
 training-method registry.  Every registered method is driven by the same
@@ -195,7 +195,7 @@ def train(
 
     if method is None or dataset is None:
         raise typer.BadParameter(
-            "Use --config with a structured MeshSplatBench config, or provide both "
+            "Use --config with a structured MeshSuite config, or provide both "
             "--method and --dataset."
         )
 
@@ -312,7 +312,7 @@ def _train_from_structured_config(
     quiet: bool,
     max_steps_override: int | None = None,
 ) -> dict:
-    """Run training from a MeshSplatBench structured config."""
+    """Run training from a MeshSuite structured config."""
     if "trainer" not in cfg:
         raise typer.BadParameter("Structured training config must include 'trainer'.")
     if "dataset" not in cfg:

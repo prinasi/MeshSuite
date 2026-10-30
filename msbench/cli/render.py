@@ -69,7 +69,7 @@ def render_images(
     method: Optional[str] = typer.Option(None, "--method", "-m", help="Method name"),
     checkpoint: Optional[str] = typer.Option(None, "--checkpoint", "-c", help="Path to model checkpoint"),
     dataset: Optional[str] = typer.Option(None, "--dataset", "-d", help="Path to dataset directory"),
-    config: Optional[Path] = typer.Option(None, "--config", help="MeshSplatBench render config YAML"),
+    config: Optional[Path] = typer.Option(None, "--config", help="MeshSuite render config YAML"),
     split: str = typer.Option("test", "--split", "-s", help="Dataset split: train/test/all"),
     output_dir: str = typer.Option("renders/", "--output-dir", "-o", help="Output directory"),
     dataset_type: str = typer.Option("auto", "--dataset-type", help="auto/colmap/mipnerf360/tanks/dtu/blender"),
@@ -136,7 +136,7 @@ def render_split(
     method: Optional[str] = typer.Option(None, "--method", "-m"),
     checkpoint: Optional[str] = typer.Option(None, "--checkpoint", "-c"),
     dataset: Optional[str] = typer.Option(None, "--dataset", "-d"),
-    config: Optional[Path] = typer.Option(None, "--config", help="MeshSplatBench render config YAML"),
+    config: Optional[Path] = typer.Option(None, "--config", help="MeshSuite render config YAML"),
     split: str = typer.Option("test", "--split", "-s"),
     output_dir: str = typer.Option("renders/", "--output-dir", "-o"),
     dataset_type: str = typer.Option("auto", "--dataset-type"),
@@ -204,7 +204,7 @@ def render_video_cmd(
     method: Optional[str] = typer.Option(None, "--method", "-m"),
     checkpoint: Optional[str] = typer.Option(None, "--checkpoint", "-c"),
     dataset: Optional[str] = typer.Option(None, "--dataset", "-d"),
-    config: Optional[Path] = typer.Option(None, "--config", help="MeshSplatBench render config YAML"),
+    config: Optional[Path] = typer.Option(None, "--config", help="MeshSuite render config YAML"),
     split: str = typer.Option("train", "--split", "-s"),
     output_dir: str = typer.Option("video/", "--output-dir", "-o"),
     dataset_type: str = typer.Option("auto", "--dataset-type"),
@@ -350,7 +350,7 @@ def render_video_cmd(
 
 @render_app.command("unity-video")
 def render_unity_video_cmd(
-    config: Optional[Path] = typer.Option(None, "--config", help="MeshSplatBench render config YAML"),
+    config: Optional[Path] = typer.Option(None, "--config", help="MeshSuite render config YAML"),
     method: Optional[str] = typer.Option(None, "--method", "-m", help="Method name"),
     checkpoint: Optional[str] = typer.Option(None, "--checkpoint", "-c", help="Path to checkpoint"),
     triasset: Optional[Path] = typer.Option(None, "--triasset", help="Path to .triasset directory"),
@@ -516,7 +516,7 @@ def viewer(
     method: Optional[str] = typer.Option(None, "--method", "-m"),
     checkpoint: Optional[str] = typer.Option(None, "--checkpoint", "-c"),
     dataset: Optional[str] = typer.Option(None, "--dataset", "-d"),
-    config: Optional[Path] = typer.Option(None, "--config", help="MeshSplatBench viewer config YAML"),
+    config: Optional[Path] = typer.Option(None, "--config", help="MeshSuite viewer config YAML"),
     split: str = typer.Option("test", "--split", "-s"),
     dataset_type: str = typer.Option("auto", "--dataset-type"),
     image_dir: str = typer.Option("images", "--image-dir"),
@@ -721,7 +721,7 @@ def _try_load_adapter(method: str, checkpoint: str):
 def mesh(
     method: Optional[str] = typer.Option(None, "--method", "-m"),
     checkpoint: Optional[str] = typer.Option(None, "--checkpoint", "-c"),
-    config: Optional[Path] = typer.Option(None, "--config", help="MeshSplatBench render config YAML"),
+    config: Optional[Path] = typer.Option(None, "--config", help="MeshSuite render config YAML"),
     output: str = typer.Option("mesh.ply", "--output", "-o"),
 ):
     """Export the adapter primitive as a PLY mesh/triangle soup."""
@@ -760,7 +760,7 @@ def mesh(
 def viewer_path(
     method: Optional[str] = typer.Option(None, "--method", "-m"),
     checkpoint: Optional[str] = typer.Option(None, "--checkpoint", "-c"),
-    config: Optional[Path] = typer.Option(None, "--config", help="MeshSplatBench render config YAML"),
+    config: Optional[Path] = typer.Option(None, "--config", help="MeshSuite render config YAML"),
     trajectory: Path = typer.Option(..., "--trajectory", "-t", help="Path to nerfbaselines-v1 trajectory JSON."),
     output_dir: str = typer.Option("trajectory_render/", "--output-dir", "-o"),
     output_types: str = typer.Option("color", "--output-types", help="Comma-separated: color,depth,alpha,normal"),

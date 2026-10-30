@@ -1,6 +1,6 @@
 """Bundled renderer backend registry.
 
-MeshSplatBench vendors the minimal runtime and CUDA sources needed by each
+MeshSuite vendors the minimal runtime and CUDA sources needed by each
 supported renderer under ``msbench.vendor``.  The registry mirrors the
 Splatwizard style: methods are selected by name while concrete Python/CUDA
 modules are loaded lazily from a package-local namespace.

@@ -14,7 +14,7 @@ from msbench.renderers.backends import BackendSpec, BackendUnavailableError
 def purge_modules(roots: tuple[str, ...]) -> None:
     """Compatibility no-op.
 
-    MeshSplatBench now vendors renderer modules under unique package names, so
+    MeshSuite now vendors renderer modules under unique package names, so
     there are no shared top-level modules to evict from ``sys.modules``.
     """
 
@@ -46,7 +46,7 @@ def import_backend_module(
     except ImportError as exc:
         raise BackendUnavailableError(
             f"Cannot import bundled module '{target}' for backend '{spec.name}'. "
-            "Install MeshSplatBench with its bundled CUDA extensions built."
+            "Install MeshSuite with its bundled CUDA extensions built."
         ) from exc
 
 
@@ -55,7 +55,7 @@ def ensure_module_from_backend(
     spec: BackendSpec,
     repo_root: str | Path | None = None,
 ) -> None:
-    """Validate that a module is inside the MeshSplatBench vendored namespace."""
+    """Validate that a module is inside the MeshSuite vendored namespace."""
     if not module.__name__.startswith("msbench.vendor."):
         raise BackendUnavailableError(
             f"Imported '{module.__name__}', but backend '{spec.name}' expects "

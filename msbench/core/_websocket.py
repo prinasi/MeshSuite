@@ -1577,7 +1577,7 @@ def httpserver_websocket_handler(fn) -> Callable:
     The method takes the websocket object as the first argument.
     """
     def websocket_handler(self, *args, **kwargs):
-        # Keep MeshSplatBench viewer frames uncompressed. Browser WebSocket clients
+        # Keep MeshSuite viewer frames uncompressed. Browser WebSocket clients
         # request permessage-deflate by default, but image payloads are already
         # compressed PNG/JPEG and compressed binary frames have proven brittle
         # across local browser/headless environments.

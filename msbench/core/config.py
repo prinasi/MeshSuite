@@ -1,6 +1,6 @@
-"""Configuration loading utilities for MeshSplatBench.
+"""Configuration loading utilities for MeshSuite.
 
-MeshSplatBench configs are plain YAML mappings with optional ``_base_`` inheritance.
+MeshSuite configs are plain YAML mappings with optional ``_base_`` inheritance.
 They are intentionally small compared with MMEngine/MMDetection configs, but
 keep the same useful shape: declare components in YAML and build them through
 registries.
@@ -579,7 +579,7 @@ def _safe_dump(data: Any) -> str:
 
 
 def _mini_yaml_load(text: str) -> dict[str, Any]:
-    """Parse the small YAML subset used by MeshSplatBench example configs."""
+    """Parse the small YAML subset used by MeshSuite example configs."""
     root: dict[str, Any] = {}
     stack: list[tuple[int, Any]] = [(-1, root)]
     pending: list[tuple[int, Any, str]] = []

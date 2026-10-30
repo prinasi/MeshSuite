@@ -28,7 +28,7 @@ def profile(
     ),
     scene: str | None = typer.Option(None, "--scene", help="Scene name or dataset directory"),
     config: Path | None = typer.Option(  # noqa: B008
-        None, "--config", help="MeshSplatBench profile config YAML"
+        None, "--config", help="MeshSuite profile config YAML"
     ),
     split: str = typer.Option("test", "--split", "-s", help="Dataset split"),
     repeats: int = typer.Option(100, "--repeats", "-r", help="Number of profiling repetitions"),

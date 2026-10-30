@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Calculate local connectivity metrics for MeshSplatting meshes.
 
-The default input is a MeshSplatBench MeshSplatting config.  The script resolves the
+The default input is a MeshSuite MeshSplatting config.  The script resolves the
 configured checkpoint, reads the indexed mesh stored in
 ``point_cloud_state_dict.pt`` (``triangles_points`` + ``_triangle_indices``),
 and reports topology metrics that are less easily hidden by global averages.
@@ -632,7 +632,7 @@ def main() -> None:
             "metrics for a MeshSplatting triangular mesh."
         )
     )
-    parser.add_argument("--config", "-c", type=str, help="MeshSplatBench MeshSplatting config YAML.")
+    parser.add_argument("--config", "-c", type=str, help="MeshSuite MeshSplatting config YAML.")
     parser.add_argument(
         "--checkpoint",
         type=str,

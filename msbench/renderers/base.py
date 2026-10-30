@@ -1,4 +1,4 @@
-"""Base renderer adapter interface for MeshSplatBench."""
+"""Base renderer adapter interface for MeshSuite."""
 
 from __future__ import annotations
 
@@ -146,5 +146,5 @@ class RendererAdapter(ABC):
         """
         raise NotImplementedError(
             f"{self.__class__.__name__}.to_primitive() is not implemented. "
-            "This method should convert the internal model to a MeshSplatBench primitive type."
+            "This method should convert the internal model to a MeshSuite primitive type."
         )

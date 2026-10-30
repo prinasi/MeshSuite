@@ -1,1 +1,1 @@
-"""MeshSplatBench test suite."""
+"""MeshSuite test suite."""

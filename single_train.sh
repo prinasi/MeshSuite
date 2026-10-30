@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# single_train.sh - config-driven MeshSplatBench scene/dataset pipeline.
+# single_train.sh - config-driven MeshSuite scene/dataset pipeline.
 #
 # Primary interface:
 #   bash single_train.sh <method> <dataset/scene|dataset/all|all> <gpu_id> [options]
@@ -1040,7 +1040,7 @@ print_final_summary() {
 
     echo
     echo "=============================================================================================================="
-    echo "  MeshSplatBench Summary  (method: ${METHOD_ID})"
+    echo "  MeshSuite Summary  (method: ${METHOD_ID})"
     echo "=============================================================================================================="
     "${PYTHON_BIN}" "${FORMAT_METRICS}" --config "${SUMMARY_CONFIGS[@]}"
 }

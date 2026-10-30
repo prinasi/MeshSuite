@@ -1,4 +1,4 @@
-"""Tests for the interactive MeshSplatBench viewer backend (nerfbaselines-compatible)."""
+"""Tests for the interactive MeshSuite viewer backend (nerfbaselines-compatible)."""
 
 from __future__ import annotations
 

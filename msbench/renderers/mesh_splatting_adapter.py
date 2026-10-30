@@ -161,7 +161,7 @@ class MeshSplattingAdapter(RendererAdapter):
         return self._backend.status(self.repo_root)
 
     def configure(self, **kwargs: Any) -> None:
-        """Set render-time options used by MeshSplatBench evaluation.
+        """Set render-time options used by MeshSuite evaluation.
 
         Accepted keys:
             render_scaling (int): MeshSplatting triangle scaling used by the
@@ -202,7 +202,7 @@ class MeshSplattingAdapter(RendererAdapter):
         except ImportError as exc:
             raise ImportError(
                 "Cannot import bundled mesh-splatting renderer. Reinstall "
-                "MeshSplatBench with its bundled CUDA extensions built."
+                "MeshSuite with its bundled CUDA extensions built."
             ) from exc
 
         self._TriangleModel = TriangleModel

@@ -43,7 +43,7 @@ def split_dtu_indices(
     eval: bool,
     llffhold: int = 8,
 ) -> tuple[list[int], list[int]]:
-    """Return train/test indices matching the MeshSplatBench DTU evaluation split."""
+    """Return train/test indices matching the MeshSuite DTU evaluation split."""
     indices = list(range(num_images))
     if not eval:
         return indices, []

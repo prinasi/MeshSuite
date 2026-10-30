@@ -28,7 +28,7 @@ def run_d2ts_native_config(
     max_steps: int,
     quiet: bool = True,
 ) -> dict[str, Any]:
-    """Run the bundled 2DTS VanillaTS trainer from a MeshSplatBench config."""
+    """Run the bundled 2DTS VanillaTS trainer from a MeshSuite config."""
     from msbench.vendor.d2ts.diff_recon import VanillaTSTrainer
 
     native = _build_d2ts_native_config(

@@ -78,7 +78,7 @@ class DiffSoupAdapter(RendererAdapter):
             import msbench.vendor.diffsoup as ds
         except ImportError as exc:
             raise ImportError(
-                "Cannot import bundled DiffSoup renderer. Reinstall MeshSplatBench "
+                "Cannot import bundled DiffSoup renderer. Reinstall MeshSuite "
                 "with its bundled CMake/CUDA extension built."
             ) from exc
 

@@ -1,7 +1,7 @@
-"""NerfBaselines-compatible interactive viewer for MeshSplatBench models.
+"""NerfBaselines-compatible interactive viewer for MeshSuite models.
 
 Serves the nerfbaselines Three.js frontend with remote rendering backed by
-any MeshSplatBench RendererAdapter. Supports:
+any MeshSuite RendererAdapter. Supports:
 
 - Free-viewpoint remote rendering (HTTP POST /render + WebSocket /render-websocket)
 - Train/test camera frustums with click-to-navigate
@@ -412,7 +412,7 @@ def serve_viewer(
     server = _bind_server(host, int(port), handler)
     actual_port = server.server_address[1]
     url = f"http://{_display_host(host, actual_port)}"
-    print(f"MeshSplatBench viewer running at {url}")
+    print(f"MeshSuite viewer running at {url}")
     try:
         server.serve_forever()
     finally:
@@ -464,7 +464,7 @@ class _ViewerRequestHandler(SimpleHTTPRequestHandler):
             if path == "/palettes.js":
                 return self._handle_palettes_js()
             if path == "/3dgs.js":
-                raise ViewerNotFound("MeshSplatBench viewer does not serve the 3DGS local renderer")
+                raise ViewerNotFound("MeshSuite viewer does not serve the 3DGS local renderer")
             if path == "/dataset/pointcloud.ply":
                 return self._handle_pointcloud()
             if path.startswith("/dataset/geometry/"):

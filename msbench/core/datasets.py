@@ -1,4 +1,4 @@
-"""Dataset loading abstractions for MeshSplatBench."""
+"""Dataset loading abstractions for MeshSuite."""
 
 from __future__ import annotations
 

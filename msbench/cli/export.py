@@ -63,7 +63,7 @@ def point_cloud(
         "-c",
         help="Path to model checkpoint",
     ),
-    config: Optional[Path] = typer.Option(None, "--config", help="MeshSplatBench config YAML"),
+    config: Optional[Path] = typer.Option(None, "--config", help="MeshSuite config YAML"),
     output: Optional[Path] = typer.Option(
         None,
         "--output",

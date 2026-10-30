@@ -1,4 +1,4 @@
-"""Training method hooks for MeshSplatBench."""
+"""Training method hooks for MeshSuite."""
 
 from __future__ import annotations
 

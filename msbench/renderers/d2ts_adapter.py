@@ -86,7 +86,7 @@ class D2TSAdapter(RendererAdapter):
             from msbench.vendor.d2ts.diff_recon.utils.camera import Camera
         except ImportError as exc:
             raise ImportError(
-                "Cannot import bundled 2DTS renderer. Reinstall MeshSplatBench "
+                "Cannot import bundled 2DTS renderer. Reinstall MeshSuite "
                 "with its bundled CUDA extensions built."
             ) from exc
 

@@ -243,7 +243,7 @@ def main(
                 color = _composite_white_background(color, rast_out)
             pred_init.append(color.squeeze(0))
         pred_init = torch.stack(pred_init, dim=0)
-    # Diagnostic renders are intentionally not written during MeshSplatBench runs.
+    # Diagnostic renders are intentionally not written during MeshSuite runs.
 
     # ── Optimisers ───────────────────────────────────────────────────
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Export Unity-readable mesh assets from MeshSplatBench checkpoints.
+"""Export Unity-readable mesh assets from MeshSuite checkpoints.
 
 The filename is kept as ``create_off.py`` for compatibility with older
 workflows.  The default export is now ``unity_mesh.off`` with a ``COFF`` header
@@ -772,12 +772,12 @@ def _resolve_from_config(
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Export original MeshSplatBench topology as a Unity-readable mesh. "
+            "Export original MeshSuite topology as a Unity-readable mesh. "
             "Default output is COFF-style .off with per-face colors."
         )
     )
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--config", type=str, help="MeshSplatBench config YAML path")
+    group.add_argument("--config", type=str, help="MeshSuite config YAML path")
     group.add_argument(
         "--method",
         type=str,

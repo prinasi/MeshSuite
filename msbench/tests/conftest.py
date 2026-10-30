@@ -1,4 +1,4 @@
-"""Shared test fixtures for MeshSplatBench."""
+"""Shared test fixtures for MeshSuite."""
 
 import torch
 import pytest

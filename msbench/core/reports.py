@@ -1,4 +1,4 @@
-"""Report generation for MeshSplatBench evaluation runs."""
+"""Report generation for MeshSuite evaluation runs."""
 
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ def generate_markdown_report(
         Markdown-formatted report string.
     """
     lines = [
-        "# MeshSplatBench Report",
+        "# MeshSuite Report",
         "",
         f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
         "",

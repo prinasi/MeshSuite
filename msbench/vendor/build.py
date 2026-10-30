@@ -1,4 +1,4 @@
-"""Build helpers for MeshSplatBench's bundled CUDA renderer modules."""
+"""Build helpers for MeshSuite's bundled CUDA renderer modules."""
 
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ class ParallelBuildExt(BuildExtension):
         cmake = shutil.which("cmake")
         if cmake is None:
             raise RuntimeError(
-                "Building MeshSplatBench's bundled DiffSoup extension requires "
+                "Building MeshSuite's bundled DiffSoup extension requires "
                 "CMake. Install it with `pip install cmake` or use build "
                 "isolation so pyproject.toml can install `cmake>=3.20`."
             )
@@ -57,7 +57,7 @@ class ParallelBuildExt(BuildExtension):
             ).strip()
         except subprocess.CalledProcessError as exc:
             raise RuntimeError(
-                "Building MeshSplatBench's bundled DiffSoup extension requires "
+                "Building MeshSuite's bundled DiffSoup extension requires "
                 "nanobind in the Python environment used for the build. Install "
                 "it with `pip install nanobind`, or build without "
                 "`--no-build-isolation` so pyproject.toml can install "
@@ -122,7 +122,7 @@ def _ccache_nvcc_args() -> list[str]:
     if not _USE_CCACHE:
         return []
     if not shutil.which("ccache"):
-        print("[MeshSplatBench] MSBENCH_CCACHE=1 but ccache not found on PATH — ignoring.")
+        print("[MeshSuite] MSBENCH_CCACHE=1 but ccache not found on PATH — ignoring.")
         return []
     # The most portable way: tell nvcc to use ccache as its host compiler wrapper.
     return []  # ccache is activated via the CUDAHOSTCXX env var instead.
@@ -250,7 +250,7 @@ def get_ext_modules() -> list[Extension]:
 
     if _ONLY_BACKENDS and not extensions:
         print(
-            f"[MeshSplatBench] MSBENCH_CUDA_BACKENDS='{_ONLY_BACKENDS}' "
+            f"[MeshSuite] MSBENCH_CUDA_BACKENDS='{_ONLY_BACKENDS}' "
             "did not match any known backend.  Available: "
             "triangle-splatting, mesh-splatting, 2dts, simple-knn, diffsoup"
         )

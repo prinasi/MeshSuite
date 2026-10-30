@@ -1,2 +1,2 @@
-"""Vendored renderer backends bundled with MeshSplatBench."""
+"""Vendored renderer backends bundled with MeshSuite."""
 

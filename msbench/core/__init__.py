@@ -1,4 +1,4 @@
-"""Core abstractions for MeshSplatBench."""
+"""Core abstractions for MeshSuite."""
 
 __all__ = [
     "CameraBatch",

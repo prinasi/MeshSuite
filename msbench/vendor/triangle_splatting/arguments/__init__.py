@@ -1,7 +1,7 @@
 """Argument helpers vendored from triangle-splatting.
 
 The original project exposes argparse parameter groups. Keeping the same
-attribute names lets MeshSplatBench call the native training code while still
+attribute names lets MeshSuite call the native training code while still
 remaining a single installable package.
 """
 

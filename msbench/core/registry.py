@@ -1,8 +1,8 @@
-"""Method and adapter registry for MeshSplatBench.
+"""Method and adapter registry for MeshSuite.
 
 Adapters are discovered via the ``msbench.adapters`` entry-point group,
 so both built-in and third-party adapters register the same way — through
-``pyproject.toml`` (or ``setup.cfg``) without modifying any MeshSplatBench
+``pyproject.toml`` (or ``setup.cfg``) without modifying any MeshSuite
 source file.
 """
 

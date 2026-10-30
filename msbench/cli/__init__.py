@@ -1,1 +1,1 @@
-"""MeshSplatBench command-line interface."""
+"""MeshSuite command-line interface."""

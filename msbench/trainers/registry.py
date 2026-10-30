@@ -1,8 +1,8 @@
-"""Training method registry for MeshSplatBench.
+"""Training method registry for MeshSuite.
 
 Training methods are registered by name and discovered via entry points,
 allowing third-party packages to provide new training pipelines without
-modifying MeshSplatBench source.
+modifying MeshSuite source.
 """
 
 from __future__ import annotations

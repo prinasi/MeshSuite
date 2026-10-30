@@ -30,7 +30,7 @@ def evaluate_images(
     method: Optional[str] = typer.Option(None, "--method", "-m", help="Method name"),
     checkpoint: Optional[str] = typer.Option(None, "--checkpoint", "-c", help="Path to model checkpoint"),
     dataset: Optional[str] = typer.Option(None, "--dataset", "-d", help="Path to dataset directory"),
-    config: Optional[Path] = typer.Option(None, "--config", help="MeshSplatBench evaluation config YAML"),
+    config: Optional[Path] = typer.Option(None, "--config", help="MeshSuite evaluation config YAML"),
     split: str = typer.Option("test", "--split", "-s", help="Dataset split"),
     output: str = typer.Option("metrics.json", "--output", "-o", help="Output JSON file path"),
     save_renders: bool = typer.Option(False, "--save-renders", help="Save rendered images"),
@@ -216,7 +216,7 @@ def evaluate_images(
 def _primitive_count_from_checkpoint(checkpoint, method=None) -> int | None:
     """Count model primitives from a checkpoint without importing the renderer.
 
-    Works for the common MeshSplatBench checkpoints (a ``.pt`` state dict or a ``.ply``
+    Works for the common MeshSuite checkpoints (a ``.pt`` state dict or a ``.ply``
     mesh) using only a CPU torch load, so it does not require the bundled CUDA
     extensions to be importable.
     """
@@ -413,7 +413,7 @@ def evaluate_mesh(
     pred: Optional[str] = typer.Option(None, "--pred", help="Predicted mesh/point cloud"),
     dtu_root: Optional[str] = typer.Option(None, "--dtu-root", help="Official DTU dataset root"),
     scan_id: Optional[str] = typer.Option(None, "--scan-id", help="DTU scan id, e.g. 24 or scan24"),
-    config: Optional[Path] = typer.Option(None, "--config", help="MeshSplatBench evaluation config YAML"),
+    config: Optional[Path] = typer.Option(None, "--config", help="MeshSuite evaluation config YAML"),
     output: str = typer.Option("mesh_metrics.json", "--output", "-o"),
     samples: Optional[int] = typer.Option(None, "--samples"),
     downsample_density: Optional[float] = typer.Option(None, "--downsample-density"),
