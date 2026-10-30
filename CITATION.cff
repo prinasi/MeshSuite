@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 message: "If you use this benchmark or codebase in your research, please cite our paper as follows."
-title: "MeshSplatBench: A Unified Benchmark for Triangle-Based Neural Rendering"
+title: "MeshSuite: A Unified Benchmark for Triangle-Based Neural Rendering"
 authors:
   - family-names: "Zhang"
     given-names: "Kaixuan"
@@ -15,7 +15,7 @@ url: "https://arxiv.org/abs/2609.01306"
 identifiers:
   - type: other
     value: "arXiv:2609.01306"
-    description: "The arXiv preprint of MeshSplatBench"
+    description: "The arXiv preprint of MeshSuite"
 preferred-citation:
   type: article
   authors:
@@ -27,7 +27,7 @@ preferred-citation:
       given-names: "Mingwu"
     - family-names: "Zhu"
       given-names: "Xiatian"
-  title: "MeshSplatBench: A Unified Benchmark for Triangle-Based Neural Rendering"
+  title: "MeshSuite: A Unified Benchmark for Triangle-Based Neural Rendering"
   year: 2026
   eprint: "2609.01306"
   archivePrefix: "arXiv"

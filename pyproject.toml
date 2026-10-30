@@ -10,7 +10,7 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [
-    {name = "MeshSplatBench Contributors"},
+    {name = "MeshSuite Contributors"},
 ]
 keywords = ["3D reconstruction", "triangle splatting", "radiance fields", "benchmarking"]
 classifiers = [

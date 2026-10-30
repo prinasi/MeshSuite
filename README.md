@@ -1,16 +1,16 @@
 <!-- @format -->
 
-# MeshSplatBench: A Unified Benchmark for Triangle-Based Neural Rendering
+# MeshSuite: A Unified Benchmark for Triangle-Based Neural Rendering
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![arXiv](https://img.shields.io/badge/arXiv-2609.01306-b31b1b.svg)](https://arxiv.org/abs/2609.01306)
 [![Project Page](https://img.shields.io/badge/Project-Page-2563eb.svg)](https://prinasi.github.io/MeshSuite/)
 
-**MeshSplatBench** (also presented as **MeshSuite**) is a unified, Python-first benchmarking toolkit and evaluation framework for comparing triangle-splatting-style radiance field reconstruction methods, bridging academic novel view synthesis research and real-time industrial game engine deployment (Unity). Visit the [Project Page](https://prinasi.github.io/MeshSuite/) for interactive comparisons and full leaderboards.
+**MeshSuite** is a unified, Python-first benchmarking toolkit and evaluation framework for comparing triangle-splatting-style radiance field reconstruction methods, bridging academic novel view synthesis research and real-time industrial game engine deployment (Unity). Visit the [Project Page](https://prinasi.github.io/MeshSuite/) for interactive comparisons and full leaderboards.
 
 ## Overview
 
-MeshSplatBench provides a single, consistent evaluation framework for comparing different triangle-based radiance field reconstruction methods. Instead of wrangling per-repo scripts and ad-hoc metrics, you get:
+MeshSuite provides a single, consistent evaluation framework for comparing different triangle-based radiance field reconstruction methods. Instead of wrangling per-repo scripts and ad-hoc metrics, you get:
 
 - **Standardized metrics** -- PSNR, SSIM, LPIPS, and geometry quality, computed the same way for every method.
 - **Adapter pattern** -- plug any triangle-splatting method into the same API.
@@ -71,8 +71,8 @@ ExMesh training, and cached under `outputs/exmesh-preprocess/`. ExMesh needs the
 ### Option 1: Conda Environment (Recommended)
 
 ```bash
-git clone https://github.com/prinasi/MeshSplatBench.git
-cd MeshSplatBench
+git clone https://github.com/prinasi/MeshSuite.git
+cd MeshSuite
 conda env create -f environment.yml
 conda activate msbench
 
@@ -88,11 +88,11 @@ python -m pip install -e ".[dev,cuda]" --no-build-isolation
 
 ### Option 2: Pip Install / Editable Development Install
 
-If you already have a Conda or Python environment with PyTorch (>= 2.0 with CUDA support), install MeshSplatBench in editable mode:
+If you already have a Conda or Python environment with PyTorch (>= 2.0 with CUDA support), install MeshSuite in editable mode:
 
 ```bash
-git clone https://github.com/prinasi/MeshSplatBench.git
-cd MeshSplatBench
+git clone https://github.com/prinasi/MeshSuite.git
+cd MeshSuite
 ```
 
 #### 1. Full Installation (Compiling All Bundled CUDA Extensions)
@@ -152,7 +152,7 @@ Supported backend identifiers: `triangle-splatting`, `mesh-splatting`, `2dts`, `
 
 ## Dataset Setup
 
-MeshSplatBench evaluates methods on standard novel view synthesis benchmarks: **Mip-NeRF 360**, **NeRF-Synthetic (Blender)**, **Tanks & Temples**, and **DTU**.
+MeshSuite evaluates methods on standard novel view synthesis benchmarks: **Mip-NeRF 360**, **NeRF-Synthetic (Blender)**, **Tanks & Temples**, and **DTU**.
 
 Readers should download the datasets from their official sources and place or symlink them into the `data/` directory according to the default format:
 
@@ -341,7 +341,7 @@ extension builds entirely.
 
 ## Unity-native Evaluation
 
-MeshSplatBench can export method-preserving Unity `.triasset` packages, render Unity
+MeshSuite can export method-preserving Unity `.triasset` packages, render Unity
 test-view images for PSNR/SSIM/LPIPS, and profile GPU FPS/memory through a
 Linux standalone Development Player. The workflow is designed for completed
 config-driven runs under `outputs/{method}/{dataset}/{scene}`.
@@ -697,7 +697,7 @@ The `adapter.checkpoint` template in each method base config points at `ckpt/`:
 
 
 ```
-MeshSplatBench/
+MeshSuite/
 ├── msbench/
 │   ├── core/           # Config, datasets, cameras, metrics, mesh eval, profiling, viewer
 │   ├── primitives/     # Triangle primitive types (independent, mesh, convex)
@@ -719,8 +719,8 @@ MeshSplatBench/
 If you find this benchmark, codebase, or results helpful in your research, please cite our paper:
 
 ```bibtex
-@misc{zhang2026meshsplatbenchunifiedbenchmarktrianglebased,
-      title={MeshSplatBench: A Unified Benchmark for Triangle-Based Neural Rendering}, 
+@misc{zhang2026meshsuiteunifiedbenchmarktrianglebased,
+      title={MeshSuite: A Unified Benchmark for Triangle-Based Neural Rendering}, 
       author={Kaixuan Zhang and Minxian Li and Mingwu Ren and Xiatian Zhu},
       year={2026},
       eprint={2609.01306},

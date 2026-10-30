@@ -1,5 +1,5 @@
 /**
- * MeshSuite / MeshSplatBench Project Page Script
+ * MeshSuite Project Page Script
  */
 
 document.addEventListener('DOMContentLoaded', () => {

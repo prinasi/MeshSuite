@@ -1,4 +1,4 @@
-"""MeshSplatBench: a config-driven benchmark for triangle/splatting reconstruction."""
+"""MeshSuite: a config-driven benchmark for triangle/splatting reconstruction."""
 
 __version__ = "0.1.0"
 
