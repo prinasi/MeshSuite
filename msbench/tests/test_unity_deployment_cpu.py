@@ -35,19 +35,19 @@ class CanonicalImageEvaluationTests(unittest.TestCase):
         ).item()
         self.assertAlmostEqual(native_gaussian_ssim(prediction, target), expected, places=7)
 
-    def test_matches_native_prefix_and_scores_both_references(self) -> None:
+    def test_matches_de_facto_prefix_and_scores_both_references(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             _write_rgb(root / "unity/test/frame.png", 128)
             _write_rgb(root / "gt/frame.JPG", 0)
-            _write_rgb(root / "native/00000_frame.png", 64)
+            _write_rgb(root / "de_facto/00000_frame.png", 64)
 
-            report = evaluate_directories(root / "unity", root / "gt", native_dir=root / "native")
+            report = evaluate_directories(root / "unity", root / "gt", de_facto_dir=root / "de_facto")
 
-            self.assertEqual(report["protocol"]["evaluator_revision"], 2)
+            self.assertEqual(report["protocol"]["evaluator_revision"], 3)
             self.assertEqual(report["test"]["count"], 1)
-            self.assertEqual(report["native_fidelity"]["count"], 1)
-            self.assertGreater(report["native_fidelity"]["psnr"], report["test"]["psnr"])
+            self.assertEqual(report["de_facto_fidelity"]["count"], 1)
+            self.assertGreater(report["de_facto_fidelity"]["psnr"], report["test"]["psnr"])
 
     def test_strict_pairing_rejects_missing_ground_truth(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -58,27 +58,27 @@ class CanonicalImageEvaluationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "missing_gt"):
                 evaluate_directories(root / "prediction", root / "gt")
 
-    def test_native_shape_policy_can_crop_native_fidelity_only(self) -> None:
+    def test_de_facto_shape_policy_can_crop_de_facto_fidelity_only(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             _write_rgb(root / "unity/frame.png", 128)
             _write_rgb(root / "gt/frame.png", 0)
-            (root / "native").mkdir()
-            Image.fromarray(np.full((15, 15, 3), 64, dtype=np.uint8), mode="RGB").save(root / "native/frame.png")
+            (root / "de_facto").mkdir()
+            Image.fromarray(np.full((15, 15, 3), 64, dtype=np.uint8), mode="RGB").save(root / "de_facto/frame.png")
 
             with self.assertRaisesRegex(ValueError, "image shape mismatch"):
-                evaluate_directories(root / "unity", root / "gt", native_dir=root / "native")
+                evaluate_directories(root / "unity", root / "gt", de_facto_dir=root / "de_facto")
 
             report = evaluate_directories(
                 root / "unity",
                 root / "gt",
-                native_dir=root / "native",
-                native_shape_policy="crop",
+                de_facto_dir=root / "de_facto",
+                de_facto_shape_policy="crop",
             )
 
             self.assertEqual(report["test"]["count"], 1)
-            self.assertEqual(report["native_fidelity"]["count"], 1)
-            adjustments = report["protocol"]["native_shape_adjustments"]
+            self.assertEqual(report["de_facto_fidelity"]["count"], 1)
+            adjustments = report["protocol"]["de_facto_shape_adjustments"]
             self.assertEqual(adjustments[0]["policy"], "crop")
             self.assertEqual(adjustments[0]["scored_shape"], [15, 15, 3])
 
@@ -87,31 +87,31 @@ class DeploymentAggregationTests(unittest.TestCase):
     def test_quality_cli_writes_csv_and_json(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            report_root = root / "garden/unity_method_aware_rev2"
+            report_root = root / "garden/unity_custom_engine_rev3"
             report_root.mkdir(parents=True)
             report_root.joinpath("metrics_summary.json").write_text(json.dumps({
-                "protocol": {"evaluator_revision": 1},
+                "protocol": {"evaluator_revision": 3},
                 "test": {"count": 2, "psnr": 20.0, "ssim": 0.8},
-                "native_fidelity": {"count": 2, "psnr": 30.0, "ssim": 0.9},
+                "de_facto_fidelity": {"count": 2, "psnr": 30.0, "ssim": 0.9},
             }))
             with patch.object(sys, "argv", [
                 "aggregate_unity_triasset_eval.py",
                 "--outputs-root", str(root),
-                "--output-name", "unity_method_aware_rev2",
+                "--output-name", "unity_custom_engine_rev3",
                 "--scenes", "garden",
             ]):
                 self.assertEqual(aggregate_quality_main(), 0)
-            self.assertTrue((root / "unity_method_aware_rev2_summary.csv").is_file())
+            self.assertTrue((root / "unity_custom_engine_rev3_summary.csv").is_file())
             aggregate = json.loads(
-                (root / "unity_method_aware_rev2_summary.json").read_text()
+                (root / "unity_custom_engine_rev3_summary.json").read_text()
             )
             self.assertEqual(aggregate["test"]["views_total"], 2)
-            self.assertEqual(aggregate["test"]["native_psnr_macro"], 30.0)
+            self.assertEqual(aggregate["test"]["de_facto_psnr_macro"], 30.0)
 
     def test_requires_exact_runs_views_and_samples(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            scene = root / "mesh-splatting/method-aware/garden"
+            scene = root / "mesh-splatting/custom-engine/garden"
             payload = {
                 "views": [{
                     "cpu_frame_samples_ms": [1.0, 2.0, 3.0],
@@ -127,7 +127,7 @@ class DeploymentAggregationTests(unittest.TestCase):
                 path.write_text(json.dumps(payload))
 
             report = aggregate_condition(
-                root, "mesh-splatting", "method-aware", "garden",
+                root, "mesh-splatting", "custom-engine", "garden",
                 expected_runs=2, expected_views=1, expected_frames=3, gpu_fraction=0.8,
             )
             self.assertEqual(report["runs"], 2)
@@ -136,14 +136,14 @@ class DeploymentAggregationTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "expected 3 independent runs"):
                 aggregate_condition(
-                    root, "mesh-splatting", "method-aware", "garden",
+                    root, "mesh-splatting", "custom-engine", "garden",
                     expected_runs=3, expected_views=1, expected_frames=3, gpu_fraction=0.8,
                 )
 
     def test_unity_metrics_formatter_writes_paper_ready_reports(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            result = root / "bicycle/unity_method_aware"
+            result = root / "bicycle/unity_custom_engine"
             asset = root / "bicycle/unity_native/2dts.triasset"
             report_dir = root / "reports"
             asset.mkdir(parents=True)
@@ -153,7 +153,7 @@ class DeploymentAggregationTests(unittest.TestCase):
             (result / "msbench_run_protocol.json").write_text(json.dumps({"asset": str(asset)}))
             (result / "metrics_summary.json").write_text(json.dumps({
                 "test": {"count": 2, "psnr": 21.0, "ssim": 0.81, "lpips_vgg": 0.12},
-                "native_fidelity": {"psnr": 31.0, "ssim": 0.91, "lpips_vgg": 0.02},
+                "de_facto_fidelity": {"psnr": 31.0, "ssim": 0.91, "lpips_vgg": 0.02},
             }))
             (result / "fps_per_test_view.csv").write_text(
                 "view,mean_frame_ms,fps\n"
@@ -175,7 +175,7 @@ class DeploymentAggregationTests(unittest.TestCase):
                 "format_unity_metrics_report.py",
                 "--result", f"mipnerf360/bicycle={result}",
                 "--method", "2dts",
-                "--condition", "method-aware",
+                "--condition", "custom-engine",
                 "--profile-runs", "1",
                 "--output-dir", str(report_dir),
             ]):
@@ -183,6 +183,8 @@ class DeploymentAggregationTests(unittest.TestCase):
 
             self.assertTrue((report_dir / "unity_metrics_report.csv").is_file())
             self.assertTrue((report_dir / "unity_metrics_report.json").is_file())
+            markdown = (report_dir / "unity_metrics_report.md").read_text()
+            self.assertTrue(markdown.startswith("Setting: Cust. (custom engine deployment)\n"))
             payload = json.loads((report_dir / "unity_metrics_report.json").read_text())
             self.assertEqual(payload["scenes"][0]["views"], 2)
             self.assertNotIn("fps_profile_cpu_p50", payload["scenes"][0])

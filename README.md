@@ -380,7 +380,7 @@ outputs/{method}/{dataset}/{scene}/unity_native/{method}.triasset/
 
 Existing valid packages are skipped; use `--force` to re-export.
 
-### Method-aware Unity benchmark
+### Custom engine deployment
 
 ```bash
 ./single_unity_eval.sh 2dts mipnerf360/all 0 \
@@ -398,14 +398,19 @@ for method in 2dts triangle-splatting mesh-splatting diffsoup; do
 done
 ```
 
-The default condition is `method-aware`; outputs are written under each scene's
-`unity_method_aware/` directory and summarized in:
+The default setting is custom engine deployment (`--custom-engine`), which renders
+through each method's method-aware Unity renderer; outputs are written under each
+scene's `unity_custom_engine/` directory and summarized in:
 
 ```text
-outputs/unity_reports/{method}/unity_method_aware/unity_metrics_report.csv
-outputs/unity_reports/{method}/unity_method_aware/unity_metrics_report.json
-outputs/unity_reports/{method}/unity_method_aware/unity_metrics_report.md
+outputs/unity_reports/{method}/unity_custom_engine/unity_metrics_report.csv
+outputs/unity_reports/{method}/unity_custom_engine/unity_metrics_report.json
+outputs/unity_reports/{method}/unity_custom_engine/unity_metrics_report.md
 ```
+
+Image metrics are also computed against each scene's de facto renderer outputs
+(`--de-facto-render-subdir`, default `renders/test/renders`) and reported as
+`de_facto_fidelity`.
 
 The terminal summary reports:
 
@@ -416,22 +421,23 @@ PSNR | SSIM | LPIPS | GPU FPS | GPU P50 ms | GPU P95 ms | Render MiB | Asset MiB
 `GPU FPS` is computed as `1000 / GPU P50 ms`. CPU/engine FPS is deliberately
 not used for paper tables.
 
-### General-purpose Unity renderer
+### Standard engine deployment
 
-Use `--general-purpose` and a separate output name:
+Use `--standard-engine` to render a conventional opaque vertex-colored Unity Mesh;
+outputs go to `unity_standard_engine/`:
 
 ```bash
 for method in 2dts triangle-splatting mesh-splatting diffsoup; do
   ./single_unity_eval.sh "$method" mipnerf360/all 0 \
     --unity "$UNITY" \
     --unity-project unity \
-    --general-purpose \
-    --output-name unity_general_purpose
+    --standard-engine
 done
 ```
 
-Methods whose exported manifest does not declare a comparable general-purpose
-appearance are rejected instead of producing misleading numbers.
+Methods whose exported manifest does not declare a comparable standard engine
+deployment appearance (DiffSoup) are rejected instead of producing misleading
+numbers.
 
 ### Runtime profile details
 

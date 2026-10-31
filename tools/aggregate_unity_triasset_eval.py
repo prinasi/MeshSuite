@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
-"""Aggregate strict per-scene Unity quality and Native-fidelity reports."""
+"""Aggregate strict per-scene Unity quality and de facto fidelity reports."""
 from __future__ import annotations
 
 import argparse
 import csv
 import json
 from pathlib import Path
+
+try:
+    from tools.evaluate_deployment_images import EVALUATOR_REVISION
+except ModuleNotFoundError:  # Direct ``python tools/...py`` execution.
+    from evaluate_deployment_images import EVALUATOR_REVISION
 
 
 SCENES = ("bicycle", "bonsai", "counter", "flowers", "garden", "kitchen", "room", "stump", "treehill")
@@ -29,16 +34,16 @@ def main() -> int:
         if not metrics_path.is_file():
             raise FileNotFoundError(f"missing scene report: {metrics_path}")
         summary = json.loads(metrics_path.read_text())
-        if summary.get("protocol", {}).get("evaluator_revision") != 1:
+        if summary.get("protocol", {}).get("evaluator_revision") != EVALUATOR_REVISION:
             raise ValueError(f"stale or non-canonical evaluator report: {metrics_path}")
         values = summary["test"]
         if values["count"] <= 0:
             raise ValueError(f"empty test result: {metrics_path}")
         row = {"scene": scene, "views": values["count"], **{key: value for key, value in values.items() if key != "count"}}
-        native = summary.get("native_fidelity")
-        if native is None or native.get("count") != values["count"]:
-            raise ValueError(f"missing or incomplete Native-fidelity result: {metrics_path}")
-        row.update({f"native_{key}": value for key, value in native.items() if key != "count"})
+        de_facto = summary.get("de_facto_fidelity")
+        if de_facto is None or de_facto.get("count") != values["count"]:
+            raise ValueError(f"missing or incomplete de facto fidelity result: {metrics_path}")
+        row.update({f"de_facto_{key}": value for key, value in de_facto.items() if key != "count"})
         rows.append(row)
 
     if len(rows) != len(args.scenes):
@@ -54,7 +59,7 @@ def main() -> int:
     aggregate = {
         "protocol": {
             "quality_mean": "macro mean of per-scene means",
-            "evaluator_revision": 1,
+            "evaluator_revision": EVALUATOR_REVISION,
             "timing": "not mixed into quality aggregation; use standalone Player deployment profile",
         },
         "scenes": rows,

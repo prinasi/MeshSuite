@@ -24,13 +24,13 @@ SHOW_PLAYER_OUTPUT=0
 FORCE_PLAYER_BUILD=0
 SKIP_PLAYER_BUILD=0
 DATASETS_ROOT_OVERRIDE="${DATASETS:-}"
-OUTPUT_NAME="unity_method_aware"
+OUTPUT_NAME="unity_custom_engine"
 OUTPUT_NAME_EXPLICIT=0
-CONDITION="method-aware"
+CONDITION="custom-engine"
 REPORT_DIR=""
 REPORT_DIR_EXPLICIT=0
-NATIVE_RENDER_SUBDIR="renders/test/renders"
-NATIVE_SHAPE_POLICY="crop"
+DE_FACTO_RENDER_SUBDIR="renders/test/renders"
+DE_FACTO_SHAPE_POLICY="crop"
 REFERENCE_IMAGE_DIR_OVERRIDE=""
 PROFILE_RUNS=3
 PROFILE_VIEWS=3
@@ -85,7 +85,7 @@ Usage:
 
 Examples:
   bash $0 2dts mipnerf360/bicycle 0 --unity "\$UNITY" --unity-project "\$PROJECT"
-  bash $0 triangle-splatting mipnerf360/all 0 --output-name unity_method_aware_vulkan
+  bash $0 triangle-splatting mipnerf360/all 0 --output-name unity_custom_engine_vulkan
   bash $0 mipnerf360/garden 0 --method mesh-splatting --report-only
 
 Options:
@@ -95,9 +95,9 @@ Options:
   --config-root PATH       Config root (default: ${CONFIG_ROOT})
   --asset-subdir NAME      Per-run asset directory (default: ${ASSET_SUBDIR})
   --output-name NAME       Unity output folder under each scene output.dir
-                           (default: unity_method_aware or unity_general_purpose by condition)
-  --method-aware           Use method-aware Unity renderer (default)
-  --general-purpose        Use ordinary Unity Mesh baseline
+                           (default: unity_custom_engine or unity_standard_engine by setting)
+  --custom-engine          Custom engine deployment: method-aware Unity renderer (default)
+  --standard-engine        Standard engine deployment: opaque vertex-colored Unity Mesh
                            (automatically switches output/report naming unless overridden)
   --profile-runs N         Independent profile runs per scene (default: ${PROFILE_RUNS})
   --profile-views N        Views per profile run (default: ${PROFILE_VIEWS})
@@ -119,8 +119,10 @@ Options:
   --lpips-device DEVICE    LPIPS device (default: cuda:0 for numeric GPU, cpu for cpu)
   --lpips-tile N           Non-canonical tiled LPIPS size; 0 means full frame
   --no-lpips               Score PSNR/SSIM only
-  --native-render-subdir P Native render directory under output.dir
-  --native-shape-policy P  Native fidelity shape policy: crop, strict, or skip (default: ${NATIVE_SHAPE_POLICY})
+  --de-facto-render-subdir P
+                           de facto renderer output directory under output.dir
+  --de-facto-shape-policy P
+                           de facto fidelity shape policy: crop, strict, or skip (default: ${DE_FACTO_SHAPE_POLICY})
   --reference-image-dir P  Reference image dir inside each dataset root
   --report-dir PATH        Report output directory
   --report-name NAME       Report file prefix (default: ${REPORT_NAME})
@@ -321,6 +323,8 @@ import json
 import sys
 from pathlib import Path
 
+from tools.evaluate_deployment_images import EVALUATOR_REVISION
+
 path = Path(sys.argv[1])
 with_lpips = sys.argv[2] == "1"
 reference = Path(sys.argv[3]).resolve()
@@ -334,7 +338,10 @@ except Exception:
 required = {"psnr", "ssim"}
 if with_lpips:
     required.add("lpips_vgg")
-ground_truth = report.get("protocol", {}).get("ground_truth")
+protocol = report.get("protocol", {})
+if protocol.get("evaluator_revision") != EVALUATOR_REVISION:
+    raise SystemExit(1)
+ground_truth = protocol.get("ground_truth")
 if not ground_truth or Path(ground_truth).resolve() != reference:
     raise SystemExit(1)
 raise SystemExit(0 if required.issubset(test) else 1)
@@ -466,8 +473,8 @@ while [[ "$#" -gt 0 ]]; do
         --asset-subdir|--asset_subdir|--output-subdir|--output_subdir) require_value "$@"; ASSET_SUBDIR="$2"; shift 2 ;;
         --output-name|--output_name) require_value "$@"; OUTPUT_NAME="$2"; OUTPUT_NAME_EXPLICIT=1; shift 2 ;;
         --method) require_value "$@"; METHOD="$2"; shift 2 ;;
-        --method-aware|--method_aware|--method-specific|--method_specific) CONDITION="method-aware"; shift ;;
-        --general-purpose|--general_purpose|--standard-mesh|--standard_mesh) CONDITION="general-purpose"; shift ;;
+        --custom-engine|--custom_engine) CONDITION="custom-engine"; shift ;;
+        --standard-engine|--standard_engine) CONDITION="standard-engine"; shift ;;
         --profile-runs|--profile_runs) require_value "$@"; PROFILE_RUNS="$2"; shift 2 ;;
         --profile-views|--profile_views) require_value "$@"; PROFILE_VIEWS="$2"; shift 2 ;;
         --profile-warmup|--profile_warmup) require_value "$@"; PROFILE_WARMUP="$2"; shift 2 ;;
@@ -487,8 +494,8 @@ while [[ "$#" -gt 0 ]]; do
         --lpips-device|--lpips_device) require_value "$@"; LPIPS_DEVICE="$2"; shift 2 ;;
         --lpips-tile|--lpips_tile) require_value "$@"; LPIPS_TILE="$2"; shift 2 ;;
         --no-lpips|--skip-lpips) WITH_LPIPS=0; shift ;;
-        --native-render-subdir|--native_render_subdir) require_value "$@"; NATIVE_RENDER_SUBDIR="$2"; shift 2 ;;
-        --native-shape-policy|--native_shape_policy) require_value "$@"; NATIVE_SHAPE_POLICY="$2"; shift 2 ;;
+        --de-facto-render-subdir|--de_facto_render_subdir) require_value "$@"; DE_FACTO_RENDER_SUBDIR="$2"; shift 2 ;;
+        --de-facto-shape-policy|--de_facto_shape_policy) require_value "$@"; DE_FACTO_SHAPE_POLICY="$2"; shift 2 ;;
         --reference-image-dir|--reference_image_dir) require_value "$@"; REFERENCE_IMAGE_DIR_OVERRIDE="$2"; shift 2 ;;
         --report-dir|--report_dir) require_value "$@"; REPORT_DIR="$2"; REPORT_DIR_EXPLICIT=1; shift 2 ;;
         --report-name|--report_name) require_value "$@"; REPORT_NAME="$2"; shift 2 ;;
@@ -546,9 +553,9 @@ if [[ ! "${LPIPS_TILE}" =~ ^[0-9]+$ ]]; then
     echo "--lpips-tile must be a non-negative integer: ${LPIPS_TILE}" >&2
     exit 1
 fi
-case "${NATIVE_SHAPE_POLICY}" in
+case "${DE_FACTO_SHAPE_POLICY}" in
     strict|crop|skip) ;;
-    *) echo "--native-shape-policy must be strict, crop, or skip: ${NATIVE_SHAPE_POLICY}" >&2; exit 1 ;;
+    *) echo "--de-facto-shape-policy must be strict, crop, or skip: ${DE_FACTO_SHAPE_POLICY}" >&2; exit 1 ;;
 esac
 
 resolve_python_bin
@@ -564,8 +571,8 @@ then
 fi
 expand_targets "${TARGETS[@]}"
 
-if [[ "${CONDITION}" == "general-purpose" && "${OUTPUT_NAME_EXPLICIT}" -eq 0 ]]; then
-    OUTPUT_NAME="unity_general_purpose"
+if [[ "${CONDITION}" == "standard-engine" && "${OUTPUT_NAME_EXPLICIT}" -eq 0 ]]; then
+    OUTPUT_NAME="unity_standard_engine"
 fi
 
 if [[ "${GPU_ID}" == "cpu" ]]; then
@@ -578,7 +585,7 @@ fi
 
 if [[ -z "${REPORT_DIR}" ]]; then
     REPORT_DIR="outputs/unity_reports/${METHOD_ID}/${OUTPUT_NAME}"
-elif [[ "${CONDITION}" == "general-purpose" && "${REPORT_DIR_EXPLICIT}" -eq 0 && "${REPORT_DIR}" == "outputs/unity_reports/${METHOD_ID}/unity_method_aware" ]]; then
+elif [[ "${CONDITION}" == "standard-engine" && "${REPORT_DIR_EXPLICIT}" -eq 0 && "${REPORT_DIR}" == "outputs/unity_reports/${METHOD_ID}/unity_custom_engine" ]]; then
     REPORT_DIR="outputs/unity_reports/${METHOD_ID}/${OUTPUT_NAME}"
 fi
 
@@ -714,8 +721,8 @@ for target in "${EXPANDED_TARGETS[@]}"; do
     UNITY_OUTPUTS_ROOT="$(dirname "${MODEL_PATH}")"
     UNITY_DATASETS_ROOT="$(dirname "${DATASET_PATH}")"
     UNITY_SCENE_NAME="$(basename "${MODEL_PATH}")"
-    CONDITION_ARG="--method-aware"
-    [[ "${CONDITION}" == "general-purpose" ]] && CONDITION_ARG="--general-purpose"
+    CONDITION_ARG="--custom-engine"
+    [[ "${CONDITION}" == "standard-engine" ]] && CONDITION_ARG="--standard-engine"
 
     if [[ "${SKIP_CAPTURE}" -eq 0 ]]; then
         if [[ "${FORCE_CAPTURE}" -eq 1 ]] || ! capture_complete "${RESULT_DIR}" "${REF_PATH}"; then
@@ -808,11 +815,11 @@ for target in "${EXPANDED_TARGETS[@]}"; do
                 --prediction "${RESULT_DIR}"
                 --ground-truth "${REF_PATH}"
                 --output "${METRICS_JSON}")
-            NATIVE_DIR="${MODEL_PATH}/${NATIVE_RENDER_SUBDIR}"
-            if has_images "${NATIVE_DIR}"; then
-                METRICS_CMD+=(--native "${NATIVE_DIR}" --native-shape-policy "${NATIVE_SHAPE_POLICY}")
+            DE_FACTO_DIR="${MODEL_PATH}/${DE_FACTO_RENDER_SUBDIR}"
+            if has_images "${DE_FACTO_DIR}"; then
+                METRICS_CMD+=(--de-facto "${DE_FACTO_DIR}" --de-facto-shape-policy "${DE_FACTO_SHAPE_POLICY}")
             else
-                echo "[${LABEL}] Native fidelity unavailable; no images under ${NATIVE_DIR}"
+                echo "[${LABEL}] de facto fidelity unavailable; no images under ${DE_FACTO_DIR}"
             fi
             if [[ "${WITH_LPIPS}" -eq 1 ]]; then
                 METRICS_CMD+=(--with-lpips --lpips-net vgg --lpips-device "${LPIPS_DEVICE}" --lpips-tile "${LPIPS_TILE}")

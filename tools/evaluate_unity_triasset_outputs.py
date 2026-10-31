@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Score Unity outputs with the same evaluator used for Native CUDA renders."""
+"""Score Unity outputs with the same evaluator used for de facto renderer outputs."""
 from __future__ import annotations
 
 import argparse
@@ -30,8 +30,8 @@ def main() -> int:
     parser.add_argument("--output-name", required=True)
     parser.add_argument("--method")
     parser.add_argument("--reference-image-dir")
-    parser.add_argument("--condition", choices=("method-aware", "general-purpose"), required=True)
-    parser.add_argument("--native-render-subdir", default="renders/test/renders")
+    parser.add_argument("--condition", choices=("custom-engine", "standard-engine"), required=True)
+    parser.add_argument("--de-facto-render-subdir", default="renders/test/renders")
     parser.add_argument("--lpips-device", default="cpu")
     parser.add_argument("--scenes", nargs="*", default=SCENES)
     args = parser.parse_args()
@@ -53,9 +53,9 @@ def main() -> int:
         import json
         manifest = json.loads((asset / "manifest.json").read_text())
         general = manifest["rendering"].get("general_purpose", {})
-        if args.condition == "general-purpose" and not general.get("supported", False):
+        if args.condition == "standard-engine" and not general.get("supported", False):
             raise RuntimeError(
-                f"{method}/{scene} has no fair general-purpose appearance contract: "
+                f"{method}/{scene} has no fair standard engine deployment appearance contract: "
                 f"{general.get('reason', 'unsupported')}"
             )
         image_dir = args.reference_image_dir or reference_image_directory(scene, method)
@@ -63,7 +63,7 @@ def main() -> int:
             str(args.python), str(args.evaluator),
             "--prediction", str(root),
             "--ground-truth", str(args.datasets_root.resolve() / scene / image_dir),
-            "--native", str(scene_root / args.native_render_subdir),
+            "--de-facto", str(scene_root / args.de_facto_render_subdir),
             "--output", str(root / "metrics_summary.json"),
             "--with-lpips", "--lpips-net", "vgg", "--lpips-device", args.lpips_device,
         ]

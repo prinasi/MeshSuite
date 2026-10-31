@@ -55,15 +55,15 @@ def read_quality(root: Path) -> dict[str, Any]:
         return {}
     payload = json.loads(path.read_text())
     test = payload.get("test", {})
-    native = payload.get("native_fidelity") or {}
+    de_facto = payload.get("de_facto_fidelity") or {}
     return {
         "views": test.get("count"),
         "psnr": test.get("psnr"),
         "ssim": test.get("ssim"),
         "lpips_vgg": test.get("lpips_vgg"),
-        "native_psnr": native.get("psnr"),
-        "native_ssim": native.get("ssim"),
-        "native_lpips_vgg": native.get("lpips_vgg"),
+        "de_facto_psnr": de_facto.get("psnr"),
+        "de_facto_ssim": de_facto.get("ssim"),
+        "de_facto_lpips_vgg": de_facto.get("lpips_vgg"),
     }
 
 
@@ -201,10 +201,16 @@ def aggregate_row(rows: list[dict[str, Any]], method: str, condition: str, runti
     return result
 
 
+# v5 Table 5 abbreviates the two engine deployment settings as Std./Cust.
+SETTING_LABELS = {
+    "standard-engine": ("Std.", "standard engine deployment"),
+    "custom-engine": ("Cust.", "custom engine deployment"),
+}
+
 REPORT_COLUMNS = (
     "dataset", "scene", "method", "condition", "runtime", "views",
     "psnr", "ssim", "lpips_vgg",
-    "native_psnr", "native_ssim", "native_lpips_vgg",
+    "de_facto_psnr", "de_facto_ssim", "de_facto_lpips_vgg",
     "fps_profile_gpu_p50", "gpu_frame_p50_ms", "gpu_frame_p95_ms", "profile_gpu_samples",
     "rendering_memory_mib", "unity_allocated_mib", "unity_reserved_mib",
     "asset_memory_mib", "load_to_ready_ms", "profile_runs",
@@ -218,7 +224,13 @@ def display(value: Any, digits: int = 4) -> str:
     return f"{number:.{digits}f}"
 
 
-def write_markdown(path: Path, rows: list[dict[str, Any]]) -> None:
+def setting_label(condition: str) -> str:
+    """The v5 manuscript's label for an engine deployment setting."""
+    short, name = SETTING_LABELS[condition]
+    return f"Setting: {short} ({name})"
+
+
+def write_markdown(path: Path, rows: list[dict[str, Any]], condition: str) -> None:
     columns = (
         ("Dataset/Scene", lambda row: f"{row['dataset']}/{row['scene']}"),
         ("PSNR", lambda row: display(row.get("psnr"))),
@@ -232,6 +244,8 @@ def write_markdown(path: Path, rows: list[dict[str, Any]]) -> None:
         ("Load ms", lambda row: display(row.get("load_to_ready_ms"), 1)),
     )
     lines = [
+        setting_label(condition),
+        "",
         "| " + " | ".join(name for name, _ in columns) + " |",
         "| " + " | ".join("---" for _ in columns) + " |",
     ]
@@ -243,7 +257,8 @@ def report_row(row: dict[str, Any]) -> dict[str, Any]:
     return {key: row.get(key) for key in REPORT_COLUMNS}
 
 
-def print_summary(rows: list[dict[str, Any]]) -> None:
+def print_summary(rows: list[dict[str, Any]], condition: str) -> None:
+    print(setting_label(condition))
     header = (
         f"{'Dataset/Scene':<26} {'PSNR':>9} {'SSIM':>9} {'LPIPS':>9} "
         f"{'GPU FPS':>10} {'GPU P50 ms':>11} {'GPU P95 ms':>11} "
@@ -266,7 +281,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--result", action="append", required=True, metavar="DATASET/SCENE=PATH")
     parser.add_argument("--method", required=True)
-    parser.add_argument("--condition", choices=("method-aware", "general-purpose"), required=True)
+    parser.add_argument("--condition", choices=tuple(SETTING_LABELS), required=True)
     parser.add_argument("--runtime", default="editor-development-only")
     parser.add_argument("--profile-runs", type=int)
     parser.add_argument("--output-dir", type=Path, required=True)
@@ -314,8 +329,8 @@ def main() -> int:
         "aggregate": report_row(aggregate),
     }
     prefix.with_suffix(".json").write_text(json.dumps(payload, indent=2) + "\n")
-    write_markdown(prefix.with_suffix(".md"), report_rows)
-    print_summary(report_rows)
+    write_markdown(prefix.with_suffix(".md"), report_rows, args.condition)
+    print_summary(report_rows, args.condition)
     print(f"CSV: {prefix.with_suffix('.csv')}")
     print(f"JSON: {prefix.with_suffix('.json')}")
     print(f"Markdown: {prefix.with_suffix('.md')}")

@@ -122,12 +122,12 @@ def main() -> int:
     parser.add_argument("--profile-frames", type=int, default=180)
     condition = parser.add_mutually_exclusive_group(required=True)
     condition.add_argument(
-        "--general-purpose", "--standard-mesh", dest="general_purpose", action="store_true",
-        help="Use the ordinary opaque Unity Mesh baseline. The legacy --standard-mesh spelling is accepted.",
+        "--standard-engine", dest="standard_engine", action="store_true",
+        help="Standard engine deployment: opaque vertex-colored Unity Mesh.",
     )
     condition.add_argument(
-        "--method-aware", "--method-specific", dest="method_aware", action="store_true",
-        help="Use the Unity method-aware renderer. The legacy --method-specific spelling is accepted.",
+        "--custom-engine", dest="custom_engine", action="store_true",
+        help="Custom engine deployment: method-aware Unity renderer.",
     )
     args = parser.parse_args()
     args.unity = args.unity.resolve()
@@ -157,9 +157,9 @@ def main() -> int:
         manifest = json.loads(manifest_path.read_text())
         rendering = manifest["rendering"]
         general = rendering.get("general_purpose", {})
-        if args.general_purpose and not general.get("supported", False):
+        if args.standard_engine and not general.get("supported", False):
             raise RuntimeError(
-                f"{args.method}/{scene} cannot enter the general-purpose benchmark: "
+                f"{args.method}/{scene} cannot enter standard engine deployment: "
                 f"{general.get('reason', 'manifest does not declare a comparable appearance field')}"
             )
         if not (dataset / "sparse/0/cameras.bin").is_file() or not image_dir.is_dir():
@@ -178,7 +178,7 @@ def main() -> int:
             "schema_version": manifest.get("schema_version"),
             "export_contract_revision": manifest.get("export_contract_revision"),
             "method": args.method,
-            "renderer_condition": "general-purpose" if args.general_purpose else "method-aware",
+            "renderer_condition": "standard-engine" if args.standard_engine else "custom-engine",
             "method_aware_status": rendering.get("unity_method_aware_status"),
             "cuda_equivalent": False,
             "requires_per_camera_depth_sort": rendering.get("unity_method_aware_requires_per_camera_depth_sort", False),
@@ -223,9 +223,9 @@ def main() -> int:
                 "-profile-frames", str(args.profile_frames),
             ))
         command.extend(("-background-color", str(rendering.get("background_color", "black"))))
-        if args.general_purpose:
+        if args.standard_engine:
             command.extend(("-standard-mesh", "1"))
-        if args.method_aware:
+        if args.custom_engine:
             command.extend(("-method-specific", "1"))
         print(f"[MeshSuite] Unity scene={scene}, reference={image_dir.name}, resolution={width}x{height}", flush=True)
         capture_started = time.time()

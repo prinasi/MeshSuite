@@ -1,8 +1,8 @@
 """Unity video trajectory rendering utilities for MeshSuite.
 
 Handles PCA ellipse camera trajectory generation, Unity batch invocation,
-direct frame streaming, and MP4 video encoding for both method-aware and
-general-purpose Unity native renderer conditions. Frames are streamed directly
+direct frame streaming, and MP4 video encoding for both custom and standard
+engine deployment. Frames are streamed directly
 into the video encoder without saving intermediate PNG images to disk unless
 explicitly requested via --write-frames.
 """
@@ -602,7 +602,7 @@ def run_unity_video_for_scene(
     triasset_path: Path,
     dataset_path: Path | None,
     output_dir: Path,
-    condition: str = "method-aware",
+    condition: str = "custom-engine",
     trajectory_path: Path | None = None,
     dataset_type: str = "auto",
     image_dir: str = "images",
@@ -663,9 +663,9 @@ def run_unity_video_for_scene(
     manifest = json.loads(manifest_path.read_text())
     rendering = manifest.get("rendering", {})
     general = rendering.get("general_purpose", {})
-    if condition == "general-purpose" and not general.get("supported", False):
+    if condition == "standard-engine" and not general.get("supported", False):
         raise RuntimeError(
-            f"{method} cannot enter general-purpose video rendering: "
+            f"{method} cannot enter standard engine deployment video rendering: "
             f"{general.get('reason', 'manifest does not declare a comparable appearance field')}"
         )
 
@@ -728,7 +728,7 @@ def run_unity_video_for_scene(
         "-video-stream-port", str(stream_port),
         "-logFile", str(log_path),
     ]
-    if condition == "general-purpose":
+    if condition == "standard-engine":
         command.extend(("-standard-mesh", "1"))
     else:
         command.extend(("-method-specific", "1"))

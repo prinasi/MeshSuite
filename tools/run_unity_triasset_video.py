@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Render camera trajectory videos using the Unity-native TriAsset renderer.
 
-Renders videos for method-aware (procedural splatting) or general-purpose
-(standard Unity Mesh) conditions along the exact same PCA ellipse camera
+Renders videos for custom engine deployment (method-aware procedural
+splatting) or standard engine deployment (opaque Unity Mesh) along the exact same PCA ellipse camera
 trajectory as ``msbench render video``.
 """
 from __future__ import annotations
@@ -62,11 +62,11 @@ def main() -> int:
     parser.add_argument("--force-unity", action="store_true", help="Terminate conflicting Unity processes holding project lock before launching.")
 
     cond_group = parser.add_mutually_exclusive_group()
-    cond_group.add_argument("--method-aware", "--method-specific", dest="method_aware", action="store_true", default=True, help="Use method-aware procedural Unity renderer (default).")
-    cond_group.add_argument("--general-purpose", "--standard-mesh", dest="general_purpose", action="store_true", help="Use standard Unity Mesh baseline.")
+    cond_group.add_argument("--custom-engine", dest="custom_engine", action="store_true", default=True, help="Custom engine deployment: method-aware Unity renderer (default).")
+    cond_group.add_argument("--standard-engine", dest="standard_engine", action="store_true", help="Standard engine deployment: opaque vertex-colored Unity Mesh.")
 
     args = parser.parse_args()
-    condition = "general-purpose" if args.general_purpose else "method-aware"
+    condition = "standard-engine" if args.standard_engine else "custom-engine"
 
     unity_bin = args.unity or find_unity_executable()
     if unity_bin is None or not Path(unity_bin).is_file():
@@ -102,7 +102,7 @@ def main() -> int:
             dataset_path = dataset_path / dataset_cfg["scene"]
 
         run_dir = config_output_dir(cfg)
-        cond_folder = "unity_method_aware" if condition == "method-aware" else "unity_general_purpose"
+        cond_folder = "unity_custom_engine" if condition == "custom-engine" else "unity_standard_engine"
         default_out = Path(run_dir) / cond_folder / "video" if run_dir else Path(f"video_{cond_folder}")
         output_dir = Path(args.output_dir or default_out)
 
@@ -153,7 +153,7 @@ def main() -> int:
         else:
             dataset_path = None
 
-        cond_folder = "unity_method_aware" if condition == "method-aware" else "unity_general_purpose"
+        cond_folder = "unity_custom_engine" if condition == "custom-engine" else "unity_standard_engine"
         if args.outputs_root:
             scene_out = Path(args.outputs_root) / scene
             triasset = args.triasset or (scene_out / "unity_native" / f"{method}.triasset")

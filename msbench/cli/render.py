@@ -226,17 +226,15 @@ def render_video_cmd(
         "--unity",
         help="Render video using Unity native renderer instead of adapter.",
     ),
-    general_purpose: bool = typer.Option(
+    standard_engine: bool = typer.Option(
         False,
-        "--general-purpose",
-        "--standard-mesh",
-        help="With --unity, use standard Unity Mesh baseline.",
+        "--standard-engine",
+        help="With --unity, standard engine deployment: opaque vertex-colored Unity Mesh.",
     ),
-    method_aware: bool = typer.Option(
+    custom_engine: bool = typer.Option(
         True,
-        "--method-aware",
-        "--method-specific",
-        help="With --unity, use method-aware Unity renderer (default).",
+        "--custom-engine",
+        help="With --unity, custom engine deployment: method-aware Unity renderer (default).",
     ),
     unity_bin: Optional[Path] = typer.Option(None, "--unity-bin", help="Path to Unity binary."),
     unity_project: Optional[Path] = typer.Option(None, "--unity-project", help="Path to Unity project root."),
@@ -254,8 +252,8 @@ def render_video_cmd(
             checkpoint=checkpoint,
             dataset=dataset,
             output_dir=output_dir if output_dir != "video/" else None,
-            general_purpose=general_purpose,
-            method_aware=method_aware,
+            standard_engine=standard_engine,
+            custom_engine=custom_engine,
             frames=frames,
             fps=fps,
             zoom=zoom,
@@ -344,17 +342,15 @@ def render_unity_video_cmd(
     triasset: Optional[Path] = typer.Option(None, "--triasset", help="Path to .triasset directory"),
     dataset: Optional[str] = typer.Option(None, "--dataset", "-d", help="Path to dataset directory"),
     output_dir: Optional[str] = typer.Option(None, "--output-dir", "-o", help="Output directory for video"),
-    general_purpose: bool = typer.Option(
+    standard_engine: bool = typer.Option(
         False,
-        "--general-purpose",
-        "--standard-mesh",
-        help="Use standard Unity Mesh baseline.",
+        "--standard-engine",
+        help="Standard engine deployment: opaque vertex-colored Unity Mesh.",
     ),
-    method_aware: bool = typer.Option(
+    custom_engine: bool = typer.Option(
         True,
-        "--method-aware",
-        "--method-specific",
-        help="Use method-aware Unity renderer (default).",
+        "--custom-engine",
+        help="Custom engine deployment: method-aware Unity renderer (default).",
     ),
     trajectory: Optional[Path] = typer.Option(None, "--trajectory", "-t", help="Existing trajectory JSON file"),
     frames: int = typer.Option(240, "--frames", help="Number of frames in ellipse trajectory"),
@@ -376,14 +372,14 @@ def render_unity_video_cmd(
         help="Terminate any conflicting Unity processes holding the project lock before launching.",
     ),
 ):
-    """Render a trajectory video using Unity (method-aware or general-purpose condition)."""
+    """Render a trajectory video using Unity (custom or standard engine deployment)."""
     from msbench.unity_video import (
         find_unity_executable,
         find_unity_project,
         run_unity_video_for_scene,
     )
 
-    condition = "general-purpose" if general_purpose else "method-aware"
+    condition = "standard-engine" if standard_engine else "custom-engine"
 
     unity_bin = unity or find_unity_executable()
     if unity_bin is None or not Path(unity_bin).is_file():
@@ -415,7 +411,7 @@ def render_unity_video_cmd(
             dataset_path = dataset_path / dataset_cfg["scene"]
 
         run_dir = config_output_dir(cfg)
-        cond_folder = "unity_method_aware" if condition == "method-aware" else "unity_general_purpose"
+        cond_folder = "unity_custom_engine" if condition == "custom-engine" else "unity_standard_engine"
         default_out = Path(run_dir) / cond_folder / "video" if run_dir else Path(f"video_{cond_folder}")
         target_output_dir = Path(output_dir or default_out)
 
@@ -457,7 +453,7 @@ def render_unity_video_cmd(
 
     target_triasset = triasset or Path(f"outputs/{method}/unity_native/{method}.triasset")
     target_dataset = Path(dataset) if dataset else None
-    cond_folder = "unity_method_aware" if condition == "method-aware" else "unity_general_purpose"
+    cond_folder = "unity_custom_engine" if condition == "custom-engine" else "unity_standard_engine"
     target_output_dir = Path(output_dir or f"outputs/{method}/{cond_folder}/video")
 
     video_path = run_unity_video_for_scene(

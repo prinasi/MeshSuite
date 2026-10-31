@@ -136,7 +136,7 @@ def evaluate_scene(
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, default=Path("outputs/diffsoup/mipnerf360"))
-    parser.add_argument("--prediction-subdir", default="unity_method_aware/test")
+    parser.add_argument("--prediction-subdir", default="unity_custom_engine/test")
     parser.add_argument("--ground-truth-subdir", default="renders/test/gt")
     parser.add_argument("--no-lpips", action="store_true")
     parser.add_argument("--lpips-device")

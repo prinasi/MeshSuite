@@ -4,8 +4,9 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${REPO_ROOT}"
 
-# Render camera trajectory videos in Unity using either method-aware procedural
-# splatting or general-purpose Unity Mesh baselines.
+# Render camera trajectory videos in Unity under custom engine deployment
+# (method-aware procedural splatting) or standard engine deployment (opaque
+# vertex-colored Unity Mesh).
 # Uses the exact same PCA ellipse camera trajectory as "msbench render video".
 
 CONFIG_ROOT="configs"
@@ -16,7 +17,7 @@ UNITY_BIN="${UNITY:-}"
 UNITY_PROJECT_DIR="${PROJECT:-${UNITY_PROJECT:-}}"
 DATASETS_ROOT_OVERRIDE="${DATASETS:-}"
 OUTPUT_NAME=""
-CONDITION="method-aware"
+CONDITION="custom-engine"
 TRAJECTORY_PATH=""
 FRAMES=240
 FPS=30
@@ -56,15 +57,15 @@ Usage:
   bash $0 <target> [target ...] [gpu_id] --method <method> [options]
 
 Examples:
-  bash $0 2dts mipnerf360/bicycle 0 --method-aware
-  bash $0 triangle-splatting mipnerf360/garden 0 --general-purpose
+  bash $0 2dts mipnerf360/bicycle 0 --custom-engine
+  bash $0 triangle-splatting mipnerf360/garden 0 --standard-engine
   bash $0 mesh-splatting mipnerf360/all 0 --frames 120 --fps 30
 
 Options:
   --unity PATH             Unity executable (default: auto-detected or \$UNITY)
   --unity-project PATH     Unity project root (default: unity/ or \$PROJECT)
-  --method-aware           Use method-aware Unity renderer (default)
-  --general-purpose        Use ordinary Unity Mesh baseline
+  --custom-engine          Custom engine deployment: method-aware Unity renderer (default)
+  --standard-engine        Standard engine deployment: opaque vertex-colored Unity Mesh
   --frames N               Number of frames in ellipse trajectory (default: 240)
   --fps N                  Video framerate (default: 30)
   --zoom F                 Focal length multiplier (default: 1.0)
@@ -74,7 +75,7 @@ Options:
   --trajectory PATH        Use existing trajectory JSON instead of computing ellipse
   --write-frames           Keep rendered PNG frames alongside MP4
   --force-unity            Terminate conflicting Unity processes holding project lock
-  --output-name NAME       Subdirectory name (default: unity_method_aware/video or unity_general_purpose/video)
+  --output-name NAME       Subdirectory name (default: unity_custom_engine/video or unity_standard_engine/video)
   --config-root PATH       Config root (default: configs)
   --datasets-root PATH     Override dataset root with PATH/<scene>
   --continue-on-error      Keep running subsequent scenes when a scene fails
@@ -110,8 +111,8 @@ while [[ $# -gt 0 ]]; do
         --datasets-root|--datasets_root) require_value "$@"; DATASETS_ROOT_OVERRIDE="$2"; shift 2 ;;
         --config-root|--config_root) require_value "$@"; CONFIG_ROOT="$2"; shift 2 ;;
         --output-name|--output_name) require_value "$@"; OUTPUT_NAME="$2"; shift 2 ;;
-        --method-aware|--method_aware|--method-specific|--method_specific) CONDITION="method-aware"; shift ;;
-        --general-purpose|--general_purpose|--standard-mesh|--standard_mesh) CONDITION="general-purpose"; shift ;;
+        --custom-engine|--custom_engine) CONDITION="custom-engine"; shift ;;
+        --standard-engine|--standard_engine) CONDITION="standard-engine"; shift ;;
         --frames) require_value "$@"; FRAMES="$2"; shift 2 ;;
         --fps) require_value "$@"; FPS="$2"; shift 2 ;;
         --zoom) require_value "$@"; ZOOM="$2"; shift 2 ;;
@@ -152,8 +153,8 @@ fi
 
 METHOD_ID="$(canonical_method "${METHOD}")"
 if [[ -z "${OUTPUT_NAME}" ]]; then
-    OUTPUT_NAME="unity_method_aware"
-    [[ "${CONDITION}" == "general-purpose" ]] && OUTPUT_NAME="unity_general_purpose"
+    OUTPUT_NAME="unity_custom_engine"
+    [[ "${CONDITION}" == "standard-engine" ]] && OUTPUT_NAME="unity_standard_engine"
 fi
 
 if [[ -z "${UNITY_BIN}" ]]; then
@@ -229,7 +230,7 @@ for target in "${RESOLVED_TARGETS[@]}"; do
 
     [[ -n "${UNITY_BIN}" ]] && CMD+=(--unity "${UNITY_BIN}")
     [[ -n "${UNITY_PROJECT_DIR}" ]] && CMD+=(--unity-project "${UNITY_PROJECT_DIR}")
-    [[ "${CONDITION}" == "general-purpose" ]] && CMD+=(--general-purpose) || CMD+=(--method-aware)
+    [[ "${CONDITION}" == "standard-engine" ]] && CMD+=(--standard-engine) || CMD+=(--custom-engine)
     [[ "${WRITE_FRAMES}" -eq 1 ]] && CMD+=(--write-frames)
     [[ "${FORCE_UNITY}" -eq 1 ]] && CMD+=(--force-unity)
     [[ -n "${TRAJECTORY_PATH}" ]] && CMD+=(--trajectory "${TRAJECTORY_PATH}")

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Canonical CPU-capable evaluator for Native and Unity deployment images.
+"""Canonical CPU-capable evaluator for de facto renderer and Unity deployment images.
 
 The same implementation scores every prediction against dataset ground truth
-and, optionally, against the matched Native CUDA renders. Inputs remain in raw
+and, optionally, against the matched de facto renderer outputs. Inputs remain in raw
 image code-value space [0, 1]. No prediction-derived normalization is applied.
 """
 from __future__ import annotations
@@ -19,8 +19,8 @@ from PIL import Image
 
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg"}
-EVALUATOR_REVISION = 2
-NATIVE_SHAPE_POLICIES = ("strict", "crop", "skip")
+EVALUATOR_REVISION = 3
+DE_FACTO_SHAPE_POLICIES = ("strict", "crop", "skip")
 
 
 def read_rgb(path: Path) -> np.ndarray:
@@ -61,7 +61,7 @@ def native_gaussian_ssim(prediction: np.ndarray, target: np.ndarray) -> float:
 
 
 def _image_key(path: Path) -> str:
-    # MeshSuite Native renders use ``00023_DSC08140.png`` while Unity captures
+    # MeshSuite de facto renders use ``00023_DSC08140.png`` while Unity captures
     # use ``DSC08140.png``. Strip only the framework's numeric prefix.
     return re.sub(r"^\d{5}_", "", path.stem).casefold()
 
@@ -142,28 +142,28 @@ def center_crop_pair(prediction: np.ndarray, target: np.ndarray) -> tuple[np.nda
     return crop(prediction), crop(target)
 
 
-def align_native_pair(
+def align_de_facto_pair(
     prediction: np.ndarray,
-    native: np.ndarray,
+    de_facto: np.ndarray,
     *,
     policy: str,
 ) -> tuple[np.ndarray, np.ndarray, dict[str, object] | None]:
-    if prediction.shape == native.shape:
-        return prediction, native, None
+    if prediction.shape == de_facto.shape:
+        return prediction, de_facto, None
     if policy == "strict":
-        raise ValueError(f"image shape mismatch: {prediction.shape} versus {native.shape}")
+        raise ValueError(f"image shape mismatch: {prediction.shape} versus {de_facto.shape}")
     adjustment = {
         "policy": policy,
         "prediction_shape": list(prediction.shape),
-        "native_shape": list(native.shape),
+        "de_facto_shape": list(de_facto.shape),
     }
     if policy == "skip":
-        return prediction, native, adjustment
+        return prediction, de_facto, adjustment
     if policy == "crop":
-        cropped_prediction, cropped_native = center_crop_pair(prediction, native)
+        cropped_prediction, cropped_de_facto = center_crop_pair(prediction, de_facto)
         adjustment["scored_shape"] = list(cropped_prediction.shape)
-        return cropped_prediction, cropped_native, adjustment
-    raise ValueError(f"unknown native shape policy: {policy}")
+        return cropped_prediction, cropped_de_facto, adjustment
+    raise ValueError(f"unknown de facto shape policy: {policy}")
 
 
 def summarize(rows: list[dict[str, object]], metric_field: str) -> dict[str, float | int]:
@@ -177,30 +177,30 @@ def evaluate_directories(
     prediction_dir: Path,
     ground_truth_dir: Path,
     *,
-    native_dir: Path | None = None,
+    de_facto_dir: Path | None = None,
     lpips_fn: Callable[[np.ndarray, np.ndarray], float] | None = None,
     lpips_net: str = "vgg",
     allow_partial: bool = False,
-    native_shape_policy: str = "strict",
+    de_facto_shape_policy: str = "strict",
 ) -> dict[str, object]:
-    if native_shape_policy not in NATIVE_SHAPE_POLICIES:
-        raise ValueError(f"unknown native shape policy: {native_shape_policy}")
+    if de_facto_shape_policy not in DE_FACTO_SHAPE_POLICIES:
+        raise ValueError(f"unknown de facto shape policy: {de_facto_shape_policy}")
     predictions = image_index(prediction_dir)
     ground_truth = image_index(ground_truth_dir)
-    native = image_index(native_dir) if native_dir is not None else None
+    de_facto = image_index(de_facto_dir) if de_facto_dir is not None else None
     expected = set(predictions)
     missing_gt = expected - set(ground_truth)
-    missing_native = expected - set(native or {}) if native is not None else set()
+    missing_de_facto = expected - set(de_facto or {}) if de_facto is not None else set()
     extra_gt = set(ground_truth) - expected
-    if not allow_partial and (missing_gt or missing_native):
+    if not allow_partial and (missing_gt or missing_de_facto):
         raise ValueError(
             "unmatched image sets: "
-            f"missing_gt={sorted(missing_gt)}, missing_native={sorted(missing_native)}, extra_gt={sorted(extra_gt)}"
+            f"missing_gt={sorted(missing_gt)}, missing_de_facto={sorted(missing_de_facto)}, extra_gt={sorted(extra_gt)}"
         )
-    keys = sorted(expected - missing_gt - missing_native)
+    keys = sorted(expected - missing_gt - missing_de_facto)
     rows: list[dict[str, object]] = []
-    native_rows: list[dict[str, object]] = []
-    native_shape_adjustments: list[dict[str, object]] = []
+    de_facto_rows: list[dict[str, object]] = []
+    de_facto_shape_adjustments: list[dict[str, object]] = []
     for key in keys:
         prediction = read_rgb(predictions[key])
         target = read_rgb(ground_truth[key])
@@ -209,18 +209,18 @@ def evaluate_directories(
             "key": key,
             "vs_gt": score_pair(prediction, target, lpips_fn, lpips_net),
         }
-        if native is not None:
-            native_prediction, native_target, adjustment = align_native_pair(
-                prediction, read_rgb(native[key]), policy=native_shape_policy
+        if de_facto is not None:
+            de_facto_prediction, de_facto_target, adjustment = align_de_facto_pair(
+                prediction, read_rgb(de_facto[key]), policy=de_facto_shape_policy
             )
             if adjustment is not None:
                 adjustment["key"] = key
-                native_shape_adjustments.append(adjustment)
+                de_facto_shape_adjustments.append(adjustment)
             if adjustment is not None and adjustment["policy"] == "skip":
-                row["native_fidelity_skipped"] = adjustment
+                row["de_facto_fidelity_skipped"] = adjustment
             else:
-                row["vs_native"] = score_pair(native_prediction, native_target, lpips_fn, lpips_net)
-                native_rows.append(row)
+                row["vs_de_facto"] = score_pair(de_facto_prediction, de_facto_target, lpips_fn, lpips_net)
+                de_facto_rows.append(row)
         rows.append(row)
     if not rows:
         raise ValueError("no matched images remain after pairing")
@@ -231,14 +231,14 @@ def evaluate_directories(
             "ssim": "native triangle-family 11x11 sigma-1.5 Gaussian SSIM with zero padding",
             "lpips": lpips_net if lpips_fn is not None else "unavailable",
             "strict_image_pairing": not allow_partial,
-            "native_shape_policy": native_shape_policy if native is not None else None,
-            "native_shape_adjustments": native_shape_adjustments,
+            "de_facto_shape_policy": de_facto_shape_policy if de_facto is not None else None,
+            "de_facto_shape_adjustments": de_facto_shape_adjustments,
         },
         "test": summarize(rows, "vs_gt"),
         "per_view": rows,
     }
-    if native is not None and native_rows:
-        report["native_fidelity"] = summarize(native_rows, "vs_native")
+    if de_facto is not None and de_facto_rows:
+        report["de_facto_fidelity"] = summarize(de_facto_rows, "vs_de_facto")
     return report
 
 
@@ -246,7 +246,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--prediction", type=Path, required=True)
     parser.add_argument("--ground-truth", type=Path, required=True)
-    parser.add_argument("--native", type=Path, help="Matched Native CUDA render directory.")
+    parser.add_argument("--de-facto", type=Path, help="Matched de facto renderer output directory.")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--with-lpips", action="store_true")
     parser.add_argument("--lpips-net", choices=("alex", "vgg"), default="vgg")
@@ -257,26 +257,26 @@ def main() -> int:
     )
     parser.add_argument("--allow-partial", action="store_true")
     parser.add_argument(
-        "--native-shape-policy",
-        choices=NATIVE_SHAPE_POLICIES,
+        "--de-facto-shape-policy",
+        choices=DE_FACTO_SHAPE_POLICIES,
         default="strict",
-        help="How to handle Unity/native shape mismatches; GT scoring remains strict.",
+        help="How to handle Unity/de facto shape mismatches; GT scoring remains strict.",
     )
     args = parser.parse_args()
     lpips_fn = build_lpips(args.lpips_net, args.lpips_device, args.lpips_tile) if args.with_lpips else None
     report = evaluate_directories(
         args.prediction.resolve(),
         args.ground_truth.resolve(),
-        native_dir=args.native.resolve() if args.native else None,
+        de_facto_dir=args.de_facto.resolve() if args.de_facto else None,
         lpips_fn=lpips_fn,
         lpips_net=args.lpips_net,
         allow_partial=args.allow_partial,
-        native_shape_policy=args.native_shape_policy,
+        de_facto_shape_policy=args.de_facto_shape_policy,
     )
     report["protocol"].update({
         "prediction": str(args.prediction.resolve()),
         "ground_truth": str(args.ground_truth.resolve()),
-        "native": str(args.native.resolve()) if args.native else None,
+        "de_facto": str(args.de_facto.resolve()) if args.de_facto else None,
         "lpips_tile": args.lpips_tile if args.with_lpips else None,
         "lpips_full_frame": bool(args.with_lpips and args.lpips_tile <= 0),
     })
