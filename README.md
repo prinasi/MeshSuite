@@ -26,9 +26,12 @@ MeshSuite provides a single, consistent evaluation framework for comparing diffe
 | Triangle Splatting           | `TriangleSplattingAdapter` | Config/train/render/eval/profile/export support |
 | MeshSplatting                | `MeshSplattingAdapter`     | Config/train/render/eval/profile/export support |
 | DiffSoup                     | `DiffSoupAdapter`          | Config/train/render/eval/export support; In-shader Micro-MLP support |
-| ExMesh                       | `ExMeshAdapter`            | Native training/render/eval/profile/export; DTU and NeRF-Synthetic configs |
+| ExMesh                       | `ExMeshAdapter`            | Native training/render/eval/profile/export; DTU and NeRF-Synthetic configs; beyond the paper |
 
 ### ExMesh
+
+ExMesh goes beyond the MeshSuite paper (arXiv v5), which does not evaluate it; its
+results are not part of the paper's tables.
 
 ExMesh uses the same dataset configs as every other method (e.g. DTU from
 `configs/base/dtu.yaml`: foreground evaluation on white, 1/2 resolution, all views
