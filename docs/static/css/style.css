@@ -1080,7 +1080,7 @@ body {
 }
 
 /* -------------------------------------------------------------
- * 3-Way Video Split Slider (Standard -> Dedicated -> Non-Engine)
+ * 3-Way Video Split Slider (Std. -> Cust. -> de facto)
  * ------------------------------------------------------------- */
 .tri-video-container {
   background: white;
@@ -1147,21 +1147,21 @@ body {
   user-select: none;
 }
 
-/* Layer 1: Standard Deployment (Left: 0% -> var(--x1)) */
+/* Layer 1: Standard Engine Deployment (Left: 0% -> var(--x1)) */
 .tri-video-layer-std {
   z-index: 3;
   clip-path: polygon(0% 0%, var(--x1) 0%, var(--x1) 100%, 0% 100%);
   -webkit-clip-path: polygon(0% 0%, var(--x1) 0%, var(--x1) 100%, 0% 100%);
 }
 
-/* Layer 2: Dedicated Deployment (Middle: var(--x1) -> var(--x2)) */
+/* Layer 2: Custom Engine Deployment (Middle: var(--x1) -> var(--x2)) */
 .tri-video-layer-ded {
   z-index: 2;
   clip-path: polygon(var(--x1) 0%, var(--x2) 0%, var(--x2) 100%, var(--x1) 100%);
   -webkit-clip-path: polygon(var(--x1) 0%, var(--x2) 0%, var(--x2) 100%, var(--x1) 100%);
 }
 
-/* Layer 3: Non-Engine Render (Right: var(--x2) -> 100%) */
+/* Layer 3: de facto Renderer (Right: var(--x2) -> 100%) */
 .tri-video-layer-ne {
   z-index: 1;
   clip-path: polygon(var(--x2) 0%, 100% 0%, 100% 100%, var(--x2) 100%);
@@ -1343,7 +1343,7 @@ body {
 }
 
 /* -------------------------------------------------------------
- * 4-Way Image Split Slider (Standard -> Dedicated -> Non-Engine -> GT)
+ * 4-Way Image Split Slider (Std. -> Cust. -> de facto -> GT)
  * ------------------------------------------------------------- */
 .quad-img-canvas {
   position: relative;
@@ -1391,21 +1391,21 @@ body {
   user-select: none;
 }
 
-/* Layer 1: Standard Deployment (0% -> var(--img-x1)) */
+/* Layer 1: Standard Engine Deployment (0% -> var(--img-x1)) */
 .quad-img-layer-std {
   z-index: 4;
   clip-path: polygon(0% 0%, var(--img-x1) 0%, var(--img-x1) 100%, 0% 100%);
   -webkit-clip-path: polygon(0% 0%, var(--img-x1) 0%, var(--img-x1) 100%, 0% 100%);
 }
 
-/* Layer 2: Dedicated Deployment (var(--img-x1) -> var(--img-x2)) */
+/* Layer 2: Custom Engine Deployment (var(--img-x1) -> var(--img-x2)) */
 .quad-img-layer-ded {
   z-index: 3;
   clip-path: polygon(var(--img-x1) 0%, var(--img-x2) 0%, var(--img-x2) 100%, var(--img-x1) 100%);
   -webkit-clip-path: polygon(var(--img-x1) 0%, var(--img-x2) 0%, var(--img-x2) 100%, var(--img-x1) 100%);
 }
 
-/* Layer 3: Non-Engine Render (var(--img-x2) -> var(--img-x3)) */
+/* Layer 3: de facto Renderer (var(--img-x2) -> var(--img-x3)) */
 .quad-img-layer-ne {
   z-index: 2;
   clip-path: polygon(var(--img-x2) 0%, var(--img-x3) 0%, var(--img-x3) 100%, var(--img-x2) 100%);

@@ -120,7 +120,7 @@
         <img src="static/images/framework4.png" alt="MeshSuite Benchmark Architecture">
         <div class="teaser-caption">
           <strong>Figure 1 | The MeshSuite Framework Architecture:</strong>
-          The <code>Dataset Management</code> layer standardizes data formats (image resolution, camera-view alignment, and color channels). Triangle- and mesh-based splatting methods (2DTS, Triangle Splatting, MeshSplatting, DiffSoup) are unified in the <code>Algorithm Pool</code> and trained via <code>Model Training</code>. Trained models are systematically evaluated across three rendering paradigms: <strong>Non-Engine Render</strong> (native CUDA rasterizers), <strong>Standard Deployment</strong> (conventional opaque vertex-colored mesh in Unity), and <strong>Dedicated Deployment</strong> (method-specific Unity renderers preserving alpha blending and view-dependent appearance).
+          The <code>Dataset Management</code> layer standardizes data formats (image resolution, camera-view alignment, and color channels). Triangle- and mesh-based splatting methods (2DTS, Triangle Splatting, MeshSplatting, DiffSoup) are unified in the <code>Algorithm Pool</code> and trained via <code>Model Training</code>. Trained models are systematically evaluated across three rendering paradigms: <strong>de facto renderer</strong> (CUDA-based differentiable rasterizers), <strong>standard engine deployment</strong> (conventional opaque vertex-colored mesh in Unity), and <strong>custom engine deployment</strong> (method-specific Unity renderers preserving alpha blending and view-dependent appearance).
         </div>
       </div>
     </section>
@@ -140,7 +140,7 @@
           <div class="highlight-icon">⚖️</div>
           <h3 class="highlight-title">The Fidelity-Speed Tradeoff</h3>
           <p class="highlight-desc">
-            Dedicated Unity shaders recover <strong>2.7–10.8 dB PSNR</strong> by retaining soft coverage and alpha compositing, but suffer a <strong>5×–33× framerate slowdown</strong> due to depth sorting overhead.
+            Custom engine deployment recovers <strong>2.7–10.8 dB PSNR</strong> by retaining soft coverage and alpha compositing, but suffers a <strong>5×–33× framerate slowdown</strong> due to depth sorting overhead.
           </p>
         </div>
 
@@ -174,11 +174,11 @@
           There have been several such methods driven by parallel efforts, developed and evaluated under inconsistent settings, with little or no comparison with each other; critically, most have never used graphics engines for evaluation nor considered deployability in practice — significantly undermining the objective and motivation.
         </p>
         <p>
-          To address these issues, we introduce <strong>MeshSuite</strong>, the first benchmark of its kind to enable systematic evaluation of graphics-engine deployment and Non-Engine Render for triangle- and mesh-based neural rendering methods. Importantly, our deployment protocol includes two engine deployment settings:
+          To address these issues, we introduce <strong>MeshSuite</strong>, the first benchmark of its kind to enable systematic evaluation of graphics-engine deployment and the de facto renderer for triangle- and mesh-based neural rendering methods. Importantly, our deployment protocol includes two engine deployment settings:
         </p>
         <ul style="margin: 0.5rem 0 1rem 1.5rem; line-height: 1.8;">
-          <li><strong>(1) Standard Deployment</strong> — a conventional opaque mesh pipeline with vertex colors and hardware Z-buffering;</li>
-          <li><strong>(2) Dedicated Deployment</strong> — method-specific engine implementations supporting retained appearance and compositing features (e.g., alpha blending), taking into account individual model characteristics.</li>
+          <li><strong>(1) standard engine deployment</strong> — a conventional opaque mesh pipeline with vertex colors and hardware Z-buffering;</li>
+          <li><strong>(2) custom engine deployment</strong> — adding method-specific engine implementations supporting the retained appearance and compositing features (e.g., alpha blending), so that the characteristics of each specific model can be taken into account.</li>
         </ul>
         <p>
           For mesh splatting, we further propose a structural audit of exported surfaces, diagnosing topological and geometric integrity toward downstream graphics assets. From this benchmark, we validate that <strong><em>rasterizability is merely part of graphics readiness</em></strong>, and highlight the significance of assessing the graphics engine deployment process.
@@ -186,13 +186,13 @@
       </div>
     </section>
 
-    <!-- Interactive Qualitative Comparison: 4-Way Split Slider (Standard -> Dedicated -> Non-Engine -> GT) -->
+    <!-- Interactive Qualitative Comparison: 4-Way Split Slider (Std. -> Cust. -> de facto -> GT) -->
     <section class="section" id="comparison">
       <div class="section-header">
         <span class="section-tag">Interactive Visualizer</span>
         <h2 class="section-title">4-Way Synchronized Image Split Comparison</h2>
         <p class="section-subtitle">
-          Comparing novel-view synthesis across <strong>Standard Deployment</strong> &rarr; <strong>Dedicated Deployment</strong> &rarr; <strong>Non-Engine Render</strong> &rarr; <strong>Ground Truth</strong>. Drag the vertical divider lines to dynamically adjust the visible split regions!
+          Comparing novel-view synthesis across <strong>standard engine deployment</strong> &rarr; <strong>custom engine deployment</strong> &rarr; <strong>de facto renderer</strong> &rarr; <strong>Ground Truth</strong>. Drag the vertical divider lines to dynamically adjust the visible split regions!
         </p>
       </div>
 
@@ -216,7 +216,7 @@
 
           <div style="display: flex; align-items: center; gap: 0.75rem;">
             <span id="img-status-badge" class="badge badge-primary" style="font-weight: 600;">
-              Standard &rarr; Dedicated &rarr; Non-Engine &rarr; GT
+              Std. &rarr; Cust. &rarr; de facto &rarr; GT
             </span>
             <div class="view-mode-toggle">
               <button class="view-mode-btn img-view-mode-btn active" data-mode="slider">
@@ -236,22 +236,22 @@
             <img id="img-view-gt" src="static/images/2dts/gt.png" alt="Ground Truth" draggable="false">
           </div>
 
-          <!-- Layer 3: Non-Engine Render (X2 -> X3) -->
+          <!-- Layer 3: de facto Renderer (X2 -> X3) -->
           <div class="quad-img-layer quad-img-layer-ne" id="img-layer-ne">
-            <img id="img-view-ne" src="static/images/2dts/non-engine.png" alt="Non-Engine Render" draggable="false">
+            <img id="img-view-ne" src="static/images/2dts/non-engine.png" alt="de facto Renderer" draggable="false">
           </div>
 
-          <!-- Layer 2: Dedicated Deployment (X1 -> X2) -->
+          <!-- Layer 2: Custom Engine Deployment (X1 -> X2) -->
           <div class="quad-img-layer quad-img-layer-ded" id="img-layer-ded">
-            <img id="img-view-ded" src="static/images/2dts/dedicated.png" alt="Dedicated Deployment" draggable="false">
+            <img id="img-view-ded" src="static/images/2dts/dedicated.png" alt="Custom Engine Deployment" draggable="false">
           </div>
 
-          <!-- Layer 1: Standard Deployment (0% -> X1) -->
+          <!-- Layer 1: Standard Engine Deployment (0% -> X1) -->
           <div class="quad-img-layer quad-img-layer-std" id="img-layer-std">
-            <img id="img-view-std" src="static/images/2dts/standard.png" alt="Standard Deployment" draggable="false">
+            <img id="img-view-std" src="static/images/2dts/standard.png" alt="Standard Engine Deployment" draggable="false">
           </div>
 
-          <!-- Divider 1: Between Standard and Dedicated -->
+          <!-- Divider 1: Between Std. and Cust. -->
           <div class="quad-img-divider quad-img-divider-1" id="img-divider-1" style="left: 25%;">
             <div class="quad-img-divider-handle">
               <i class="fa-solid fa-arrows-left-right"></i>
@@ -259,36 +259,36 @@
             </div>
           </div>
 
-          <!-- Divider 2: Between Dedicated and Non-Engine -->
+          <!-- Divider 2: Between Cust. and de facto -->
           <div class="quad-img-divider quad-img-divider-2" id="img-divider-2" style="left: 50%;">
             <div class="quad-img-divider-handle">
               <i class="fa-solid fa-arrows-left-right"></i>
-              <span>Ded | Native</span>
+              <span>Cust. | de facto</span>
             </div>
           </div>
 
-          <!-- Divider 3: Between Non-Engine and GT -->
+          <!-- Divider 3: Between de facto and GT -->
           <div class="quad-img-divider quad-img-divider-3" id="img-divider-3" style="left: 75%;">
             <div class="quad-img-divider-handle">
               <i class="fa-solid fa-arrows-left-right"></i>
-              <span>Native | GT</span>
+              <span>de facto | GT</span>
             </div>
           </div>
 
           <!-- Floating Region Badges -->
           <div class="quad-region-badge" id="img-badge-std" style="left: 12.5%;">
             <span class="badge-dot badge-dot-std"></span>
-            <span>Standard Deployment</span>
+            <span>Standard Engine Deployment</span>
           </div>
 
           <div class="quad-region-badge" id="img-badge-ded" style="left: 37.5%;">
             <span class="badge-dot badge-dot-ded"></span>
-            <span>Dedicated Deployment</span>
+            <span>Custom Engine Deployment</span>
           </div>
 
           <div class="quad-region-badge" id="img-badge-ne" style="left: 62.5%;">
             <span class="badge-dot badge-dot-ne"></span>
-            <span>Non-Engine Render</span>
+            <span>de facto Renderer</span>
           </div>
 
           <div class="quad-region-badge" id="img-badge-gt" style="left: 87.5%;">
@@ -297,25 +297,25 @@
           </div>
         </div>
 
-        <!-- 4-Way Grid View (ordered Standard -> Dedicated -> Non-Engine -> GT) -->
+        <!-- 4-Way Grid View (ordered Std. -> Cust. -> de facto -> GT) -->
         <div id="quad-grid-view" class="comparison-grid-view" style="display: none;">
           <div class="grid-column" id="grid-col-std">
             <div class="grid-column-header" style="color: #ef4444;">
-              <span class="badge-dot badge-dot-std" style="display:inline-block; margin-right:4px;"></span> Standard Deployment
+              <span class="badge-dot badge-dot-std" style="display:inline-block; margin-right:4px;"></span> Standard Engine Deployment
             </div>
-            <img id="grid-col-img-std" src="static/images/2dts/standard.png" alt="Standard Deployment" draggable="false">
+            <img id="grid-col-img-std" src="static/images/2dts/standard.png" alt="Standard Engine Deployment" draggable="false">
           </div>
           <div class="grid-column" id="grid-col-ded">
             <div class="grid-column-header" style="color: #10b981;">
-              <span class="badge-dot badge-dot-ded" style="display:inline-block; margin-right:4px;"></span> Dedicated Deployment
+              <span class="badge-dot badge-dot-ded" style="display:inline-block; margin-right:4px;"></span> Custom Engine Deployment
             </div>
-            <img id="grid-col-img-ded" src="static/images/2dts/dedicated.png" alt="Dedicated Deployment" draggable="false">
+            <img id="grid-col-img-ded" src="static/images/2dts/dedicated.png" alt="Custom Engine Deployment" draggable="false">
           </div>
           <div class="grid-column" id="grid-col-ne">
             <div class="grid-column-header" style="color: #3b82f6;">
-              <span class="badge-dot badge-dot-ne" style="display:inline-block; margin-right:4px;"></span> Non-Engine Render
+              <span class="badge-dot badge-dot-ne" style="display:inline-block; margin-right:4px;"></span> de facto Renderer
             </div>
-            <img id="grid-col-img-ne" src="static/images/2dts/non-engine.png" alt="Non-Engine Render" draggable="false">
+            <img id="grid-col-img-ne" src="static/images/2dts/non-engine.png" alt="de facto Renderer" draggable="false">
           </div>
           <div class="grid-column" id="grid-col-gt">
             <div class="grid-column-header" style="color: #a855f7;">
@@ -328,7 +328,7 @@
         <!-- DiffSoup Alert note (shown when DiffSoup is selected) -->
         <div id="img-diffsoup-note" style="display: none; padding: 0.75rem 1.5rem; background: #fffbeb; border-bottom: 1px solid #fef3c7; font-size: 0.85rem; color: #92400e;">
           <i class="fa-solid fa-circle-info" style="margin-right: 0.4rem;"></i>
-          <strong>DiffSoup Architecture:</strong> Encodes appearance as latent features evaluated by an in-shader neural Micro-MLP. Standard Deployment is unsupported (N/A); comparing <strong>Dedicated Deployment</strong> &rarr; <strong>Non-Engine Render</strong> &rarr; <strong>Ground Truth</strong>.
+          <strong>DiffSoup Architecture:</strong> Encodes appearance as latent features evaluated by an in-shader neural Micro-MLP. Standard engine deployment is unsupported (N/A); comparing <strong>custom engine deployment</strong> &rarr; <strong>de facto renderer</strong> &rarr; <strong>Ground Truth</strong>.
         </div>
 
         <!-- Bottom Controls Bar -->
@@ -338,12 +338,12 @@
             <div class="tri-ctrl-group">
               <span class="tri-preset-label"><i class="fa-solid fa-table-columns"></i> Presets:</span>
               <button class="tri-preset-btn img-preset-btn active" data-preset="quad-split">4-Way Split (25% each)</button>
-              <button class="tri-preset-btn img-preset-btn" data-preset="std-vs-ded">Std vs Ded (50/50)</button>
-              <button class="tri-preset-btn img-preset-btn" data-preset="ded-vs-ne">Ded vs Native (50/50)</button>
-              <button class="tri-preset-btn img-preset-btn" data-preset="ne-vs-gt">Native vs GT (50/50)</button>
-              <button class="tri-preset-btn img-preset-btn" data-preset="full-std">Standard Full</button>
-              <button class="tri-preset-btn img-preset-btn" data-preset="full-ded">Dedicated Full</button>
-              <button class="tri-preset-btn img-preset-btn" data-preset="full-ne">Non-Engine Full</button>
+              <button class="tri-preset-btn img-preset-btn" data-preset="std-vs-ded">Std. vs Cust. (50/50)</button>
+              <button class="tri-preset-btn img-preset-btn" data-preset="ded-vs-ne">Cust. vs de facto (50/50)</button>
+              <button class="tri-preset-btn img-preset-btn" data-preset="ne-vs-gt">de facto vs GT (50/50)</button>
+              <button class="tri-preset-btn img-preset-btn" data-preset="full-std">Std. Full</button>
+              <button class="tri-preset-btn img-preset-btn" data-preset="full-ded">Cust. Full</button>
+              <button class="tri-preset-btn img-preset-btn" data-preset="full-ne">de facto Full</button>
               <button class="tri-preset-btn img-preset-btn" data-preset="full-gt">GT Full</button>
             </div>
 
@@ -363,7 +363,7 @@
         <div class="scene-explanation">
           <span id="img-scene-badge" class="badge badge-2dts">2DTS</span>
           <div id="img-scene-text">
-            <strong>The Soup Deployment Collapse:</strong> 2DTS relies heavily on alpha blending of independent triangle facelets. In Standard Deployment with hardware Z-buffering, overlapping semi-transparent triangles degenerate into opaque black shards (15.6 dB drop). Dedicated Deployment recovers multi-pass alpha compositing.
+            <strong>The Soup Deployment Collapse:</strong> 2DTS relies heavily on alpha blending of independent triangle facelets. Under standard engine deployment with hardware Z-buffering, overlapping semi-transparent triangles degenerate into opaque black shards (15.6 dB drop). Custom engine deployment recovers multi-pass alpha compositing.
           </div>
         </div>
       </div>
@@ -382,7 +382,7 @@
       <div class="paradigms-grid">
         <div class="paradigm-card">
           <span class="paradigm-badge badge-gray">Baseline Setting</span>
-          <h3 class="paradigm-title">1. Non-Engine Render</h3>
+          <h3 class="paradigm-title">1. de facto Renderer</h3>
           <p class="paradigm-desc">
             Evaluated directly using each method's official source research renderer (differentiable CUDA kernels). Serves as the upper-bound fidelity benchmark.
           </p>
@@ -395,7 +395,7 @@
 
         <div class="paradigm-card">
           <span class="paradigm-badge badge-red">Conventional Asset</span>
-          <h3 class="paradigm-title">2. Standard Deployment</h3>
+          <h3 class="paradigm-title">2. Standard Engine Deployment</h3>
           <p class="paradigm-desc">
             Converts trained models to conventional opaque meshes with static vertex colors rendered using standard hardware Z-buffering in Unity.
           </p>
@@ -408,7 +408,7 @@
 
         <div class="paradigm-card">
           <span class="paradigm-badge badge-emerald">Engine Native</span>
-          <h3 class="paradigm-title">3. Dedicated Deployment</h3>
+          <h3 class="paradigm-title">3. Custom Engine Deployment</h3>
           <p class="paradigm-desc">
             Customized engine shaders in Unity implementing method-specific appearance (view-dependent SH, soft coverage, order-dependent alpha blending).
           </p>
@@ -432,8 +432,8 @@
             <thead>
               <tr>
                 <th rowspan="2">Method</th>
-                <th colspan="2" style="text-align: center; border-left: 1px solid var(--surface-border); border-right: 1px solid var(--surface-border);">Standard Deployment</th>
-                <th colspan="5" style="text-align: center;">Dedicated Deployment (Method-Aware Unity Shaders)</th>
+                <th colspan="2" style="text-align: center; border-left: 1px solid var(--surface-border); border-right: 1px solid var(--surface-border);">Standard Engine Deployment</th>
+                <th colspan="5" style="text-align: center;">Custom Engine Deployment (Method-Aware Unity Shaders)</th>
               </tr>
               <tr>
                 <th style="border-left: 1px solid var(--surface-border);">Support</th>
@@ -550,9 +550,9 @@
               </tr>
             </thead>
             <tbody>
-              <!-- Non-Engine -->
+              <!-- de facto Renderer -->
               <tr>
-                <td rowspan="6" style="vertical-align: middle; font-weight: 700; background: #f8fafc;">Non-Engine Render</td>
+                <td rowspan="6" style="vertical-align: middle; font-weight: 700; background: #f8fafc;">de facto Renderer</td>
                 <td>3DGS (Reference)</td>
                 <td>Gaussian Splats</td>
                 <td>27.21</td>
@@ -613,9 +613,9 @@
                 <td>23,134 MiB (Train)</td>
               </tr>
 
-              <!-- Standard Deployment -->
+              <!-- Standard Engine Deployment -->
               <tr style="border-top: 2px solid var(--surface-border);">
-                <td rowspan="4" style="vertical-align: middle; font-weight: 700; background: #fff1f2;">Standard Deployment (Unity)</td>
+                <td rowspan="4" style="vertical-align: middle; font-weight: 700; background: #fff1f2;">Standard Engine Deployment (Unity)</td>
                 <td>2DGS (TSDF)</td>
                 <td>Opaque Mesh</td>
                 <td>12.70</td>
@@ -656,9 +656,9 @@
                 <td>54 MiB</td>
               </tr>
 
-              <!-- Dedicated Deployment -->
+              <!-- Custom Engine Deployment -->
               <tr style="border-top: 2px solid var(--surface-border);">
-                <td rowspan="4" style="vertical-align: middle; font-weight: 700; background: #f0fdf4;">Dedicated Deployment (Unity)</td>
+                <td rowspan="4" style="vertical-align: middle; font-weight: 700; background: #f0fdf4;">Custom Engine Deployment (Unity)</td>
                 <td><strong>2DTS</strong></td>
                 <td>Custom Alpha Splat</td>
                 <td><span class="best-val">23.28</span></td>
@@ -720,7 +720,7 @@
             </thead>
             <tbody>
               <tr>
-                <td rowspan="4" style="font-weight:700; background: #f8fafc;">Non-Engine</td>
+                <td rowspan="4" style="font-weight:700; background: #f8fafc;">de facto Renderer</td>
                 <td><strong>2DTS</strong></td>
                 <td>Triangle Soup</td>
                 <td><span class="best-val">23.42</span></td>
@@ -794,7 +794,7 @@
               </tr>
 
               <tr style="border-top: 2px solid var(--surface-border);">
-                <td rowspan="4" style="font-weight:700; background: #f0fdf4;">Dedicated (Unity)</td>
+                <td rowspan="4" style="font-weight:700; background: #f0fdf4;">Custom Engine Deployment (Unity)</td>
                 <td><strong>2DTS</strong></td>
                 <td>Custom Splat</td>
                 <td>19.26</td>
@@ -966,7 +966,7 @@
         <span class="section-tag">Trade-Off Analysis</span>
         <h2 class="section-title">Quality vs. Efficiency Trade-Off</h2>
         <p class="section-subtitle">
-          How image fidelity transitions to framerate across Standard, Dedicated, and Native renderers.
+          How image fidelity transitions to framerate across standard engine deployment, custom engine deployment, and the de facto renderer.
         </p>
       </div>
 
@@ -975,7 +975,7 @@
           <img src="static/images/quality_vs_efficiency_inverted.png" alt="Quality vs Efficiency Trade-off Curves">
           <h4>Fidelity vs. Throughput Trajectories</h4>
           <p>
-            Standard Deployment hits thousands of FPS (up to 5,480 FPS) via GPU rasterization, but at the cost of drastic visual drops. Dedicated Deployment shifts along the Pareto frontier, restoring near-native PSNR while operating at 70–2,388 FPS.
+            Standard engine deployment hits thousands of FPS (up to 5,480 FPS) via GPU rasterization, but at the cost of drastic visual drops. Custom engine deployment shifts along the Pareto frontier, restoring PSNR close to the de facto renderer while operating at 70–2,388 FPS.
           </p>
         </div>
 
@@ -1136,7 +1136,7 @@
           <code>StandardVertexColorRaw.shader</code>
           <h5>Standard Opaque Baseline</h5>
           <p>
-            Evaluates conventional game-engine opaque mesh rendering with static vertex colors and hardware Z-buffering for standard deployment comparisons.
+            Evaluates conventional game-engine opaque mesh rendering with static vertex colors and hardware Z-buffering for standard engine deployment comparisons.
           </p>
         </div>
       </div>
@@ -1148,7 +1148,7 @@
         <span class="section-tag">Interactive Camera Trajectory Player</span>
         <h2 class="section-title">3-Way Synchronized Video Split Comparison</h2>
         <p class="section-subtitle">
-          Real-time camera orbit videos rendered across <strong>Standard Deployment</strong> &rarr; <strong>Dedicated Deployment</strong> &rarr; <strong>Non-Engine Render</strong>. Drag the vertical divider lines to dynamically adjust the visible split regions!
+          Real-time camera orbit videos rendered across <strong>standard engine deployment</strong> &rarr; <strong>custom engine deployment</strong> &rarr; <strong>de facto renderer</strong>. Drag the vertical divider lines to dynamically adjust the visible split regions!
         </p>
       </div>
 
@@ -1172,65 +1172,65 @@
           
           <div style="display: flex; align-items: center; gap: 0.5rem;">
             <span id="tri-video-status-badge" class="badge badge-primary" style="font-weight: 600;">
-              Standard &rarr; Dedicated &rarr; Non-Engine
+              Std. &rarr; Cust. &rarr; de facto
             </span>
           </div>
         </div>
 
         <!-- 3-Way Video Canvas -->
         <div class="tri-video-canvas" id="tri-video-canvas">
-          <!-- Layer 3: Non-Engine Render (Right region: X2 -> 100%) -->
+          <!-- Layer 3: de facto Renderer (Right region: X2 -> 100%) -->
           <div class="tri-video-layer tri-video-layer-ne" id="tri-layer-ne">
             <video id="tri-vid-ne" src="static/videos/2dts/non-engine.mp4" playsinline loop muted autoplay preload="auto"></video>
           </div>
 
-          <!-- Layer 2: Dedicated Deployment (Middle region: X1 -> X2) -->
+          <!-- Layer 2: Custom Engine Deployment (Middle region: X1 -> X2) -->
           <div class="tri-video-layer tri-video-layer-ded" id="tri-layer-ded">
             <video id="tri-vid-ded" src="static/videos/2dts/dedicated.mp4" playsinline loop muted autoplay preload="auto"></video>
           </div>
 
-          <!-- Layer 1: Standard Deployment (Left region: 0% -> X1) -->
+          <!-- Layer 1: Standard Engine Deployment (Left region: 0% -> X1) -->
           <div class="tri-video-layer tri-video-layer-std" id="tri-layer-std">
             <video id="tri-vid-std" src="static/videos/2dts/standard.mp4" playsinline loop muted autoplay preload="auto"></video>
           </div>
 
-          <!-- Divider 1: Between Standard and Dedicated -->
+          <!-- Divider 1: Between Std. and Cust. -->
           <div class="tri-divider" id="tri-divider-1" style="left: 33.33%;">
             <div class="tri-divider-handle">
               <i class="fa-solid fa-arrows-left-right"></i>
-              <span>Standard | Dedicated</span>
+              <span>Std. | Cust.</span>
             </div>
           </div>
 
-          <!-- Divider 2: Between Dedicated and Non-Engine -->
+          <!-- Divider 2: Between Cust. and de facto -->
           <div class="tri-divider" id="tri-divider-2" style="left: 66.66%;">
             <div class="tri-divider-handle">
               <i class="fa-solid fa-arrows-left-right"></i>
-              <span>Dedicated | Non-Engine</span>
+              <span>Cust. | de facto</span>
             </div>
           </div>
 
           <!-- Floating Region Badges -->
           <div class="tri-region-badge" id="tri-badge-std" style="left: 16.66%;">
             <span class="badge-dot badge-dot-std"></span>
-            <span>Standard Deployment</span>
+            <span>Standard Engine Deployment</span>
           </div>
 
           <div class="tri-region-badge" id="tri-badge-ded" style="left: 50%;">
             <span class="badge-dot badge-dot-ded"></span>
-            <span>Dedicated Deployment</span>
+            <span>Custom Engine Deployment</span>
           </div>
 
           <div class="tri-region-badge" id="tri-badge-ne" style="left: 83.33%;">
             <span class="badge-dot badge-dot-ne"></span>
-            <span>Non-Engine Render</span>
+            <span>de facto Renderer</span>
           </div>
         </div>
 
         <!-- DiffSoup Alert note (shown when DiffSoup is selected) -->
         <div id="diffsoup-note" style="display: none; padding: 0.75rem 1.5rem; background: #fffbeb; border-bottom: 1px solid #fef3c7; font-size: 0.85rem; color: #92400e;">
           <i class="fa-solid fa-circle-info" style="margin-right: 0.4rem;"></i>
-          <strong>DiffSoup Architecture:</strong> Encodes appearance as latent features evaluated by an in-shader neural Micro-MLP. Standard Deployment is unsupported (N/A); comparing <strong>Dedicated Deployment (Left)</strong> vs. <strong>Non-Engine Render (Right)</strong>.
+          <strong>DiffSoup Architecture:</strong> Encodes appearance as latent features evaluated by an in-shader neural Micro-MLP. Standard engine deployment is unsupported (N/A); comparing <strong>custom engine deployment (Left)</strong> vs. <strong>de facto renderer (Right)</strong>.
         </div>
 
         <!-- Controls Bar -->
@@ -1250,11 +1250,11 @@
             <div class="tri-ctrl-group">
               <span class="tri-preset-label"><i class="fa-solid fa-table-columns"></i> Presets:</span>
               <button class="tri-preset-btn active" data-preset="three-way">1/3 Split (3-Way)</button>
-              <button class="tri-preset-btn" data-preset="std-vs-ded">Std vs Ded (50/50)</button>
-              <button class="tri-preset-btn" data-preset="ded-vs-ne">Ded vs Native (50/50)</button>
-              <button class="tri-preset-btn" data-preset="full-std">Standard Full</button>
-              <button class="tri-preset-btn" data-preset="full-ded">Dedicated Full</button>
-              <button class="tri-preset-btn" data-preset="full-ne">Non-Engine Full</button>
+              <button class="tri-preset-btn" data-preset="std-vs-ded">Std. vs Cust. (50/50)</button>
+              <button class="tri-preset-btn" data-preset="ded-vs-ne">Cust. vs de facto (50/50)</button>
+              <button class="tri-preset-btn" data-preset="full-std">Std. Full</button>
+              <button class="tri-preset-btn" data-preset="full-ded">Cust. Full</button>
+              <button class="tri-preset-btn" data-preset="full-ne">de facto Full</button>
             </div>
 
             <!-- Playback Rate & Options -->
