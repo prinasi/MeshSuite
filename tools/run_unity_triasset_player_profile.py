@@ -403,12 +403,6 @@ def main() -> int:
     parser.add_argument("--log-name", default="unity_player_profile.log")
     parser.add_argument("--method", default="triangle-splatting")
     parser.add_argument("--asset-subdir", default="unity_native")
-    parser.add_argument(
-        "--topology",
-        choices=("indexed", "mesh", "soup"),
-        default="indexed",
-        help="Unity mesh layout intervention. 'mesh' is an alias for indexed; 'soup' de-indexes shared vertices at load time.",
-    )
     parser.add_argument("--reference-image-dir")
     parser.add_argument("--scenes", nargs="*", default=SCENES)
     parser.add_argument("--profile-run", type=int, default=1)
@@ -476,8 +470,6 @@ def main() -> int:
         raise FileNotFoundError(f"missing Unity Player executable: {player}")
     args.outputs_root = args.outputs_root.resolve()
     args.datasets_root = args.datasets_root.resolve()
-    if args.topology == "mesh":
-        args.topology = "indexed"
 
     try:
         from tools.validate_unity_triasset_cpu import validate_triasset
@@ -498,7 +490,7 @@ def main() -> int:
         manifest_path = triasset / "manifest.json"
         manifest = json.loads(manifest_path.read_text())
         rendering = manifest["rendering"]
-        topology_label = str(rendering.get("export_topology") or args.topology)
+        topology_label = str(rendering.get("export_topology") or "indexed")
         general = rendering.get("general_purpose", {})
         if args.general_purpose and not general.get("supported", False):
             raise RuntimeError(
@@ -529,7 +521,6 @@ def main() -> int:
             "method": args.method,
             "renderer_condition": "general-purpose" if args.general_purpose else "method-aware",
             "mesh_topology_layout": topology_label,
-            "runtime_topology_layout": args.topology,
             "method_aware_status": rendering.get("unity_method_aware_status"),
             "cuda_equivalent": False,
             "requires_per_camera_depth_sort": rendering.get("unity_method_aware_requires_per_camera_depth_sort", False),
@@ -565,7 +556,6 @@ def main() -> int:
             "-profile-views", str(args.profile_views),
             "-profile-warmup", str(args.profile_warmup),
             "-profile-frames", str(args.profile_frames),
-            "-topology", args.topology,
             "-background-color", str(rendering.get("background_color", "black")),
             "-logFile", str(log_path),
         ]

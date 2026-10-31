@@ -108,12 +108,6 @@ def main() -> int:
     parser.add_argument("--method", default="triangle-splatting", help="Triasset method name and Unity batch renderer selector.")
     parser.add_argument("--asset-subdir", default="unity_native")
     parser.add_argument(
-        "--topology",
-        choices=("indexed", "mesh", "soup"),
-        default="indexed",
-        help="Unity mesh layout intervention. 'mesh' is an alias for indexed; 'soup' de-indexes shared vertices at load time.",
-    )
-    parser.add_argument(
         "--reference-image-dir",
         help="Dataset image directory used for capture resolution and ground truth. Defaults to MipNeRF360 convention.",
     )
@@ -140,8 +134,6 @@ def main() -> int:
     args.unity_project = args.unity_project.resolve()
     args.outputs_root = args.outputs_root.resolve()
     args.datasets_root = args.datasets_root.resolve()
-    if args.topology == "mesh":
-        args.topology = "indexed"
     for name in ("fps_warmup", "fps_frames", "profile_run", "profile_views", "profile_warmup", "profile_frames"):
         if getattr(args, name) <= 0:
             parser.error(f"--{name.replace('_', '-')} must be positive")
@@ -164,7 +156,7 @@ def main() -> int:
         manifest_path = triasset / "manifest.json"
         manifest = json.loads(manifest_path.read_text())
         rendering = manifest["rendering"]
-        topology_label = str(rendering.get("export_topology") or args.topology)
+        topology_label = str(rendering.get("export_topology") or "indexed")
         general = rendering.get("general_purpose", {})
         if args.general_purpose and not general.get("supported", False):
             raise RuntimeError(
@@ -189,7 +181,6 @@ def main() -> int:
             "method": args.method,
             "renderer_condition": "general-purpose" if args.general_purpose else "method-aware",
             "mesh_topology_layout": topology_label,
-            "runtime_topology_layout": args.topology,
             "method_aware_status": rendering.get("unity_method_aware_status"),
             "cuda_equivalent": False,
             "requires_per_camera_depth_sort": rendering.get("unity_method_aware_requires_per_camera_depth_sort", False),
@@ -221,7 +212,6 @@ def main() -> int:
             "-method", args.method, "-triasset", str(triasset), "-dataset", str(dataset), "-output", str(output),
             "-triasset-width", str(width), "-triasset-height", str(height),
             "-fps-warmup", str(args.fps_warmup), "-fps-frames", str(args.fps_frames),
-            "-topology", args.topology,
             "-logFile", str(log_path),
         ]
         if args.test_only:

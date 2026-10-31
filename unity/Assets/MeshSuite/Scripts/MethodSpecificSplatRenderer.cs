@@ -22,7 +22,7 @@ namespace MeshSuite.UnityNative
         Camera msBenchCommandCamera;
         int primitiveCount, mode, activeShDegree, meshAblation;
         float gamma = 1f, gammaVertexRescale = 1f, opacityFloor;
-        bool ready, rawCode, deindexedSoup;
+        bool ready, rawCode;
         string status = "Waiting to load method-specific renderer";
         ComputeBuffer triangleOrderBuffer;
         bool usesSortedTriangleOrder;
@@ -52,8 +52,6 @@ namespace MeshSuite.UnityNative
             opacityFloor = Mathf.Clamp01(ReadFloat(json, "opacity_floor", 0f));
             if (primitiveCount <= 0) { Fail("Invalid primitive_count."); yield break; }
             string b = Path.Combine(AssetDirectory, "buffers");
-            deindexedSoup = TriAssetRuntimeOptions.Get("-topology", "indexed").ToLowerInvariant() == "soup"
-                || TriAssetRuntimeOptions.Has("-deindexed-soup");
             status = "Loading learned render buffers";
             yield return null;
             int[] sourceIndices = ReadInt(Path.Combine(b, "indices.bin"));
@@ -61,15 +59,6 @@ namespace MeshSuite.UnityNative
             float[] sourcePositions = ReadFloat(Path.Combine(b, "positions.bin"));
             if (sourcePositions.Length % 3 != 0) { Fail("positions.bin is not float3 data."); yield break; }
             InitializeTriangleOrder(sourcePositions, sourceIndices);
-            if (deindexedSoup && mode == 1)
-            {
-                // MeshSplatting shader-level soup topology: keep the original
-                // indexed buffers and let each procedural triangle corner fetch
-                // source vertex attributes through _Indices in the shader.  This
-                // disables hardware vertex sharing in the draw path without
-                // materializing multi-GiB duplicate SH buffers on the CPU/GPU.
-                Debug.Log("[MeshSuite] MeshSplatting shader-level soup topology: retaining indexed buffers; procedural corners fetch via _Indices.");
-            }
             positions = Upload(sourcePositions);
             indices = Upload(sourceIndices);
             triangleOrderBuffer = Upload(triangleOrder);
@@ -117,8 +106,8 @@ namespace MeshSuite.UnityNative
             }
             material.SetInt("_RawCode", 1);
             RefreshTriangleOrder(TargetCamera, force: true);
-            ready = true; status = $"Method-specific {method} renderer ready ({primitiveCount:N0} primitives; {(deindexedSoup ? "shader-level triangle soup" : "indexed mesh")})";
-            if (mode == 1) Debug.Log($"[MeshSuite] MeshSplatting layout={(deindexedSoup ? "soup(shader-indexed)" : "indexed")}, ablation={ablation}, code={meshAblation}, opacityFloor={opacityFloor:F6}.");
+            ready = true; status = $"Method-specific {method} renderer ready ({primitiveCount:N0} primitives)";
+            if (mode == 1) Debug.Log($"[MeshSuite] MeshSplatting ablation={ablation}, code={meshAblation}, opacityFloor={opacityFloor:F6}.");
             Debug.Log("[MeshSuite] " + status);
         }
 
@@ -250,21 +239,6 @@ namespace MeshSuite.UnityNative
         static float ReadFloat(string json, string key, float fallback) { Match m=Regex.Match(json,"\\\""+key+"\\\"\\s*:\\s*([-+.0-9eE]+)"); return m.Success && Single.TryParse(m.Groups[1].Value,System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.InvariantCulture,out float v) ? v : fallback; }
         static float[] ReadFloat(string p) { byte[] raw=File.ReadAllBytes(p); if ((raw.Length&3)!=0) throw new InvalidDataException(p); float[] v=new float[raw.Length/4]; Buffer.BlockCopy(raw,0,v,0,raw.Length); return v; }
         static int[] ReadInt(string p) { byte[] raw=File.ReadAllBytes(p); if ((raw.Length&3)!=0) throw new InvalidDataException(p); int[] v=new int[raw.Length/4]; Buffer.BlockCopy(raw,0,v,0,raw.Length); return v; }
-        static float[] Deindex(float[] source, int[] sourceIndices, int stride, string name)
-        {
-            if (source.Length % stride != 0) throw new InvalidDataException(name + " has invalid stride.");
-            int vertexCount = source.Length / stride;
-            float[] output = new float[sourceIndices.Length * stride];
-            for (int corner = 0; corner < sourceIndices.Length; ++corner)
-            {
-                int sourceVertex = sourceIndices[corner];
-                if ((uint)sourceVertex >= (uint)vertexCount) throw new InvalidDataException("indices.bin references an invalid " + name + " vertex.");
-                // Array.Copy avoids a Unity/Mono Buffer.BlockCopy failure for
-                // large managed float arrays during the soup conversion.
-                Array.Copy(source, sourceVertex * stride, output, corner * stride, stride);
-            }
-            return output;
-        }
         static ComputeBuffer Upload(Array values) { ComputeBuffer b=new ComputeBuffer(values.Length,4,ComputeBufferType.Raw); b.SetData(values); return b; }
         void Fail(string msg) { status="ERROR: "+msg; Debug.LogError("[MeshSuite] "+msg); }
         void OnDestroy() { RemoveMsBenchCameraDraw(); ready=false; positions?.Release(); indices?.Release(); triangleOrderBuffer?.Release(); opacity?.Release(); sigma?.Release(); dc?.Release(); rest?.Release(); if(material!=null) Destroy(material); }

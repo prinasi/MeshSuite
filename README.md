@@ -436,12 +436,9 @@ appearance are rejected instead of producing misleading numbers.
 ### MeshSplatting topology ablation
 
 To isolate the value of MeshSplatting's shared-vertex topology, run
-`single_unity_eval.sh` for `mesh-splatting` with two soup deployment layouts
-(commands below):
+`single_unity_eval.sh` for `mesh-splatting` with a soup deployment layout
+(command below):
 
-- `shader-soup`: loads the same indexed `.triasset`, but uses the procedural
-  shader path as a corner-level triangle-soup intervention without duplicating
-  buffers.
 - `materialized-soup`: exports a separate `.triasset` with per-triangle
   duplicated positions/SH/opacity attributes and sequential soup indices. This
   is intended for asset-memory, load-feasibility, and CG compatibility evidence.
@@ -449,18 +446,7 @@ To isolate the value of MeshSplatting's shared-vertex topology, run
 Reports are written under:
 
 ```text
-outputs/unity_reports/mesh-splatting/unity_mesh_topology/{shader_soup,materialized_soup}/
-```
-
-The lower-level wrapper also accepts `--topology indexed|soup` directly when a
-single shader-level condition is needed:
-
-```bash
-./single_unity_eval.sh mesh-splatting mipnerf360/bicycle 0 \
-  --unity "$UNITY" \
-  --unity-project unity \
-  --topology soup \
-  --output-name unity_method_aware_soup
+outputs/unity_reports/mesh-splatting/unity_mesh_topology/materialized_soup/
 ```
 
 For true exported soup assets, use a separate asset subdirectory:

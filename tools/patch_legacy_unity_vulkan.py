@@ -450,7 +450,8 @@ def _patch_method_specific_camera_state(source: str) -> str:
             raise ValueError("could not locate MethodSpecific material index buffer binding")
         source = source.replace(buffer_old, buffer_new, 1)
 
-    ready_anchor = '            ready = true; status = $"Method-specific {method} renderer ready ({primitiveCount:N0} primitives; {(deindexedSoup ? "shader-level triangle soup" : "indexed mesh")})";\n'
+    # The status text after this prefix differs between project revisions.
+    ready_anchor = '            ready = true; status = $"Method-specific {method} renderer ready ('
     refresh_line = "            RefreshTriangleOrder(TargetCamera, force: true);\n"
     if refresh_line not in source:
         if ready_anchor not in source:
@@ -799,70 +800,6 @@ def _patch_method_specific_vulkan_bindings(source: str) -> str:
     )
 
 
-def _patch_method_specific_shader_level_soup(source: str) -> str:
-    """Avoid CPU-side MeshSplatting de-indexing for the soup topology ablation.
-
-    MethodSpecificSplat* shaders already draw procedurally with one vertex
-    invocation per triangle corner and fetch the source vertex attributes via
-    ``_Indices``.  Duplicating positions/SH buffers in C# therefore only adds
-    multi-GiB upload pressure without changing the corner-level draw topology.
-    """
-
-    marker = "MeshSplatting shader-level soup topology"
-    updated = source
-    old = '''            if (deindexedSoup)
-            {
-                // Same-asset layout intervention: preserve every triangle
-                // corner's position and learned attributes, while replacing
-                // shared vertex indices with sequential soup indices.
-                status = "De-indexing learned MeshSplatting attributes into triangle soup";
-                yield return null;
-                positions = Upload(Deindex(ReadFloat(Path.Combine(b, "positions.bin")), sourceIndices, 3, "positions"));
-                opacity = Upload(Deindex(ReadFloat(Path.Combine(b, mode == 1 ? "vertex_weight_logits.bin" : "opacity_logits.bin")), sourceIndices, 1, "opacity"));
-                dc = Upload(Deindex(ReadFloat(Path.Combine(b, "sh_dc.bin")), sourceIndices, 3, "sh_dc"));
-                rest = Upload(Deindex(ReadFloat(Path.Combine(b, "sh_rest.bin")), sourceIndices, 45, "sh_rest"));
-                int[] soupIndices = new int[sourceIndices.Length];
-                for (int i = 0; i < soupIndices.Length; ++i) soupIndices[i] = i;
-                indices = Upload(soupIndices);
-            }
-            else
-            {
-                positions = Upload(ReadFloat(Path.Combine(b, "positions.bin")));
-                indices = Upload(sourceIndices);
-                opacity = Upload(ReadFloat(Path.Combine(b, mode == 1 ? "vertex_weight_logits.bin" : "opacity_logits.bin")));
-                dc = Upload(ReadFloat(Path.Combine(b, "sh_dc.bin")));
-                rest = Upload(ReadFloat(Path.Combine(b, "sh_rest.bin")));
-            }'''
-    new = '''            if (deindexedSoup && mode == 1)
-            {
-                // MeshSplatting shader-level soup topology: keep the original
-                // indexed buffers and let each procedural triangle corner fetch
-                // source vertex attributes through _Indices in the shader.  This
-                // disables hardware vertex sharing in the draw path without
-                // materializing multi-GiB duplicate SH buffers on the CPU/GPU.
-                Debug.Log("[MeshSplatBench] MeshSplatting shader-level soup topology: retaining indexed buffers; procedural corners fetch via _Indices.");
-            }
-            positions = Upload(ReadFloat(Path.Combine(b, "positions.bin")));
-            indices = Upload(sourceIndices);
-            opacity = Upload(ReadFloat(Path.Combine(b, mode == 1 ? "vertex_weight_logits.bin" : "opacity_logits.bin")));
-            dc = Upload(ReadFloat(Path.Combine(b, "sh_dc.bin")));
-            rest = Upload(ReadFloat(Path.Combine(b, "sh_rest.bin")));'''
-    if old in updated:
-        updated = updated.replace(old, new, 1)
-    elif marker not in updated and "positions = Upload(Deindex(" in updated:
-        raise ValueError("could not migrate MethodSpecific soup de-index branch")
-
-    updated = updated.replace(
-        'deindexedSoup ? "triangle soup" : "indexed mesh"',
-        'deindexedSoup ? "shader-level triangle soup" : "indexed mesh"',
-    )
-    updated = updated.replace(
-        'deindexedSoup ? "soup" : "indexed"',
-        'deindexedSoup ? "soup(shader-indexed)" : "indexed"',
-    )
-    return updated
-
-
 def _capture_helpers() -> str:
     return r'''
 
@@ -1134,7 +1071,6 @@ def patch_unity_project(project: Path) -> list[Path]:
             updated = _patch_renderer_command_buffer(updated, primitive_count, path.stem)
         if name == "MethodSpecificSplatRenderer.cs":
             updated = _patch_method_specific_vulkan_bindings(updated)
-            updated = _patch_method_specific_shader_level_soup(updated)
             updated = _patch_method_specific_camera_state(updated)
         elif name == "TriangleSplattingTriAssetRenderer.cs":
             updated = _patch_generic_prepare_camera(updated, path.stem)

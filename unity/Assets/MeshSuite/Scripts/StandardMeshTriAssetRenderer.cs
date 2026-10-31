@@ -14,8 +14,6 @@ namespace MeshSuite.UnityNative
     {
         public Camera TargetCamera;
         public Shader VertexColorShader;
-        [Tooltip("Controlled layout intervention: duplicate every indexed corner into a triangle soup.")]
-        public bool DeindexedSoup;
 
         Mesh mesh;
         Material material;
@@ -30,8 +28,6 @@ namespace MeshSuite.UnityNative
         void Awake()
         {
             AssetDirectory = TriAssetRuntimeOptions.Get("-triasset", AssetDirectory);
-            string topology = TriAssetRuntimeOptions.Get("-topology", "indexed").ToLowerInvariant();
-            DeindexedSoup = topology == "soup" || TriAssetRuntimeOptions.Has("-deindexed-soup");
         }
 
         IEnumerator Start()
@@ -96,32 +92,11 @@ namespace MeshSuite.UnityNative
             positions = null;
             GC.Collect();
 
-            if (DeindexedSoup)
-            {
-                status = "De-indexing mesh corners into triangle soup";
-                yield return null;
-                Vector3[] soupVertices = new Vector3[indices.Length];
-                Color32[] soupColors = colors == null ? null : new Color32[indices.Length];
-                int[] soupIndices = new int[indices.Length];
-                for (int corner = 0; corner < indices.Length; ++corner)
-                {
-                    int source = indices[corner];
-                    if ((uint)source >= (uint)vertexCount) { Fail("indices.bin references an invalid vertex."); yield break; }
-                    soupVertices[corner] = vertices[source];
-                    if (soupColors != null) soupColors[corner] = colors[source];
-                    soupIndices[corner] = corner;
-                }
-                vertices = soupVertices;
-                if (soupColors != null) colors = soupColors;
-                indices = soupIndices;
-                vertexCount = vertices.Length;
-            }
-
-            status = "Uploading standard " + (DeindexedSoup ? "triangle-soup" : "indexed") + " Unity Mesh";
+            status = "Uploading standard indexed Unity Mesh";
             yield return null;
             mesh = new Mesh { name = "MeshSuite standard mesh compatibility baseline", indexFormat = IndexFormat.UInt32 };
             mesh.vertices = vertices;
-            if (colors != null) mesh.colors32 = colors;
+            mesh.colors32 = colors;
             mesh.SetIndices(indices, MeshTopology.Triangles, 0, false);
             mesh.RecalculateBounds();
             vertices = null;
@@ -144,7 +119,7 @@ namespace MeshSuite.UnityNative
             meshRenderer.lightProbeUsage = LightProbeUsage.Off;
             meshRenderer.reflectionProbeUsage = ReflectionProbeUsage.Off;
             ready = true;
-            status = $"Standard {(DeindexedSoup ? "triangle-soup" : "indexed Mesh")} ready: {vertexCount:N0} vertices, {triangleCount:N0} triangles" + (File.Exists(dcPath) ? "; DC vertex color" : "; default white (no standard appearance field)");
+            status = $"Standard indexed Mesh ready: {vertexCount:N0} vertices, {triangleCount:N0} triangles" + (File.Exists(dcPath) ? "; DC vertex color" : "; default white (no standard appearance field)");
             Debug.Log("[MeshSuite] " + status);
         }
 
