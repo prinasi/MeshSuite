@@ -20,7 +20,7 @@ namespace MeshSuite.UnityNative
         Material material;
         CommandBuffer msBenchDrawCommands;
         Camera msBenchCommandCamera;
-        int primitiveCount, mode, activeShDegree, meshAblation;
+        int primitiveCount, mode, activeShDegree;
         float gamma = 1f, gammaVertexRescale = 1f, opacityFloor;
         bool ready, rawCode;
         string status = "Waiting to load method-specific renderer";
@@ -66,12 +66,6 @@ namespace MeshSuite.UnityNative
             dc = Upload(ReadFloat(Path.Combine(b, "sh_dc.bin")));
             rest = Upload(ReadFloat(Path.Combine(b, "sh_rest.bin")));
             if (mode == 1) sigma = Upload(ReadFloat(Path.Combine(b, "sigma_logits.bin")));
-            string ablation = "full";
-            if (mode == 1) ablation = TriAssetRuntimeOptions.Get("-mesh-ablation", "full").ToLowerInvariant();
-            // Keep the renderer contract static: these two passes are ordinary
-            // hardware-rasterized depth passes, not a runtime branch inside the
-            // transparent splat shader.  This makes the alpha-compositing
-            // intervention independently reproducible from the material state.
             // The released Mesh-Splatting checkpoint is in its terminal solid
             // regime (sigma -> 1e-4 and opacity floor -> 0.9999).  In that
             // regime a depth-writing hardware pass is the stable limiting form
@@ -79,13 +73,7 @@ namespace MeshSuite.UnityNative
             // learned degree-3 SH field; only sub-0.1% residual transmission is
             // intentionally collapsed to hardware visibility.  Do not route
             // 2DTS here: its learned coverage remains genuinely transparent.
-            string shaderName = mode == 1 && ablation == "full"
-                ? "MeshSuite/MeshSplatTerminalSolid"
-                : mode == 1 && ablation == "alpha-test-depth"
-                    ? "MeshSuite/MeshSplatAlphaTestDepth"
-                    : mode == 1 && ablation == "opaque-depth"
-                        ? "MeshSuite/MeshSplatOpaqueDepth"
-                        : "MeshSuite/MethodSpecificSplat";
+            string shaderName = mode == 1 ? "MeshSuite/MeshSplatTerminalSolid" : "MeshSuite/MethodSpecificSplat";
             usesSortedTriangleOrder = shaderName == "MeshSuite/MethodSpecificSplat";
             SplatShader = SplatShader != null ? SplatShader : Shader.Find(shaderName);
             if (SplatShader == null) { Fail("MeshSuite/MethodSpecificSplat shader was not found."); yield break; }
@@ -98,16 +86,10 @@ namespace MeshSuite.UnityNative
             material.SetInt("_ShDegree", activeShDegree); material.SetFloat("_Gamma", gamma);
             material.SetFloat("_OpacityFloor", opacityFloor);
             material.SetFloat("_GammaVertexRescale", gammaVertexRescale);
-            if (mode == 1)
-            {
-                meshAblation = ablation == "no-sh" ? 1 : ablation == "no-sigma" ? 2 : 0;
-                material.SetInt("_MeshAblation", meshAblation);
-                material.SetInt("_UseSh", (meshAblation == 1 || meshAblation == 4) ? 0 : 1);
-            }
             material.SetInt("_RawCode", 1);
             RefreshTriangleOrder(TargetCamera, force: true);
             ready = true; status = $"Method-specific {method} renderer ready ({primitiveCount:N0} primitives)";
-            if (mode == 1) Debug.Log($"[MeshSuite] MeshSplatting ablation={ablation}, code={meshAblation}, opacityFloor={opacityFloor:F6}.");
+            if (mode == 1) Debug.Log($"[MeshSuite] MeshSplatting opacityFloor={opacityFloor:F6}.");
             Debug.Log("[MeshSuite] " + status);
         }
 
@@ -210,11 +192,6 @@ namespace MeshSuite.UnityNative
             material.SetInt("_RawCode", rawCode ? 1 : 0);
             material.SetFloat("_OpacityFloor", opacityFloor);
             material.SetFloat("_GammaVertexRescale", gammaVertexRescale);
-            if (mode == 1)
-            {
-                material.SetInt("_MeshAblation", meshAblation);
-                material.SetInt("_UseSh", (meshAblation == 1 || meshAblation == 4) ? 0 : 1);
-            }
         }
         void OnRenderObject()
         {
@@ -226,11 +203,6 @@ namespace MeshSuite.UnityNative
             material.SetInt("_RawCode", rawCode ? 1 : 0);
             material.SetFloat("_OpacityFloor", opacityFloor);
             material.SetFloat("_GammaVertexRescale", gammaVertexRescale);
-            if (mode == 1)
-            {
-                material.SetInt("_MeshAblation", meshAblation);
-                material.SetInt("_UseSh", (meshAblation == 1 || meshAblation == 4) ? 0 : 1);
-            }
             if (!material.SetPass(0)) { Debug.LogError("[MeshSuite] Shader pass is unsupported on " + SystemInfo.graphicsDeviceType + ": " + material.shader.name); enabled = false; return; } Graphics.DrawProceduralNow(MeshTopology.Triangles, primitiveCount * 3, 1);
         }
         public override void SetOutputRawCodeValues(bool enabled) { rawCode = enabled; }

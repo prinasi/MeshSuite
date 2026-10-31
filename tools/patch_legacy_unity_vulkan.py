@@ -401,7 +401,9 @@ def _patch_method_specific_camera_state(source: str) -> str:
             usesSortedTriangleOrder = shaderName == "MeshSplatBench/MethodSpecificSplat";
             SplatShader = SplatShader != null ? SplatShader : Shader.Find(shaderName);
 '''
-    if shader_new not in source:
+    # Current projects select the shader without the removed -mesh-ablation chain.
+    sorted_order_line = 'usesSortedTriangleOrder = shaderName == "MeshSplatBench/MethodSpecificSplat";'
+    if sorted_order_line not in source:
         if shader_old not in source:
             raise ValueError("could not locate MethodSpecific shader selection")
         source = source.replace(shader_old, shader_new, 1)
@@ -556,11 +558,6 @@ def _patch_method_specific_camera_state(source: str) -> str:
             material.SetInt("_RawCode", rawCode ? 1 : 0);
             material.SetFloat("_OpacityFloor", opacityFloor);
             material.SetFloat("_GammaVertexRescale", gammaVertexRescale);
-            if (mode == 1)
-            {{
-                material.SetInt("_MeshAblation", meshAblation);
-                material.SetInt("_UseSh", (meshAblation == 1 || meshAblation == 4) ? 0 : 1);
-            }}
         }}
 '''
     prepare_signature = "public override void PrepareCamera(Camera camera)"
