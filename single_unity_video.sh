@@ -18,7 +18,6 @@ DATASETS_ROOT_OVERRIDE="${DATASETS:-}"
 OUTPUT_NAME=""
 CONDITION="method-aware"
 TOPOLOGY="indexed"
-INDEXED_MESH_METHOD_AWARE=0
 TRAJECTORY_PATH=""
 FRAMES=240
 FPS=30
@@ -68,8 +67,6 @@ Options:
   --method-aware           Use method-aware Unity renderer (default)
   --general-purpose        Use ordinary Unity Mesh baseline
   --topology T             Mesh layout: indexed or soup (default: indexed)
-  --indexed-mesh-method-aware
-                           For general-purpose mesh-splatting, use indexed Mesh with method-aware appearance
   --frames N               Number of frames in ellipse trajectory (default: 240)
   --fps N                  Video framerate (default: 30)
   --zoom F                 Focal length multiplier (default: 1.0)
@@ -118,7 +115,6 @@ while [[ $# -gt 0 ]]; do
         --method-aware|--method_aware|--method-specific|--method_specific) CONDITION="method-aware"; shift ;;
         --general-purpose|--general_purpose|--standard-mesh|--standard_mesh) CONDITION="general-purpose"; shift ;;
         --topology) require_value "$@"; TOPOLOGY="$2"; shift 2 ;;
-        --indexed-mesh-method-aware|--indexed_mesh_method_aware) INDEXED_MESH_METHOD_AWARE=1; shift ;;
         --frames) require_value "$@"; FRAMES="$2"; shift 2 ;;
         --fps) require_value "$@"; FPS="$2"; shift 2 ;;
         --zoom) require_value "$@"; ZOOM="$2"; shift 2 ;;
@@ -238,7 +234,6 @@ for target in "${RESOLVED_TARGETS[@]}"; do
     [[ -n "${UNITY_BIN}" ]] && CMD+=(--unity "${UNITY_BIN}")
     [[ -n "${UNITY_PROJECT_DIR}" ]] && CMD+=(--unity-project "${UNITY_PROJECT_DIR}")
     [[ "${CONDITION}" == "general-purpose" ]] && CMD+=(--general-purpose) || CMD+=(--method-aware)
-    [[ "${INDEXED_MESH_METHOD_AWARE}" -eq 1 ]] && CMD+=(--indexed-mesh-method-aware)
     [[ "${WRITE_FRAMES}" -eq 1 ]] && CMD+=(--write-frames)
     [[ "${FORCE_UNITY}" -eq 1 ]] && CMD+=(--force-unity)
     [[ -n "${TRAJECTORY_PATH}" ]] && CMD+=(--trajectory "${TRAJECTORY_PATH}")

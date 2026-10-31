@@ -436,14 +436,9 @@ appearance are rejected instead of producing misleading numbers.
 ### MeshSplatting topology ablation
 
 To isolate the value of MeshSplatting's shared-vertex topology, run
-`single_unity_eval.sh` for `mesh-splatting` with three deployment layouts
+`single_unity_eval.sh` for `mesh-splatting` with two soup deployment layouts
 (commands below):
 
-- `mesh`: preserves the exported indexed mesh and renders it through a real
-  Unity `MeshFilter`/`MeshRenderer` with `Mesh.SetIndices`. Pass
-  `--indexed-mesh-method-aware` so the Unity indexed mesh path still evaluates
-  the learned SH appearance instead of falling back to the older DC-only
-  vertex-color baseline.
 - `shader-soup`: loads the same indexed `.triasset`, but uses the procedural
   shader path as a corner-level triangle-soup intervention without duplicating
   buffers.
@@ -454,7 +449,7 @@ To isolate the value of MeshSplatting's shared-vertex topology, run
 Reports are written under:
 
 ```text
-outputs/unity_reports/mesh-splatting/unity_mesh_topology/{indexed_mesh,shader_soup,materialized_soup}/
+outputs/unity_reports/mesh-splatting/unity_mesh_topology/{shader_soup,materialized_soup}/
 ```
 
 The lower-level wrapper also accepts `--topology indexed|soup` directly when a
@@ -466,18 +461,6 @@ single shader-level condition is needed:
   --unity-project unity \
   --topology soup \
   --output-name unity_method_aware_soup
-```
-
-For a single true Unity indexed MeshRenderer run, use:
-
-```bash
-./single_unity_eval.sh mesh-splatting mipnerf360/bicycle 0 \
-  --unity "$UNITY" \
-  --unity-project unity \
-  --general-purpose \
-  --topology indexed \
-  --indexed-mesh-method-aware \
-  --output-name unity_indexed_mesh_method_aware
 ```
 
 For true exported soup assets, use a separate asset subdirectory:

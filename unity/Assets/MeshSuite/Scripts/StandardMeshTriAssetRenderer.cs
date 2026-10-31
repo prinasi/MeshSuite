@@ -1,17 +1,14 @@
 using System;
 using System.Collections;
 using System.IO;
-using System.Text.RegularExpressions;
 using UnityEngine;
 using UnityEngine.Rendering;
 
 namespace MeshSuite.UnityNative
 {
     /// <summary>
-    /// Unity MeshRenderer deployment path: by default this is a method-agnostic
-    /// indexed Mesh baseline with baked DC vertex color; with
-    /// -indexed-mesh-method-aware for MeshSplatting it keeps the real Unity
-    /// indexed Mesh draw while evaluating the learned SH appearance in shader.
+    /// Unity MeshRenderer deployment path: a method-agnostic indexed Mesh
+    /// baseline with baked DC vertex color.
     /// </summary>
     public sealed class StandardMeshTriAssetRenderer : TriAssetRenderer
     {
@@ -22,9 +19,6 @@ namespace MeshSuite.UnityNative
 
         Mesh mesh;
         Material material;
-        ComputeBuffer shDcBuffer, shRestBuffer;
-        bool indexedMeshMethodAware, rawCode = true;
-        int activeShDegree;
         MeshFilter meshFilter;
         MeshRenderer meshRenderer;
         bool ready;
@@ -51,14 +45,6 @@ namespace MeshSuite.UnityNative
             string positionsPath = Path.Combine(buffers, "positions.bin");
             string indicesPath = Path.Combine(buffers, "indices.bin");
             string dcPath = Path.Combine(buffers, "sh_dc.bin");
-            string restPath = Path.Combine(buffers, "sh_rest.bin");
-            string manifestPath = Path.Combine(AssetDirectory ?? "", "manifest.json");
-            activeShDegree = File.Exists(manifestPath) ? ReadInt(File.ReadAllText(manifestPath), "active_sh_degree", 0) : 0;
-            if (indexedMeshMethodAware && (!File.Exists(dcPath) || !File.Exists(restPath)))
-            {
-                Fail("Indexed MeshSplatting method-aware renderer requires sh_dc and sh_rest buffers.");
-                yield break;
-            }
             if (!File.Exists(positionsPath) || !File.Exists(indicesPath))
             {
                 Fail("Standard Mesh baseline requires positions and indices buffers.");
@@ -77,14 +63,14 @@ namespace MeshSuite.UnityNative
             if (indices.Length % 3 != 0) { Fail("indices.bin is not triangle data."); yield break; }
             int triangleCount = indices.Length / 3;
 
-            status = indexedMeshMethodAware ? "Preparing method-aware indexed MeshSplatting mesh" : (File.Exists(dcPath) ? "Baking SH DC to standard vertex RGB" : "No standard color field; using default white material");
+            status = File.Exists(dcPath) ? "Baking SH DC to standard vertex RGB" : "No standard color field; using default white material";
             yield return null;
             Vector3[] vertices = new Vector3[vertexCount];
-            Color32[] colors = indexedMeshMethodAware ? null : new Color32[vertexCount];
+            Color32[] colors = new Color32[vertexCount];
             const float c0 = 0.28209479177387814f;
             for (int i = 0, p = 0; i < vertexCount; ++i, p += 3)
                 vertices[i] = new Vector3(positions[p], positions[p + 1], positions[p + 2]);
-            if (!indexedMeshMethodAware && File.Exists(dcPath))
+            if (File.Exists(dcPath))
             {
                 float[] dc = ReadFloatArray(dcPath);
                 if (dc.Length == vertexCount * 3)
@@ -105,7 +91,7 @@ namespace MeshSuite.UnityNative
                 else { Fail("sh_dc.bin is neither per-vertex nor per-triangle RGB data."); yield break; }
                 dc = null;
             }
-            else if (!indexedMeshMethodAware)
+            else
                 for (int i = 0; i < vertexCount; ++i) colors[i] = new Color32(255, 255, 255, 255);
             positions = null;
             GC.Collect();
@@ -143,21 +129,10 @@ namespace MeshSuite.UnityNative
             indices = null;
             GC.Collect();
 
-            string shaderName = indexedMeshMethodAware ? "MeshSuite/MeshSplatIndexedMesh" : "MeshSuite/StandardVertexColorRaw";
-            VertexColorShader = indexedMeshMethodAware ? (Resources.Load<Shader>("MeshSplatIndexedMesh") ?? Shader.Find(shaderName)) : (VertexColorShader != null ? VertexColorShader : Shader.Find(shaderName));
+            const string shaderName = "MeshSuite/StandardVertexColorRaw";
+            VertexColorShader = VertexColorShader != null ? VertexColorShader : Shader.Find(shaderName);
             if (VertexColorShader == null) { Fail(shaderName + " shader was not found."); yield break; }
             material = new Material(VertexColorShader) { hideFlags = HideFlags.HideAndDontSave };
-            if (indexedMeshMethodAware)
-            {
-                shDcBuffer = Upload(ReadFloatArray(dcPath));
-                shRestBuffer = Upload(ReadFloatArray(restPath));
-                material.SetBuffer("_ShDc", shDcBuffer);
-                material.SetBuffer("_ShRest", shRestBuffer);
-                material.SetInt("_ShDegree", activeShDegree);
-                material.SetInt("_RawCode", rawCode ? 1 : 0);
-                material.SetVector("_CameraWorldPos", TargetCamera != null ? TargetCamera.transform.position : Vector3.zero);
-                Debug.Log("[MeshSuite] Using true indexed MeshSplatting method-aware MeshRenderer path.");
-            }
             meshFilter = GetComponent<MeshFilter>();
             if (meshFilter == null) meshFilter = gameObject.AddComponent<MeshFilter>();
             meshRenderer = GetComponent<MeshRenderer>();
@@ -169,12 +144,10 @@ namespace MeshSuite.UnityNative
             meshRenderer.lightProbeUsage = LightProbeUsage.Off;
             meshRenderer.reflectionProbeUsage = ReflectionProbeUsage.Off;
             ready = true;
-            status = $"Standard {(DeindexedSoup ? "triangle-soup" : "indexed Mesh")} ready: {vertexCount:N0} vertices, {triangleCount:N0} triangles" + (indexedMeshMethodAware ? "; full SH indexed MeshSplatting shader" : (File.Exists(dcPath) ? "; DC vertex color" : "; default white (no standard appearance field)"));
+            status = $"Standard {(DeindexedSoup ? "triangle-soup" : "indexed Mesh")} ready: {vertexCount:N0} vertices, {triangleCount:N0} triangles" + (File.Exists(dcPath) ? "; DC vertex color" : "; default white (no standard appearance field)");
             Debug.Log("[MeshSuite] " + status);
         }
 
-        static int ReadInt(string json, string key, int fallback) { Match m=Regex.Match(json,"\\\""+key+"\\\"\\s*:\\s*(\\d+)"); return m.Success && Int32.TryParse(m.Groups[1].Value,out int v) ? v : fallback; }
-        static ComputeBuffer Upload(Array values) { ComputeBuffer b=new ComputeBuffer(values.Length,4,ComputeBufferType.Raw); b.SetData(values); return b; }
         static byte ToByte(float value) => (byte)Mathf.Clamp(Mathf.RoundToInt(Mathf.Clamp01(value) * 255f), 0, 255);
         static Color32 DcColor(float[] dc, int offset, float c0) => new Color32(ToByte(c0 * dc[offset] + 0.5f), ToByte(c0 * dc[offset + 1] + 0.5f), ToByte(c0 * dc[offset + 2] + 0.5f), 255);
 
@@ -224,10 +197,6 @@ namespace MeshSuite.UnityNative
             if (meshFilter != null) meshFilter.sharedMesh = null;
             if (meshRenderer != null) meshRenderer.sharedMaterial = null;
             if (mesh != null) Destroy(mesh);
-            shDcBuffer?.Release();
-            shRestBuffer?.Release();
-            shDcBuffer = null;
-            shRestBuffer = null;
             if (material != null) Destroy(material);
         }
     }

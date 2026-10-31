@@ -29,7 +29,6 @@ OUTPUT_NAME="unity_method_aware"
 OUTPUT_NAME_EXPLICIT=0
 CONDITION="method-aware"
 TOPOLOGY="indexed"
-INDEXED_MESH_METHOD_AWARE=0
 REPORT_DIR=""
 REPORT_DIR_EXPLICIT=0
 NATIVE_RENDER_SUBDIR="renders/test/renders"
@@ -104,8 +103,6 @@ Options:
   --general-purpose        Use ordinary Unity Mesh baseline
                            (automatically switches output/report naming unless overridden)
   --topology T             Mesh layout for Unity renderer: indexed/mesh or soup (default: ${TOPOLOGY})
-  --indexed-mesh-method-aware
-                           With --general-purpose mesh-splatting, use Unity indexed MeshRenderer plus method-aware SH shader
   --profile-runs N         Independent profile runs per scene (default: ${PROFILE_RUNS})
   --profile-views N        Views per profile run (default: ${PROFILE_VIEWS})
   --profile-warmup N       Warmup frames per profiled view (default: ${PROFILE_WARMUP})
@@ -477,7 +474,6 @@ while [[ "$#" -gt 0 ]]; do
         --method-aware|--method_aware|--method-specific|--method_specific) CONDITION="method-aware"; shift ;;
         --general-purpose|--general_purpose|--standard-mesh|--standard_mesh) CONDITION="general-purpose"; shift ;;
         --topology|--mesh-topology|--mesh_topology) require_value "$@"; TOPOLOGY="$2"; shift 2 ;;
-        --indexed-mesh-method-aware|--indexed_mesh_method_aware) INDEXED_MESH_METHOD_AWARE=1; shift ;;
         --profile-runs|--profile_runs) require_value "$@"; PROFILE_RUNS="$2"; shift 2 ;;
         --profile-views|--profile_views) require_value "$@"; PROFILE_VIEWS="$2"; shift 2 ;;
         --profile-warmup|--profile_warmup) require_value "$@"; PROFILE_WARMUP="$2"; shift 2 ;;
@@ -661,15 +657,6 @@ if [[ "${SKIP_PROFILE}" -eq 0 && "${PROFILE_RUNTIME}" == "player" ]]; then
         PLAYER_REBUILD_REASON="MeshSplatting shader-level soup topology"
         PLAYER_REBUILD_SOURCES+=("${UNITY_ASSETS_DIR}/Scripts/MethodSpecificSplatRenderer.cs")
     fi
-    if [[ "${METHOD_ID}" == "mesh-splatting" && "${INDEXED_MESH_METHOD_AWARE}" -eq 1 && "${SKIP_PLAYER_BUILD}" -eq 0 ]]; then
-        REQUIRES_CURRENT_PLAYER_BUILD=1
-        PLAYER_REBUILD_REASON="MeshSplatting indexed MeshRenderer path"
-        PLAYER_REBUILD_SOURCES+=(
-            "${UNITY_ASSETS_DIR}/Scripts/StandardMeshTriAssetRenderer.cs"
-            "${UNITY_ASSETS_DIR}/Shaders/MeshSplatIndexedMesh.shader"
-            "${UNITY_ASSETS_DIR}/Resources/MeshSplatIndexedMesh.shader"
-        )
-    fi
     if [[ -n "${UNITY_PLAYER_BIN}" ]]; then
         UNITY_PLAYER_BIN="$(abs_path "${UNITY_PLAYER_BIN}")"
     else
@@ -801,7 +788,6 @@ for target in "${EXPANDED_TARGETS[@]}"; do
                 --topology "${TOPOLOGY}"
                 --log-name "unity_editor.log"
                 "${CONDITION_ARG}")
-            [[ "${INDEXED_MESH_METHOD_AWARE}" -eq 1 ]] && CAPTURE_CMD+=(--indexed-mesh-method-aware)
             if ! run_command "${LABEL}:capture" "${CAPTURE_CMD[@]}"; then
                 if handle_failure "${LABEL}" "Unity capture failed"; then continue; fi
                 break
@@ -834,7 +820,6 @@ for target in "${EXPANDED_TARGETS[@]}"; do
                         --require-gpu-timing
                         --gpu-timing-min-fraction "${GPU_TIMING_MIN_FRACTION}"
                         "${CONDITION_ARG}")
-                    [[ "${INDEXED_MESH_METHOD_AWARE}" -eq 1 ]] && PROFILE_CMD+=(--indexed-mesh-method-aware)
                     [[ -n "${UNITY_DISPLAY}" ]] && PROFILE_CMD+=(--display "${UNITY_DISPLAY}")
                     [[ "${PLAYER_BATCHMODE}" -eq 1 ]] && PROFILE_CMD+=(--batchmode)
                     [[ "${SHOW_PLAYER_OUTPUT}" -eq 1 ]] && PROFILE_CMD+=(--show-console-output)
@@ -857,7 +842,6 @@ for target in "${EXPANDED_TARGETS[@]}"; do
                         --topology "${TOPOLOGY}"
                         --log-name "unity_profile_run_$(printf '%02d' "${run}").log"
                         "${CONDITION_ARG}")
-                    [[ "${INDEXED_MESH_METHOD_AWARE}" -eq 1 ]] && PROFILE_CMD+=(--indexed-mesh-method-aware)
                 fi
                 if ! run_command "${LABEL}:profile-${run}" "${PROFILE_CMD[@]}"; then
                     if handle_failure "${LABEL}" "Unity profile run ${run} failed"; then continue 2; fi
@@ -912,7 +896,6 @@ for target in "${EXPANDED_TARGETS[@]}"; do
             --scenes "${UNITY_SCENE_NAME}"
             --topology "${TOPOLOGY}"
             "${CONDITION_ARG}")
-        [[ "${INDEXED_MESH_METHOD_AWARE}" -eq 1 ]] && VIDEO_CMD+=(--indexed-mesh-method-aware)
         if ! run_command "${LABEL}:video" "${VIDEO_CMD[@]}"; then
             if handle_failure "${LABEL}" "Unity video rendering failed"; then continue; fi
             break

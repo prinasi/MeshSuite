@@ -114,11 +114,6 @@ def main() -> int:
         help="Unity mesh layout intervention. 'mesh' is an alias for indexed; 'soup' de-indexes shared vertices at load time.",
     )
     parser.add_argument(
-        "--indexed-mesh-method-aware",
-        action="store_true",
-        help="For mesh-splatting + --general-purpose, use a true Unity indexed MeshRenderer with method-aware SH appearance.",
-    )
-    parser.add_argument(
         "--reference-image-dir",
         help="Dataset image directory used for capture resolution and ground truth. Defaults to MipNeRF360 convention.",
     )
@@ -193,7 +188,6 @@ def main() -> int:
             "export_contract_revision": manifest.get("export_contract_revision"),
             "method": args.method,
             "renderer_condition": "general-purpose" if args.general_purpose else "method-aware",
-            "indexed_mesh_method_aware": args.indexed_mesh_method_aware,
             "mesh_topology_layout": topology_label,
             "runtime_topology_layout": args.topology,
             "method_aware_status": rendering.get("unity_method_aware_status"),
@@ -243,8 +237,6 @@ def main() -> int:
         command.extend(("-background-color", str(rendering.get("background_color", "black"))))
         if args.general_purpose:
             command.extend(("-standard-mesh", "1"))
-        if args.indexed_mesh_method_aware:
-            command.extend(("-indexed-mesh-method-aware", "1"))
         if args.method_aware:
             command.extend(("-method-specific", "1"))
         print(f"[MeshSuite] Unity scene={scene}, reference={image_dir.name}, resolution={width}x{height}", flush=True)

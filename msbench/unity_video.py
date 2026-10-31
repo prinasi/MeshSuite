@@ -604,7 +604,6 @@ def run_unity_video_for_scene(
     output_dir: Path,
     condition: str = "method-aware",
     topology: str = "indexed",
-    indexed_mesh_method_aware: bool = False,
     trajectory_path: Path | None = None,
     dataset_type: str = "auto",
     image_dir: str = "images",
@@ -735,8 +734,6 @@ def run_unity_video_for_scene(
         command.extend(("-standard-mesh", "1"))
     else:
         command.extend(("-method-specific", "1"))
-    if indexed_mesh_method_aware:
-        command.extend(("-indexed-mesh-method-aware", "1"))
     if write_frames:
         command.append("-write-frames")
 

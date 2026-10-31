@@ -58,7 +58,6 @@ def main() -> int:
     parser.add_argument("--resolution", type=int, default=1, help="Downscale factor or width.")
     parser.add_argument("--eval-every", type=int, default=8, help="Holdout stride.")
     parser.add_argument("--topology", choices=("indexed", "mesh", "soup"), default="indexed")
-    parser.add_argument("--indexed-mesh-method-aware", action="store_true")
     parser.add_argument("--write-frames", action="store_true", help="Keep rendered PNG frames alongside MP4.")
     parser.add_argument("--background-color", choices=("black", "white"), default=None)
     parser.add_argument("--force-unity", action="store_true", help="Terminate conflicting Unity processes holding project lock before launching.")
@@ -125,7 +124,6 @@ def main() -> int:
             output_dir=output_dir,
             condition=condition,
             topology="indexed" if args.topology == "mesh" else args.topology,
-            indexed_mesh_method_aware=args.indexed_mesh_method_aware,
             trajectory_path=args.trajectory,
             dataset_type=str(dataset_cfg.get("type", "auto")),
             image_dir=str(dataset_cfg.get("image_dir", args.image_dir)),
@@ -183,7 +181,6 @@ def main() -> int:
             output_dir=out_dir,
             condition=condition,
             topology="indexed" if args.topology == "mesh" else args.topology,
-            indexed_mesh_method_aware=args.indexed_mesh_method_aware,
             trajectory_path=args.trajectory,
             image_dir=ref_img_dir,
             resolution=args.resolution,
