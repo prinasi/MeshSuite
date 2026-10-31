@@ -163,6 +163,7 @@ class DeploymentAggregationTests(unittest.TestCase):
             (result / "runtime_profile_run_01.json").write_text(json.dumps({
                 "views": [{
                     "cpu_frame_samples_ms": [10.0, 20.0],
+                    "engine_frame_samples_ms": [12.0, 16.0],
                     "gpu_frame_samples_ms": [5.0, 7.0],
                 }],
                 "load_to_ready_ms": 123.0,
@@ -189,7 +190,9 @@ class DeploymentAggregationTests(unittest.TestCase):
             self.assertEqual(payload["scenes"][0]["views"], 2)
             self.assertNotIn("fps_profile_cpu_p50", payload["scenes"][0])
             self.assertNotIn("capture_fps", payload["scenes"][0])
-            self.assertAlmostEqual(payload["scenes"][0]["fps_profile_gpu_p50"], 1000.0 / 6.0)
+            # End-to-end FPS comes from wall-clock engine frame time, not GPU time.
+            self.assertAlmostEqual(payload["scenes"][0]["fps"], 1000.0 / 14.0)
+            self.assertAlmostEqual(payload["scenes"][0]["gpu_frame_p50_ms"], 6.0)
             self.assertEqual(payload["scenes"][0]["profile_gpu_samples"], 2)
             self.assertAlmostEqual(payload["scenes"][0]["rendering_memory_mib"], 2.0)
             self.assertGreater(payload["scenes"][0]["asset_memory_mib"], 0.0)

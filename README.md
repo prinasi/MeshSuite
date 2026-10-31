@@ -345,7 +345,7 @@ extension builds entirely.
 ## Unity-native Evaluation
 
 MeshSuite can export method-preserving Unity `.triasset` packages, render Unity
-test-view images for PSNR/SSIM/LPIPS, and profile GPU FPS/memory through a
+test-view images for PSNR/SSIM/LPIPS, and profile FPS, GPU latency and memory through a
 Linux standalone Development Player. The workflow is designed for completed
 config-driven runs under `outputs/{method}/{dataset}/{scene}`.
 
@@ -415,11 +415,13 @@ Image metrics are also computed against each scene's de facto renderer outputs
 The terminal summary reports:
 
 ```text
-PSNR | SSIM | LPIPS | GPU FPS | GPU P50 ms | GPU P95 ms | Render MiB | Asset MiB
+PSNR | SSIM | LPIPS | FPS | GPU P50 ms | GPU P95 ms | Alloc. MiB | Asset MiB
 ```
 
-`GPU FPS` is computed as `1000 / GPU P50 ms`. CPU/engine FPS is deliberately
-not used for paper tables.
+As in the v5 manuscript, `FPS` is end-to-end throughput including CPU processing
+and GPU rendering: `1000 /` the median wall-clock engine frame time. GPU frame
+latency (P50/P95) and renderer graphics allocations (`Alloc.`) are reported
+separately.
 
 ### Standard engine deployment
 
@@ -441,7 +443,7 @@ numbers.
 
 ### Runtime profile details
 
-By default, GPU speed is measured with the standalone Player:
+By default, FPS and GPU latency are measured with the standalone Player:
 
 ```text
 --profile-runtime player
@@ -472,7 +474,7 @@ For fast smoke tests:
   --fps-frames 12
 ```
 
-If quality images and metrics already exist and only GPU profiles need to be
+If quality images and metrics already exist and only profiles need to be
 rebuilt:
 
 ```bash

@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 
-REPORT_REVISION = 1
+REPORT_REVISION = 2
 
 
 def quantile(values: list[float], q: float) -> float | None:
@@ -104,6 +104,14 @@ def read_profiles(root: Path, expected_runs: int | None = None) -> dict[str, Any
             for value in view.get("cpu_frame_samples_ms", [])
             if finite(value) is not None
         ]
+        # Wall-clock frame-to-frame time (Time.unscaledDeltaTime): CPU processing
+        # plus GPU rendering, the v5 manuscript's end-to-end throughput.
+        engine = [
+            float(value)
+            for view in views
+            for value in view.get("engine_frame_samples_ms", [])
+            if finite(value) is not None
+        ]
         gpu = []
         for view in views:
             for raw in view.get("gpu_frame_samples_ms", []):
@@ -113,6 +121,7 @@ def read_profiles(root: Path, expected_runs: int | None = None) -> dict[str, Any
         runs.append({
             "cpu_p50_ms": quantile(cpu, 0.50),
             "cpu_p95_ms": quantile(cpu, 0.95),
+            "engine_p50_ms": quantile(engine, 0.50),
             "gpu_p50_ms": quantile(gpu, 0.50),
             "gpu_p95_ms": quantile(gpu, 0.95),
             "load_to_ready_ms": finite(payload.get("load_to_ready_ms")),
@@ -122,6 +131,7 @@ def read_profiles(root: Path, expected_runs: int | None = None) -> dict[str, Any
             "asset_memory_mib": mib(payload.get("asset_bytes")),
             "profile_views": len(views),
             "cpu_samples": len(cpu),
+            "engine_samples": len(engine),
             "gpu_samples": len(gpu),
         })
 
@@ -129,19 +139,19 @@ def read_profiles(root: Path, expected_runs: int | None = None) -> dict[str, Any
         values = [value for run in runs if (value := finite(run.get(key))) is not None]
         return median(values)
 
-    cpu_p50 = run_median("cpu_p50_ms")
-    gpu_p50 = run_median("gpu_p50_ms")
+    engine_p50 = run_median("engine_p50_ms")
     return {
         "profile_runs": len(runs),
         "profile_views_per_run": min(run["profile_views"] for run in runs),
         "profile_cpu_samples": sum(run["cpu_samples"] for run in runs),
+        "profile_engine_samples": sum(run["engine_samples"] for run in runs),
         "profile_gpu_samples": sum(run["gpu_samples"] for run in runs),
-        "cpu_frame_p50_ms": cpu_p50,
+        "cpu_frame_p50_ms": run_median("cpu_p50_ms"),
         "cpu_frame_p95_ms": run_median("cpu_p95_ms"),
-        "gpu_frame_p50_ms": gpu_p50,
+        "engine_frame_p50_ms": engine_p50,
+        "gpu_frame_p50_ms": run_median("gpu_p50_ms"),
         "gpu_frame_p95_ms": run_median("gpu_p95_ms"),
-        "fps_profile_cpu_p50": 1000.0 / cpu_p50 if cpu_p50 and cpu_p50 > 0 else None,
-        "fps_profile_gpu_p50": 1000.0 / gpu_p50 if gpu_p50 and gpu_p50 > 0 else None,
+        "fps": 1000.0 / engine_p50 if engine_p50 and engine_p50 > 0 else None,
         "load_to_ready_ms": run_median("load_to_ready_ms"),
         "rendering_memory_mib": run_median("rendering_memory_mib"),
         "unity_allocated_mib": run_median("unity_allocated_mib"),
@@ -211,7 +221,8 @@ REPORT_COLUMNS = (
     "dataset", "scene", "method", "condition", "runtime", "views",
     "psnr", "ssim", "lpips_vgg",
     "de_facto_psnr", "de_facto_ssim", "de_facto_lpips_vgg",
-    "fps_profile_gpu_p50", "gpu_frame_p50_ms", "gpu_frame_p95_ms", "profile_gpu_samples",
+    "fps", "engine_frame_p50_ms", "profile_engine_samples",
+    "gpu_frame_p50_ms", "gpu_frame_p95_ms", "profile_gpu_samples",
     "rendering_memory_mib", "unity_allocated_mib", "unity_reserved_mib",
     "asset_memory_mib", "load_to_ready_ms", "profile_runs",
 )
@@ -236,10 +247,10 @@ def write_markdown(path: Path, rows: list[dict[str, Any]], condition: str) -> No
         ("PSNR", lambda row: display(row.get("psnr"))),
         ("SSIM", lambda row: display(row.get("ssim"))),
         ("LPIPS-VGG", lambda row: display(row.get("lpips_vgg"))),
-        ("FPS (GPU P50)", lambda row: display(row.get("fps_profile_gpu_p50"), 2)),
+        ("FPS", lambda row: display(row.get("fps"), 2)),
         ("GPU P50 ms", lambda row: display(row.get("gpu_frame_p50_ms"), 3)),
         ("GPU P95 ms", lambda row: display(row.get("gpu_frame_p95_ms"), 3)),
-        ("Render Mem MiB", lambda row: display(row.get("rendering_memory_mib"), 1)),
+        ("Alloc. MiB", lambda row: display(row.get("rendering_memory_mib"), 1)),
         ("Asset MiB", lambda row: display(row.get("asset_memory_mib"), 1)),
         ("Load ms", lambda row: display(row.get("load_to_ready_ms"), 1)),
     )
@@ -261,8 +272,8 @@ def print_summary(rows: list[dict[str, Any]], condition: str) -> None:
     print(setting_label(condition))
     header = (
         f"{'Dataset/Scene':<26} {'PSNR':>9} {'SSIM':>9} {'LPIPS':>9} "
-        f"{'GPU FPS':>10} {'GPU P50 ms':>11} {'GPU P95 ms':>11} "
-        f"{'Render MiB':>12} {'Asset MiB':>10}"
+        f"{'FPS':>10} {'GPU P50 ms':>11} {'GPU P95 ms':>11} "
+        f"{'Alloc. MiB':>12} {'Asset MiB':>10}"
     )
     print(header)
     print("-" * len(header))
@@ -270,7 +281,7 @@ def print_summary(rows: list[dict[str, Any]], condition: str) -> None:
         label = f"{row['dataset']}/{row['scene']}"
         print(
             f"{label:<26} {display(row.get('psnr')):>9} {display(row.get('ssim')):>9} "
-            f"{display(row.get('lpips_vgg')):>9} {display(row.get('fps_profile_gpu_p50'), 2):>10} "
+            f"{display(row.get('lpips_vgg')):>9} {display(row.get('fps'), 2):>10} "
             f"{display(row.get('gpu_frame_p50_ms'), 3):>11} "
             f"{display(row.get('gpu_frame_p95_ms'), 3):>11} "
             f"{display(row.get('rendering_memory_mib'), 1):>12} {display(row.get('asset_memory_mib'), 1):>10}"
@@ -319,9 +330,10 @@ def main() -> int:
             "condition": args.condition,
             "runtime": args.runtime,
             "quality": "raw RGB code values; Gaussian SSIM; full-frame LPIPS-VGG",
-            "fps_profile": "1000 / median per-run pooled GPU P50 frame time; no image readback or file I/O; N/A when Unity reports no GPU frame timings",
+            "fps": "end-to-end throughput as in the v5 manuscript: 1000 / median per-run pooled engine frame time (Time.unscaledDeltaTime; CPU processing plus GPU rendering); no image readback or file I/O",
+            "gpu_latency": "median per-run pooled GPU P50/P95 frame time from FrameTimingManager; N/A when Unity reports no GPU frame timings",
             "capture_fps": "computed internally from engine frame time during capture but excluded from paper report columns",
-            "rendering_memory": "median Unity Profiler graphics-driver allocated bytes across profile runs",
+            "rendering_memory": "Alloc.: median Unity Profiler graphics-driver allocated bytes across profile runs",
             "asset_memory": "serialized TriAsset directory bytes",
             "aggregate": "macro mean of scene metrics; views are summed",
         },
