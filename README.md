@@ -1,6 +1,6 @@
 <!-- @format -->
 
-# MeshSuite: A Unified Benchmark for Triangle-Based Neural Rendering
+# MeshSuite: A Unified Benchmark for Triangle- and Mesh-Based Neural Rendering
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![arXiv](https://img.shields.io/badge/arXiv-2609.01306-b31b1b.svg)](https://arxiv.org/abs/2609.01306)
@@ -719,8 +719,8 @@ MeshSuite/
 If you find this benchmark, codebase, or results helpful in your research, please cite our paper:
 
 ```bibtex
-@misc{zhang2026meshsuiteunifiedbenchmarktrianglebased,
-      title={MeshSuite: A Unified Benchmark for Triangle-Based Neural Rendering}, 
+@misc{zhang2026meshsuiteunifiedbenchmarktriangle,
+      title={MeshSuite: A Unified Benchmark for Triangle- and Mesh-Based Neural Rendering}, 
       author={Kaixuan Zhang and Minxian Li and Mingwu Ren and Xiatian Zhu},
       year={2026},
       eprint={2609.01306},
