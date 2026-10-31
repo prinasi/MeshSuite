@@ -21,7 +21,7 @@ from PIL import Image
 from msbench.unity_assets import (
     _d2ts_gamma_vertex_rescale,
     _deployment_background_color,
-    _general_purpose_contract,
+    _standard_engine_contract,
     _mesh_splatting_opacity_floor,
     export_triasset,
     mesh_splatting_triangle_opacity,
@@ -82,7 +82,7 @@ class MeshOpacityTests(unittest.TestCase):
 
             package = export_triasset("mesh-splatting", checkpoint, root / "scene")
             manifest = json.loads(package.manifest_path.read_text())
-            self.assertEqual(manifest["export_contract_revision"], 2)
+            self.assertEqual(manifest["export_contract_revision"], 3)
             spec = manifest["buffers"]["triangle_opacity"]
             values = torch.from_file(
                 str(package.path / spec["file"]), dtype=torch.float32, size=2
@@ -221,7 +221,7 @@ class DeploymentContractTests(unittest.TestCase):
             manifest = json.loads(
                 (work / "scene.triasset/manifest.json").read_text()
             )
-            self.assertEqual(manifest["export_contract_revision"], 2)
+            self.assertEqual(manifest["export_contract_revision"], 3)
 
     def test_background_defaults_and_override_are_deterministic(self) -> None:
         self.assertEqual(_deployment_background_color("2dts", None), "white")
@@ -230,11 +230,11 @@ class DeploymentContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             _deployment_background_color("2dts", "random")
 
-    def test_diffsoup_refuses_white_mesh_as_general_purpose_result(self) -> None:
-        contract = _general_purpose_contract("diffsoup")
+    def test_diffsoup_refuses_white_mesh_as_standard_engine_result(self) -> None:
+        contract = _standard_engine_contract("diffsoup")
         self.assertFalse(contract["supported"])
         self.assertIn("texture", contract["reason"])
-        self.assertTrue(_general_purpose_contract("mesh-splatting")["supported"])
+        self.assertTrue(_standard_engine_contract("mesh-splatting")["supported"])
 
 
 def _write_legacy_capture_fixture(project: Path) -> tuple[Path, Path, Path, Path, Path]:

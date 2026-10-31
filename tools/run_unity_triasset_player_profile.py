@@ -496,11 +496,11 @@ def main() -> int:
         manifest_path = triasset / "manifest.json"
         manifest = json.loads(manifest_path.read_text())
         rendering = manifest["rendering"]
-        general = rendering.get("general_purpose", {})
-        if args.standard_engine and not general.get("supported", False):
+        standard = rendering.get("standard_engine", {})
+        if args.standard_engine and not standard.get("supported", False):
             raise RuntimeError(
                 f"{args.method}/{scene} cannot enter standard engine deployment: "
-                f"{general.get('reason', 'manifest does not declare a comparable appearance field')}"
+                f"{standard.get('reason', 'manifest does not declare a comparable appearance field')}"
             )
         if not (dataset / "sparse/0/cameras.bin").is_file() or not (dataset / "sparse/0/images.bin").is_file():
             raise FileNotFoundError(f"missing COLMAP sparse binaries: {dataset}")

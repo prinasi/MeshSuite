@@ -49,7 +49,7 @@ def validate_triasset(
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if manifest.get("schema_version") != "1.0":
         raise ValueError(f"unsupported schema_version {manifest.get('schema_version')!r}")
-    if int(manifest.get("export_contract_revision", 0)) < 2:
+    if int(manifest.get("export_contract_revision", 0)) < 3:
         raise ValueError("stale export contract revision; re-export with the current MeshSuite exporter")
 
     buffers = _buffers(manifest)
@@ -84,13 +84,13 @@ def validate_triasset(
         raise ValueError("manifest must declare the Unity method-aware per-camera sorting requirement")
     if not isinstance(rendering.get("unity_method_aware_status"), str):
         raise ValueError("manifest must declare unity_method_aware_status")
-    general = rendering.get("general_purpose")
-    if not isinstance(general, dict) or not isinstance(general.get("supported"), bool):
-        raise ValueError("manifest must declare general_purpose.supported")
-    if general["supported"] and "sh_dc" not in buffers:
-        raise ValueError("general-purpose SH-DC condition requires the sh_dc buffer")
-    if manifest.get("method") == "diffsoup" and general["supported"]:
-        raise ValueError("DiffSoup general-purpose rendering requires an explicit appearance bake")
+    standard = rendering.get("standard_engine")
+    if not isinstance(standard, dict) or not isinstance(standard.get("supported"), bool):
+        raise ValueError("manifest must declare standard_engine.supported")
+    if standard["supported"] and "sh_dc" not in buffers:
+        raise ValueError("standard engine deployment SH-DC appearance requires the sh_dc buffer")
+    if manifest.get("method") == "diffsoup" and standard["supported"]:
+        raise ValueError("DiffSoup standard engine deployment requires an explicit appearance bake")
     if manifest.get("method") == "mesh-splatting":
         for required in ("indices", "vertex_weight_logits", "triangle_opacity"):
             if required not in buffers:

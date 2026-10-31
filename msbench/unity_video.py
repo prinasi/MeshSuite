@@ -662,11 +662,11 @@ def run_unity_video_for_scene(
 
     manifest = json.loads(manifest_path.read_text())
     rendering = manifest.get("rendering", {})
-    general = rendering.get("general_purpose", {})
-    if condition == "standard-engine" and not general.get("supported", False):
+    standard = rendering.get("standard_engine", {})
+    if condition == "standard-engine" and not standard.get("supported", False):
         raise RuntimeError(
             f"{method} cannot enter standard engine deployment video rendering: "
-            f"{general.get('reason', 'manifest does not declare a comparable appearance field')}"
+            f"{standard.get('reason', 'manifest does not declare a comparable appearance field')}"
         )
 
     if background_color is None:

@@ -52,11 +52,11 @@ def main() -> int:
         validate_triasset(asset, max_faces=10000)
         import json
         manifest = json.loads((asset / "manifest.json").read_text())
-        general = manifest["rendering"].get("general_purpose", {})
-        if args.condition == "standard-engine" and not general.get("supported", False):
+        standard = manifest["rendering"].get("standard_engine", {})
+        if args.condition == "standard-engine" and not standard.get("supported", False):
             raise RuntimeError(
                 f"{method}/{scene} has no fair standard engine deployment appearance contract: "
-                f"{general.get('reason', 'unsupported')}"
+                f"{standard.get('reason', 'unsupported')}"
             )
         image_dir = args.reference_image_dir or reference_image_directory(scene, method)
         command = [

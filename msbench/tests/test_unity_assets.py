@@ -83,13 +83,13 @@ def test_triangle_splatting_export_keeps_renderer_inputs(tmp_path: Path):
     manifest = json.loads(package.manifest_path.read_text())
 
     assert package.path.name == "scene.triasset"
-    assert manifest["export_contract_revision"] == 2
+    assert manifest["export_contract_revision"] == 3
     assert manifest["rendering"]["renderer"] == "triangle-splatting"
     assert manifest["rendering"]["generic_mesh_equivalent"] is False
     assert manifest["rendering"]["background_color"] == "black"
     assert manifest["rendering"]["unity_profile_name"] == "method-aware"
     assert manifest["rendering"]["cuda_equivalent"] is False
-    assert manifest["rendering"]["general_purpose"]["supported"] is True
+    assert manifest["rendering"]["standard_engine"]["supported"] is True
     assert manifest["buffers"]["positions"]["shape"] == [6, 3]
     assert manifest["buffers"]["opacity_logits"]["semantic"] == "per-triangle opacity logits"
     assert manifest["buffers"]["sigma_logits"]["shape"] == [2, 1]
@@ -155,8 +155,8 @@ def test_diffsoup_export_keeps_neural_features_and_mlp(tmp_path: Path):
     assert set(manifest["rendering"]["color_mlp_buffers"]) == {
         "mlp.0.weight", "mlp.0.bias", "mlp.4.weight", "mlp.4.bias"
     }
-    assert manifest["rendering"]["general_purpose"]["supported"] is False
-    assert "texture" in manifest["rendering"]["general_purpose"]["reason"]
+    assert manifest["rendering"]["standard_engine"]["supported"] is False
+    assert "texture" in manifest["rendering"]["standard_engine"]["reason"]
 
 
 def test_export_unity_cli_writes_feature_preserving_package(tmp_path: Path):

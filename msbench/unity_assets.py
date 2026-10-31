@@ -23,7 +23,7 @@ import torch
 
 
 SCHEMA_VERSION = "1.0"
-EXPORT_CONTRACT_REVISION = 2
+EXPORT_CONTRACT_REVISION = 3
 PACKAGE_SUFFIX = ".triasset"
 
 
@@ -192,7 +192,7 @@ def export_triasset(
                 "unity_profile_name": "method-aware",
                 "cuda_equivalent": False,
                 "background_color": background_color,
-                "general_purpose": _general_purpose_contract(method),
+                "standard_engine": _standard_engine_contract(method),
                 **renderer,
             },
             "buffers": {name: spec.to_dict() for name, spec in writer.buffers.items()},
@@ -536,11 +536,12 @@ def _deployment_background_color(method: str, value: str | None) -> str:
     return normalized
 
 
-def _general_purpose_contract(method: str) -> dict[str, Any]:
-    """Describe whether a fair ordinary Unity Mesh condition can be constructed.
+def _standard_engine_contract(method: str) -> dict[str, Any]:
+    """Describe whether a fair standard engine deployment can be constructed.
 
+    Standard engine deployment renders an opaque vertex-coloured Unity Mesh.
     DiffSoup has no SH-DC/vertex-colour field. Rendering it as a white mesh is an
-    import diagnostic, not a comparable general-purpose appearance condition.
+    import diagnostic, not a comparable standard engine deployment appearance.
     """
 
     if method == "diffsoup":
