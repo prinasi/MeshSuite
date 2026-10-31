@@ -433,33 +433,6 @@ done
 Methods whose exported manifest does not declare a comparable general-purpose
 appearance are rejected instead of producing misleading numbers.
 
-### MeshSplatting topology ablation
-
-To isolate the value of MeshSplatting's shared-vertex topology, run
-`single_unity_eval.sh` for `mesh-splatting` with a soup deployment layout
-(command below):
-
-- `materialized-soup`: exports a separate `.triasset` with per-triangle
-  duplicated positions/SH/opacity attributes and sequential soup indices. This
-  is intended for asset-memory, load-feasibility, and CG compatibility evidence.
-
-Reports are written under:
-
-```text
-outputs/unity_reports/mesh-splatting/unity_mesh_topology/materialized_soup/
-```
-
-For true exported soup assets, use a separate asset subdirectory:
-
-```bash
-./single_unity_eval.sh mesh-splatting mipnerf360/bicycle 0 \
-  --unity "$UNITY" \
-  --unity-project unity \
-  --asset-subdir unity_native_materialized_soup \
-  --export-topology soup \
-  --output-name unity_method_aware_materialized_soup
-```
-
 ### Runtime profile details
 
 By default, GPU speed is measured with the standalone Player:

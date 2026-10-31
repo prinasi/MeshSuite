@@ -9,7 +9,6 @@ cd "${REPO_ROOT}"
 
 CONFIG_ROOT="configs"
 ASSET_SUBDIR="unity_native"
-EXPORT_TOPOLOGY="indexed"
 METHOD=""
 GPU_ID=""
 UNITY_BIN="${UNITY:-}"
@@ -95,7 +94,6 @@ Options:
   --datasets-root PATH     Override all dataset roots with PATH/<scene>
   --config-root PATH       Config root (default: ${CONFIG_ROOT})
   --asset-subdir NAME      Per-run asset directory (default: ${ASSET_SUBDIR})
-  --export-topology T      MeshSplatting export layout: indexed/mesh or soup/materialized-soup (default: ${EXPORT_TOPOLOGY})
   --output-name NAME       Unity output folder under each scene output.dir
                            (default: unity_method_aware or unity_general_purpose by condition)
   --method-aware           Use method-aware Unity renderer (default)
@@ -466,7 +464,6 @@ while [[ "$#" -gt 0 ]]; do
         --datasets-root|--datasets_root) require_value "$@"; DATASETS_ROOT_OVERRIDE="$2"; shift 2 ;;
         --config-root|--config_root) require_value "$@"; CONFIG_ROOT="$2"; shift 2 ;;
         --asset-subdir|--asset_subdir|--output-subdir|--output_subdir) require_value "$@"; ASSET_SUBDIR="$2"; shift 2 ;;
-        --export-topology|--export_topology) require_value "$@"; EXPORT_TOPOLOGY="$2"; shift 2 ;;
         --output-name|--output_name) require_value "$@"; OUTPUT_NAME="$2"; OUTPUT_NAME_EXPLICIT=1; shift 2 ;;
         --method) require_value "$@"; METHOD="$2"; shift 2 ;;
         --method-aware|--method_aware|--method-specific|--method_specific) CONDITION="method-aware"; shift ;;
@@ -530,17 +527,6 @@ fi
 METHOD_ID="$(canonical_method "${METHOD}")"
 GPU_ID="$(lower "${GPU_ID}")"
 PROFILE_RUNTIME="$(lower "${PROFILE_RUNTIME}")"
-EXPORT_TOPOLOGY="$(lower "${EXPORT_TOPOLOGY}")"
-EXPORT_TOPOLOGY="${EXPORT_TOPOLOGY//_/-}"
-case "${EXPORT_TOPOLOGY}" in
-    indexed|mesh|indexed-mesh) EXPORT_TOPOLOGY="indexed" ;;
-    soup|materialized-soup|triangle-soup|deindexed|deindexed-soup) EXPORT_TOPOLOGY="soup" ;;
-    *) echo "--export-topology must be indexed/mesh or soup/materialized-soup: ${EXPORT_TOPOLOGY}" >&2; exit 1 ;;
-esac
-if [[ "${EXPORT_TOPOLOGY}" != "indexed" && "${METHOD_ID}" != "mesh-splatting" ]]; then
-    echo "--export-topology ${EXPORT_TOPOLOGY} is only supported for mesh-splatting" >&2
-    exit 1
-fi
 if [[ "${GPU_ID}" != "cpu" && ! "${GPU_ID}" =~ ^[0-9]+$ ]]; then
     echo "Invalid gpu_id: ${GPU_ID}. Expected a non-negative integer or 'cpu'." >&2
     exit 1
@@ -609,7 +595,6 @@ if [[ "${SKIP_EXPORT}" -eq 0 ]]; then
     EXPORT_CMD=("bash" "${REPO_ROOT}/single_export_unity.sh" "${METHOD_ID}")
     EXPORT_CMD+=("${EXPANDED_TARGETS[@]}" "${GPU_ID}")
     EXPORT_CMD+=(--config-root "${CONFIG_ROOT}" --output-subdir "${ASSET_SUBDIR}" --python "${PYTHON_BIN}")
-    EXPORT_CMD+=(--export-topology "${EXPORT_TOPOLOGY}")
     [[ "${FORCE_EXPORT}" -eq 1 ]] && EXPORT_CMD+=(--force)
     [[ "${CONTINUE_ON_ERROR}" -eq 1 ]] && EXPORT_CMD+=(--continue-on-error)
     [[ "${DRY_RUN}" -eq 1 ]] && EXPORT_CMD+=(--dry-run)

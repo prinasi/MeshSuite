@@ -121,7 +121,6 @@ def export_triasset(
     *,
     overwrite: bool = False,
     mesh_opacity_floor: float | None = None,
-    export_topology: str = "indexed",
     d2ts_gamma_rescale: bool | None = None,
     background_color: str | None = None,
 ) -> TriAssetPackage:
@@ -133,9 +132,6 @@ def export_triasset(
     """
 
     method = canonical_method(method)
-    export_topology = _canonical_export_topology(export_topology)
-    if export_topology != "indexed" and method != "mesh-splatting":
-        raise ValueError("--export-topology is only supported for mesh-splatting")
     background_color = _deployment_background_color(method, background_color)
     checkpoint_path = resolve_checkpoint(method, checkpoint)
     final_output_path = _package_path(output)
@@ -164,7 +160,6 @@ def export_triasset(
                 payload,
                 checkpoint_path,
                 opacity_floor_override=mesh_opacity_floor,
-                export_topology=export_topology,
             )
         elif method == "2dts":
             renderer = _export_d2ts(writer, payload, gamma_rescale_override=d2ts_gamma_rescale)
@@ -289,7 +284,6 @@ def _export_mesh_splatting(
     checkpoint_path: Path,
     *,
     opacity_floor_override: float | None = None,
-    export_topology: str = "indexed",
 ) -> dict[str, Any]:
     state = _expect_dict(state, "mesh-splatting")
     vertices = _required_tensor(state, "triangles_points", "mesh-splatting")
@@ -305,39 +299,11 @@ def _export_mesh_splatting(
     opacity_floor, source = _mesh_splatting_opacity_floor(
         state, checkpoint_path, override=opacity_floor_override
     )
-    export_topology = _canonical_export_topology(export_topology)
-    materialized_soup = export_topology == "soup"
-    if materialized_soup:
-        corner_vertices = _mesh_corner_vertex_indices(faces, vertices.shape[0])
-        corner_count = int(corner_vertices.numel())
-        writer.tensor("positions", vertices[corner_vertices], "materialized triangle-soup positions")
-        writer.tensor(
-            "indices",
-            torch.arange(corner_count, dtype=torch.int32).reshape(-1, 3),
-            "materialized triangle-soup sequential indices",
-            dtype=torch.int32,
-        )
-        writer.tensor(
-            "vertex_weight_logits",
-            vertex_weight_logits[corner_vertices],
-            "materialized per-corner opacity weight logits",
-        )
-        writer.tensor("sh_dc", sh_dc[corner_vertices], "materialized per-corner SH DC")
-        writer.tensor("sh_rest", sh_rest[corner_vertices], "materialized per-corner SH residual")
-        export_topology_label = "materialized-soup"
-        primitive_topology = "triangle-soup"
-        vertex_count = corner_count
-        topology_expansion = float(corner_count) / float(vertices.shape[0]) if int(vertices.shape[0]) > 0 else 0.0
-    else:
-        writer.tensor("positions", vertices, "indexed-mesh positions")
-        writer.tensor("indices", faces, "triangle indices", dtype=torch.int32)
-        writer.tensor("vertex_weight_logits", vertex_weight_logits, "per-vertex opacity weight logits")
-        writer.tensor("sh_dc", sh_dc, "per-vertex SH DC")
-        writer.tensor("sh_rest", sh_rest, "per-vertex SH residual")
-        export_topology_label = "indexed"
-        primitive_topology = "indexed-triangles"
-        vertex_count = int(vertices.shape[0])
-        topology_expansion = 1.0
+    writer.tensor("positions", vertices, "indexed-mesh positions")
+    writer.tensor("indices", faces, "triangle indices", dtype=torch.int32)
+    writer.tensor("vertex_weight_logits", vertex_weight_logits, "per-vertex opacity weight logits")
+    writer.tensor("sh_dc", sh_dc, "per-vertex SH DC")
+    writer.tensor("sh_rest", sh_rest, "per-vertex SH residual")
     triangle_opacity = mesh_splatting_triangle_opacity(
         vertex_weight_logits, faces, opacity_floor=opacity_floor
     )
@@ -350,11 +316,8 @@ def _export_mesh_splatting(
     terminal_solid_eligible = opacity_floor >= 0.999 and sigma <= 1e-3
     return {
         "renderer": "mesh-splatting",
-        "primitive_topology": primitive_topology,
-        "export_topology": export_topology_label,
+        "primitive_topology": "indexed-triangles",
         "source_vertex_count": int(vertices.shape[0]),
-        "exported_vertex_count": vertex_count,
-        "topology_vertex_expansion": topology_expansion,
         "primitive_count": int(faces.shape[0]),
         "opacity_activation": "opacity_floor+(1-opacity_floor)*sigmoid",
         "opacity_floor": opacity_floor,
@@ -374,24 +337,6 @@ def _export_mesh_splatting(
         ),
         "active_sh_degree": int(state.get("active_sh_degree", 0)),
     }
-
-
-def _canonical_export_topology(value: str | None) -> str:
-    normalized = (value or "indexed").strip().lower().replace("_", "-")
-    if normalized in {"indexed", "mesh", "indexed-mesh"}:
-        return "indexed"
-    if normalized in {"soup", "materialized-soup", "triangle-soup", "deindexed", "deindexed-soup"}:
-        return "soup"
-    raise ValueError("--export-topology must be indexed/mesh or soup/materialized-soup")
-
-
-def _mesh_corner_vertex_indices(faces: torch.Tensor, vertex_count: int) -> torch.Tensor:
-    indices = faces.detach().cpu().long()
-    if indices.ndim != 2 or indices.shape[1] != 3:
-        raise ValueError(f"mesh-splatting faces must be [F,3], got {tuple(indices.shape)}")
-    if indices.numel() and (int(indices.min()) < 0 or int(indices.max()) >= int(vertex_count)):
-        raise ValueError("mesh-splatting faces reference an invalid vertex")
-    return indices.reshape(-1)
 
 
 def mesh_splatting_triangle_opacity(

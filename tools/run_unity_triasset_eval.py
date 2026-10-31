@@ -156,7 +156,6 @@ def main() -> int:
         manifest_path = triasset / "manifest.json"
         manifest = json.loads(manifest_path.read_text())
         rendering = manifest["rendering"]
-        topology_label = str(rendering.get("export_topology") or "indexed")
         general = rendering.get("general_purpose", {})
         if args.general_purpose and not general.get("supported", False):
             raise RuntimeError(
@@ -180,7 +179,6 @@ def main() -> int:
             "export_contract_revision": manifest.get("export_contract_revision"),
             "method": args.method,
             "renderer_condition": "general-purpose" if args.general_purpose else "method-aware",
-            "mesh_topology_layout": topology_label,
             "method_aware_status": rendering.get("unity_method_aware_status"),
             "cuda_equivalent": False,
             "requires_per_camera_depth_sort": rendering.get("unity_method_aware_requires_per_camera_depth_sort", False),

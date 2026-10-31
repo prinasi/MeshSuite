@@ -171,7 +171,6 @@ def scene_row(
         "scene": scene,
         "method": method,
         "condition": condition,
-        "topology": protocol.get("mesh_topology_layout", "indexed"),
         "runtime": runtime,
         **read_quality(root),
         **read_capture_fps(root),
@@ -186,15 +185,13 @@ def scene_row(
 
 
 def aggregate_row(rows: list[dict[str, Any]], method: str, condition: str, runtime: str) -> dict[str, Any]:
-    excluded = {"dataset", "scene", "method", "condition", "topology", "runtime", "views"}
-    topologies = sorted({str(row.get("topology") or "indexed") for row in rows})
+    excluded = {"dataset", "scene", "method", "condition", "runtime", "views"}
     numeric_keys = sorted({key for row in rows for key in row if key not in excluded})
     result: dict[str, Any] = {
         "dataset": "ALL",
         "scene": "MEAN",
         "method": method,
         "condition": condition,
-        "topology": topologies[0] if len(topologies) == 1 else "mixed",
         "runtime": runtime,
         "views": sum(int(row.get("views") or 0) for row in rows),
     }
@@ -205,7 +202,7 @@ def aggregate_row(rows: list[dict[str, Any]], method: str, condition: str, runti
 
 
 REPORT_COLUMNS = (
-    "dataset", "scene", "method", "condition", "topology", "runtime", "views",
+    "dataset", "scene", "method", "condition", "runtime", "views",
     "psnr", "ssim", "lpips_vgg",
     "native_psnr", "native_ssim", "native_lpips_vgg",
     "fps_profile_gpu_p50", "gpu_frame_p50_ms", "gpu_frame_p95_ms", "profile_gpu_samples",
