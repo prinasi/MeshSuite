@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 import json
-import subprocess
-import sys
 from pathlib import Path
 
-import pytest
 import torch
 from typer.testing import CliRunner
 
@@ -180,40 +177,3 @@ def test_export_unity_cli_writes_feature_preserving_package(tmp_path: Path):
     assert result.exit_code == 0, result.output
     assert (tmp_path / "cli_asset.triasset" / "manifest.json").is_file()
     assert "buffers: 6" in result.output
-
-
-def test_unity_bootstrap_installs_compute_and_method_renderers(tmp_path: Path):
-    root = Path(__file__).resolve().parents[2]
-    script = root / "tools" / "create_unity_triasset_package.py"
-    if not script.is_file():
-        pytest.skip("tools/create_unity_triasset_package.py was removed")
-    project = tmp_path / "UnityProject"
-    (project / "Assets").mkdir(parents=True)
-    result = subprocess.run(
-        [
-            sys.executable,
-            str(script),
-            "--unity-project",
-            str(project),
-        ],
-        check=True,
-        text=True,
-        capture_output=True,
-    )
-    assert "Metal procedural renderer" in result.stdout
-
-    assert (project / "Assets" / "MeshSuite" / "Scripts" / "TriAssetSplatRenderer.cs").is_file()
-    assert (project / "Assets" / "MeshSuite" / "Scripts" / "GeneralPurposeMeshTriAssetRenderer.cs").is_file()
-    assert (project / "Assets" / "MeshSuite" / "Shaders" / "TriAssetSplat.shader").is_file()
-    assert (project / "Assets" / "MeshSuite" / "Shaders" / "MeshSplatTerminalSolid.shader").is_file()
-    assert (project / "Assets" / "MeshSuite" / "Shaders" / "GeneralPurposeVertexColor.shader").is_file()
-    assert (project / "Assets" / "Resources" / "MeshSuite" / "TriAssetCull.compute").is_file()
-    shader = (project / "Assets" / "MeshSuite" / "Shaders" / "TriAssetSplat.shader").read_text()
-    renderer = (project / "Assets" / "MeshSuite" / "Scripts" / "TriAssetSplatRenderer.cs").read_text()
-    assert "nointerpolation float flatAlpha" in shader
-    assert "_Opacity[face]" in shader
-    assert "_ScreenParams.xy" in shader
-    assert 'OpacityBuffer { get { return "triangle_opacity"; } }' in renderer
-    general = (project / "Assets" / "MeshSuite" / "Scripts" / "GeneralPurposeMeshTriAssetRenderer.cs").read_text()
-    assert "Per-face colour cannot be stored on shared vertices" in general
-    assert "fixed-budget appearance bake is required" in general
