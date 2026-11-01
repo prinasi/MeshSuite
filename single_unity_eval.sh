@@ -51,6 +51,7 @@ FORCE_EXPORT=0
 FORCE_CAPTURE=0
 FORCE_PROFILE=0
 FORCE_METRICS=0
+FORCE_VIDEO=0
 CONTINUE_ON_ERROR=0
 DRY_RUN=0
 REPORT_NAME="unity_metrics_report"
@@ -130,13 +131,15 @@ Options:
   --skip-capture           Do not capture Unity PNGs/FPS CSV
   --skip-profile           Do not run Unity no-I/O profiles
   --skip-metrics           Do not compute PSNR/SSIM/LPIPS
-  --video                  Render trajectory video matching msbench render video
+  --video                  Render <output-name>/video/render_traj.mp4 along the same
+                           trajectory as msbench render video (<output.dir>/video)
   --report-only            Only format already completed scene outputs
   --force                  Rebuild export/capture/profile/metrics stages
   --force-export           Re-export TriAssets
   --force-capture          Re-capture Unity images
   --force-profile          Re-run Unity profiles
   --force-metrics          Recompute image metrics
+  --force-video            Re-render the --video trajectory video
   --skip-unity-patch       Do not patch legacy Unity project for Linux/Vulkan
   --continue-on-error      Continue with later scenes after a failure
   --dry-run                Print resolved commands without running them
@@ -505,9 +508,10 @@ while [[ "$#" -gt 0 ]]; do
         --skip-metrics|--skip_metrics) SKIP_METRICS=1; shift ;;
         --video) RENDER_VIDEO=1; shift ;;
         --report-only|--report_only) SKIP_EXPORT=1; SKIP_CAPTURE=1; SKIP_PROFILE=1; SKIP_METRICS=1; shift ;;
-        --force) FORCE_EXPORT=1; FORCE_CAPTURE=1; FORCE_PROFILE=1; FORCE_METRICS=1; shift ;;
+        --force) FORCE_EXPORT=1; FORCE_CAPTURE=1; FORCE_PROFILE=1; FORCE_METRICS=1; FORCE_VIDEO=1; shift ;;
         --force-export|--force_export) FORCE_EXPORT=1; shift ;;
         --force-capture|--force_capture) FORCE_CAPTURE=1; shift ;;
+        --force-video|--force_video) FORCE_VIDEO=1; shift ;;
         --force-profile|--force_profile) FORCE_PROFILE=1; shift ;;
         --force-metrics|--force_metrics) FORCE_METRICS=1; shift ;;
         --skip-unity-patch|--skip_unity_patch) SKIP_UNITY_PATCH=1; shift ;;
@@ -838,17 +842,26 @@ for target in "${EXPANDED_TARGETS[@]}"; do
     fi
 
     if [[ "${RENDER_VIDEO}" -eq 1 ]]; then
-        VIDEO_CMD=("${PYTHON_BIN}" "tools/run_unity_triasset_video.py"
-            --unity "${UNITY_BIN}"
-            --unity-project "${UNITY_PROJECT_DIR}"
-            --datasets-root "${UNITY_DATASETS_ROOT}"
-            --outputs-root "${UNITY_OUTPUTS_ROOT}"
-            --method "${METHOD_ID}"
-            --scenes "${UNITY_SCENE_NAME}"
-            "${CONDITION_ARG}")
-        if ! run_command "${LABEL}:video" "${VIDEO_CMD[@]}"; then
-            if handle_failure "${LABEL}" "Unity video rendering failed"; then continue; fi
-            break
+        # The scene config supplies render.video (frames, fps, zoom, split) and
+        # the dataset protocol, so the trajectory is the one `msbench render
+        # video` renders natively into <output.dir>/video/render_traj.mp4.
+        VIDEO_PATH="${RESULT_DIR}/video/render_traj.mp4"
+        if [[ "${FORCE_VIDEO}" -eq 1 || ! -s "${VIDEO_PATH}" ]]; then
+            VIDEO_CMD=("${PYTHON_BIN}" "tools/run_unity_triasset_video.py"
+                --unity "${UNITY_BIN}"
+                --unity-project "${UNITY_PROJECT_DIR}"
+                --config "${CONFIG_FILE}"
+                --method "${METHOD_ID}"
+                --dataset "${DATASET_PATH}"
+                --triasset "${TRI_ASSET}"
+                --output-dir "${RESULT_DIR}/video"
+                "${CONDITION_ARG}")
+            if ! run_command "${LABEL}:video" "${VIDEO_CMD[@]}"; then
+                if handle_failure "${LABEL}" "Unity video rendering failed"; then continue; fi
+                break
+            fi
+        else
+            echo "[${LABEL}] Video complete; skipping: ${VIDEO_PATH}"
         fi
     fi
 
