@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import contextlib
 import gc
+import os
 import sys
 import time
 from pathlib import Path
@@ -152,6 +153,24 @@ def _restore_stdout():
         sys.stdout = stdout
 
 
+def use_upstream_cuda_allocator() -> None:
+    """Expandable CUDA segments, as upstream run_pipeline.py sets for every stage.
+
+    T²-Splat's topology edits reallocate multi-GB buffers; without this the
+    caching allocator fragments (Mip-NeRF 360 runs out of memory on 12 GB GPUs).
+    The environment variable covers fresh processes; the live setting covers an
+    allocator MeshSuite has already initialized (e.g. for peak-memory stats).
+    """
+    os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+    try:
+        import torch
+
+        if torch.cuda.is_available() and "expandable_segments" in os.environ["PYTORCH_CUDA_ALLOC_CONF"]:
+            torch.cuda.memory._set_allocator_settings(os.environ["PYTORCH_CUDA_ALLOC_CONF"])
+    except (ImportError, AttributeError, RuntimeError):  # pragma: no cover
+        pass
+
+
 def _release_cuda() -> None:
     gc.collect()
     try:
@@ -180,6 +199,7 @@ def run_t2splat_native_config(
             f"trainer.max_steps={max_steps} must exceed trainer.texture.iterations={texture_iterations}"
         )
 
+    use_upstream_cuda_allocator()
     model_path = Path(output_dir) / "ckpt"
     model_path.mkdir(parents=True, exist_ok=True)
     stages: list[str] = []

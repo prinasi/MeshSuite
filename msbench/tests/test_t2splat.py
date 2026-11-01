@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -176,6 +177,19 @@ def test_t2splat_runner_skips_finished_runs_and_reuses_stage_one(tmp_path, monke
     with pytest.raises(ValueError, match="must exceed"):
         native.run_t2splat_native_config(
             trainer_cfg=trainer, dataset_root=str(tmp_path), output_dir=tmp_path, max_steps=5, quiet=True)
+
+
+def test_t2splat_runner_uses_upstream_cuda_allocator(monkeypatch):
+    import msbench.trainers.t2splat_native as native
+
+    monkeypatch.delenv("PYTORCH_CUDA_ALLOC_CONF", raising=False)
+    calls = []
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda.memory, "_set_allocator_settings", calls.append)
+    native.use_upstream_cuda_allocator()
+    # As upstream scripts/run_pipeline.py: env.setdefault(..., "expandable_segments:True").
+    assert os.environ["PYTORCH_CUDA_ALLOC_CONF"] == "expandable_segments:True"
+    assert calls == ["expandable_segments:True"]
 
 
 def test_t2splat_mesh_clean_matches_upstream_create_ply():
