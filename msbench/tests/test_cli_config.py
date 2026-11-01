@@ -21,6 +21,9 @@ from msbench.core.mesh_eval import export_adapter_mesh
 
 
 def _unified_config(path: Path) -> Path:
+    # Absolute outputs under tmp_path: the CLI writes a config snapshot to
+    # output.dir before it fails on the missing method.
+    run_dir = path / "outputs" / "missing" / "bicycle"
     config = path / "experiment.yaml"
     config.write_text(
         "dataset:\n"
@@ -33,10 +36,10 @@ def _unified_config(path: Path) -> Path:
         "  type: missing-method\n"
         "adapter:\n"
         "  type: missing-method\n"
-        "  checkpoint: outputs/missing/bicycle\n"
+        f"  checkpoint: {run_dir}\n"
         "output:\n"
-        "  dir: outputs/missing/bicycle\n"
-        "  metrics_file: outputs/missing/bicycle/metrics.json\n"
+        f"  dir: {run_dir}\n"
+        f"  metrics_file: {run_dir / 'metrics.json'}\n"
         "render:\n"
         "  split: test\n"
         "eval:\n"
