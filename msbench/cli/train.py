@@ -381,6 +381,24 @@ def _train_from_structured_config(
             typer.echo(f"Config snapshot saved to {run_output_dir / 'config.yaml'}")
         return summary
 
+    if method_name == "t2splat":
+        from msbench.trainers.t2splat_native import run_t2splat_native_config
+
+        # Upstream two-stage pipeline; checkpoints go to ckpt/point_cloud/iteration_N.
+        summary = run_with_training_stats(
+            lambda: run_t2splat_native_config(
+                trainer_cfg=trainer_cfg,
+                dataset_root=str(dataset_root),
+                output_dir=run_output_dir,
+                max_steps=max_steps,
+                quiet=quiet,
+            ),
+            run_output_dir,
+        )
+        if not quiet:
+            typer.echo(f"Config snapshot saved to {run_output_dir / 'config.yaml'}")
+        return summary
+
     if method_name == "diffsoup":
         from msbench.trainers.diffsoup_native import run_diffsoup_native_config
 
