@@ -58,6 +58,11 @@ def _latest(paths: Iterable[Path]) -> Path | None:
     return sorted(candidates, key=_numeric_suffix_key)[-1]
 
 
+# Methods whose point_cloud_state_dict.pt stores an indexed mesh
+# (``triangles_points`` + ``_triangle_indices``).
+_INDEXED_MESH_CHECKPOINT_METHODS = ("mesh-splatting", "t2splat")
+
+
 def _canonical_method(name: str) -> str:
     from msbench.renderers.backends import canonical_backend_name
 
@@ -70,7 +75,7 @@ def _resolve_checkpoint_path(method: str, checkpoint: str | Path) -> Path:
     if base.is_file():
         return base
 
-    if method == "mesh-splatting":
+    if method in _INDEXED_MESH_CHECKPOINT_METHODS:
         direct = [
             base / "point_cloud_state_dict.pt",
             base / "ckpt" / "point_cloud_state_dict.pt",
@@ -581,10 +586,10 @@ def _resolve_from_config(
         if method is None or checkpoint_value is None:
             raise ValueError("Could not resolve MeshSplatting checkpoint from config.")
         method = _canonical_method(str(method))
-        if method != "mesh-splatting":
+        if method not in _INDEXED_MESH_CHECKPOINT_METHODS:
             raise ValueError(
                 "Checkpoint connectivity loading is currently implemented for "
-                f"mesh-splatting, got {method!r}."
+                f"{', '.join(_INDEXED_MESH_CHECKPOINT_METHODS)}, got {method!r}."
             )
         resolved_checkpoint = _resolve_checkpoint_path(method, checkpoint_value)
         mesh = load_mesh_splatting_checkpoint(resolved_checkpoint)
