@@ -162,6 +162,7 @@ canonical_method() {
     case "${name}" in
         trianglesplatting) echo "triangle-splatting" ;;
         meshsplatting) echo "mesh-splatting" ;;
+        t2-splat|t2splat) echo "t2splat" ;;
         2dts|d2ts) echo "2dts" ;;
         diffsoup) echo "diffsoup" ;;
         *) echo "${name}" ;;

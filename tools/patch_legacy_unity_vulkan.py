@@ -590,10 +590,13 @@ def _patch_method_specific_camera_state(source: str) -> str:
     if not destroy_spans:
         raise ValueError("could not locate MethodSpecific OnDestroy")
     destroy_start, destroy_end = destroy_spans[0]
+    # T²-Splat's residual Mip-texture buffer exists only in current sources.
+    face_mip_release = "faceMip?.Release(); " if "ComputeBuffer positions, indices, opacity, sigma, dc, rest, faceMip;" in source else ""
     destroy_body = (
         f"        void OnDestroy() {{ {remove_helper}(); ready=false; positions?.Release(); "
         "indices?.Release(); triangleOrderBuffer?.Release(); opacity?.Release(); "
-        "sigma?.Release(); dc?.Release(); rest?.Release(); if(material!=null) Destroy(material); }\n"
+        f"sigma?.Release(); dc?.Release(); rest?.Release(); {face_mip_release}"
+        "if(material!=null) Destroy(material); }\n"
     )
     source = source[:destroy_start] + destroy_body + source[destroy_end:]
 

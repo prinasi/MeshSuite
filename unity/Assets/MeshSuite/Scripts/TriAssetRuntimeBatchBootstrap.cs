@@ -33,7 +33,7 @@ namespace MeshSuite.UnityNative
                 DiffSoupTriAssetRenderer diff = GetComponent<DiffSoupTriAssetRenderer>() ?? gameObject.AddComponent<DiffSoupTriAssetRenderer>();
                 diff.AssetDirectory = asset; diff.TargetCamera = camera; active = diff;
             }
-            else if (methodSpecific && (method == "mesh-splatting" || method == "2dts"))
+            else if (methodSpecific && (method == "mesh-splatting" || method == "t2splat" || method == "2dts"))
             {
                 if (triangle != null) triangle.enabled = false;
                 MethodSpecificSplatRenderer splat = GetComponent<MethodSpecificSplatRenderer>() ?? gameObject.AddComponent<MethodSpecificSplatRenderer>();

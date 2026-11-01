@@ -12,7 +12,7 @@ export_unity_app = typer.Typer(no_args_is_help=True)
 
 @export_unity_app.callback(invoke_without_command=True)
 def export_unity(
-    method: str = typer.Option(..., "--method", "-m", help="2dts, triangle-splatting, mesh-splatting, or diffsoup."),
+    method: str = typer.Option(..., "--method", "-m", help="2dts, triangle-splatting, mesh-splatting, t2splat, or diffsoup."),
     checkpoint: Path = typer.Option(..., "--checkpoint", "-c", exists=True, help="Checkpoint file or run directory."),
     output: Path = typer.Option(..., "--output", "-o", help="Output .triasset directory."),
     force: bool = typer.Option(False, "--force", help="Replace an existing output package."),
