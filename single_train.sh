@@ -100,6 +100,7 @@ Examples:
   bash $0 triangle-splatting nerf_synthetic/lego 0
   bash $0 triangle-splatting mipnerf360/all 0
   bash $0 triangle-splatting all 0
+  bash $0 t2splat dtu/all 0           # T²-Splat: mipnerf360, tandt and dtu only
 
 Legacy form still works:
   bash $0 garden 0 --method triangle-splatting
@@ -192,6 +193,7 @@ canonical_method() {
     case "${name}" in
         trianglesplatting) echo "triangle-splatting" ;;
         meshsplatting) echo "mesh-splatting" ;;
+        t2-splat|t2splat) echo "t2splat" ;;
         2dts|d2ts) echo "2dts" ;;
         *) echo "${name}" ;;
     esac
