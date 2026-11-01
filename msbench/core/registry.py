@@ -62,6 +62,7 @@ def _discover_plugins() -> None:
         "msbench.renderers.d2ts_adapter",
         "msbench.renderers.triangle_splatting_adapter",
         "msbench.renderers.mesh_splatting_adapter",
+        "msbench.renderers.t2splat_adapter",
         "msbench.renderers.diffsoup_adapter",
     ):
         try:

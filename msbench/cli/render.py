@@ -812,4 +812,7 @@ def _mesh_export_kwargs(cfg, mesh_cfg: dict, method: str | None = None) -> dict:
     if str(method or "").replace("_", "-") == "mesh-splatting":
         kwargs["eval_split"] = bool(mesh_cfg.get("eval_split", False))
         kwargs["render_scaling"] = int(mesh_cfg.get("render_scaling", 1))
+    if str(method or "").replace("_", "-") == "t2splat":
+        kwargs["clean"] = bool(mesh_cfg.get("clean", False))
+        kwargs["min_faces_ratio"] = float(mesh_cfg.get("min_faces_ratio", 0.01))
     return kwargs

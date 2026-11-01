@@ -74,6 +74,7 @@ exmesh = "msbench.renderers.exmesh_adapter"
 d2ts = "msbench.renderers.d2ts_adapter"
 triangle_splatting = "msbench.renderers.triangle_splatting_adapter"
 mesh_splatting = "msbench.renderers.mesh_splatting_adapter"
+t2splat = "msbench.renderers.t2splat_adapter"
 diffsoup = "msbench.renderers.diffsoup_adapter"
 
 [project.entry-points."msbench.training_methods"]

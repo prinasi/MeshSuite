@@ -520,6 +520,13 @@ def _ensure_pred_mesh_exists(
         and not _has_current_mesh_splatting_export_metadata(pred_path)
     ):
         should_export = True
+    if (
+        pred_path.exists()
+        and force_export is None
+        and method == "t2splat"
+        and not _has_current_t2splat_export_metadata(pred_path, mesh_cfg or section(cfg, "mesh"))
+    ):
+        should_export = True
     if pred_path.exists() and not should_export:
         return str(pred_path)
 
@@ -557,6 +564,21 @@ def _has_current_mesh_splatting_export_metadata(pred_path: Path) -> bool:
         export.get("method") == "mesh-splatting"
         and export.get("pipeline") == "native_tsdf"
         and int(export.get("version", 0)) >= 1
+    )
+
+
+def _has_current_t2splat_export_metadata(pred_path: Path, mesh_cfg: Mapping) -> bool:
+    from msbench.renderers.t2splat_adapter import MESH_EXPORT_VERSION
+
+    metadata_path = pred_path.with_suffix(pred_path.suffix + ".msbench.json")
+    try:
+        export = json.loads(metadata_path.read_text(encoding="utf-8"))["msbench_mesh_export"]
+    except (OSError, KeyError, TypeError, json.JSONDecodeError):
+        return False
+    return (
+        export.get("method") == "t2splat"
+        and int(export.get("version", 0)) >= MESH_EXPORT_VERSION
+        and bool(export.get("clean")) == bool(mesh_cfg.get("clean", False))
     )
 
 
