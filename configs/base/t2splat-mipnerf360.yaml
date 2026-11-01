@@ -1,0 +1,25 @@
+# @format
+
+# T²-Splat on Mip-NeRF 360: upstream configs/mipnerf360.yaml `training:` block
+# (Safe RDT "surface" backend + progressive visibility collapse) and the
+# configs/common.yaml `outdoor:` block. Indoor scenes override with the
+# `indoor:` block; upstream's update_indoor() then applies on top (--indoor).
+# The normal/depth prior weights are kept but inactive (trainer.disable_priors).
+
+trainer:
+  rdt_backend: surface
+  heartbeat_safety: true
+  topology_monitor_interval: 1000
+  visibility_pruning: progressive_collapse
+  visibility_prune_start_iter: 21000
+  visibility_prune_end_iter: 27000
+  visibility_prune_interval: 1000
+  visibility_prune_threshold_start: 0.05
+  visibility_prune_threshold_end: 0.5
+  visibility_prune_max_face_ratio: 0.02
+  # outdoor
+  lambda_normals: 0.00005
+  lambda_normals_super: 0.01
+  depth_lambda_init: 0.01
+  depth_lambda_final: 0.001
+  iteration_mesh: 7000

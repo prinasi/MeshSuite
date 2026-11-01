@@ -1,0 +1,30 @@
+# @format
+
+_base_:
+  - ../../base/mipnerf360.yaml
+  - ../../base/t2splat.yaml
+  - ../../base/t2splat-mipnerf360.yaml
+
+experiment:
+  name: t2splat_room
+
+dataset:
+  scene: room
+  image_dir: images_2
+  resolution: 1
+
+trainer:
+  max_points: 2100000
+  # Keep training images in host memory (GPU memory only; no effect on results).
+  data_device: cpu
+  # configs/common.yaml `indoor:` block; update_indoor() overrides some of it.
+  indoor: true
+  lambda_normals: 0.00004
+  lambda_normals_super: 0.01
+  depth_lambda_init: 0.0
+  depth_lambda_final: 0.0
+  iteration_mesh: 5000
+  lambda_dssim: 0.4
+  weight_lr: 0.014
+  lr_triangles_points_init: 0.0015
+  heartbeat_collapse_ratio: 0.05

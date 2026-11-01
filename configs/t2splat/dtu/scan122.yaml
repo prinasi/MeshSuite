@@ -1,0 +1,12 @@
+# @format
+
+_base_:
+  - ../../base/dtu.yaml
+  - ../../base/t2splat.yaml
+  - ../../base/t2splat-dtu.yaml
+
+experiment:
+  name: t2splat_scan122
+
+dataset:
+  scene: scan122
