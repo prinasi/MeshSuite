@@ -437,10 +437,15 @@ def training(
                 # RDT stages should share the same viewpoint for fair visual comparison.
                 _mesh_viz_save("rdt_00_before", iteration, advance_camera=False)
             with torch.no_grad():
+                # MeshSuite: effrdel's Taichi BVH allocates outside PyTorch's
+                # caching allocator; release cached blocks first, as the vendored
+                # MeshSplatting does (memory only, no numerical change).
+                torch.cuda.empty_cache()
                 rdt_debug = triangles.run_restricted_delaunay(
                     return_debug=mesh_viz_rdt_snapshots or rdt_probe,
                     backend=opt.rdt_backend, max_distance_ratio=opt.rdt_max_distance_ratio,
                     min_normal_cos=opt.rdt_min_normal_cos, min_quality=opt.rdt_min_quality)
+                torch.cuda.empty_cache()
             if rdt_probe:
                 record_topology("legacy_rdt_candidate", iteration, faces=rdt_debug["selected_faces"])
                 evaluate_views(scene, triangles, pipe, background, render, "legacy", iteration,

@@ -17,7 +17,8 @@ MeshSuite modifications (training math unchanged):
   (scene/dataset_readers.readDTUSceneInfo); ModelParams gains dtu_eval_mode and
   camera_utils ignores the RGBA alpha in DTU "full" mode, as for MeshSplatting.
 - train.py: the __main__ block is exposed as build_parser()/run_training(argv);
-  the VGG LPIPS net for in-training test reports is built lazily.
+  the VGG LPIPS net for in-training test reports is built lazily; PyTorch's
+  CUDA cache is released around RDT so effrdel's Taichi BVH can allocate.
 - train_face_texture.py: LPIPS is built lazily; alpha ground truth is composited
   with the render background as in Stage I (a no-op for RGB scenes).
 See LICENSE.md (Apache-2.0 for the T²-Splat modifications) and LICENSE_GS.md
