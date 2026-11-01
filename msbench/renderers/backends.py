@@ -121,6 +121,16 @@ BACKENDS: dict[str, BackendSpec] = {
         aliases=("meshsplatting", "mesh_splatting"),
         vendor_subdir="mesh_splatting",
     ),
+    "t2splat": BackendSpec(
+        name="t2splat",
+        package="msbench.vendor.t2splat",
+        extension_modules=(
+            "msbench.vendor._cmod.t2splat_rasterization",
+            "msbench.vendor._cmod.simple_knn",
+        ),
+        aliases=("t2-splat", "t2_splat", "t^2-splat", "t²-splat"),
+        vendor_subdir="t2splat",
+    ),
     "triangle-splatting": BackendSpec(
         name="triangle-splatting",
         package="msbench.vendor.triangle_splatting",

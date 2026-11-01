@@ -48,6 +48,13 @@ exmesh = [
     "xatlas==0.0.11",
     "nvdiffrast @ git+https://github.com/NVlabs/nvdiffrast.git@253ac4fcea7de5f396371124af597e6cc957bfae",
 ]
+# T²-Splat's restricted Delaunay (effrdel: pip install --no-build-isolation
+# ./submodules/effrdel) and its runtime-compiled Safe RDT selector.
+t2splat = [
+    "gstaichi==4.6.0",
+    "libigl==2.6.3",
+    "pybind11>=2.12",
+]
 dev = [
     "pytest>=7.0",
     "pytest-cov",
@@ -86,6 +93,8 @@ exclude = [
 
 [tool.setuptools.package-data]
 "msbench.vendor.exmesh" = ["LICENSE.md", "UPSTREAM.md"]
+"msbench.vendor.t2splat" = ["LICENSE.md", "LICENSE_GS.md", "UPSTREAM.md"]
+"msbench.vendor.t2splat.utils" = ["rdt_surface_selector.cpp"]
 
 [tool.pytest.ini_options]
 testpaths = ["msbench/tests"]
