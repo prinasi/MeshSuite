@@ -19,7 +19,8 @@
  *
  * For inquiries contact jan.held@uliege.be
  */
- 
+ #include <cstdint>
+ #include <cstddef>
  #pragma once
 
  #include <iostream>
