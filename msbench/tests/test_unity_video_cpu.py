@@ -309,5 +309,16 @@ def test_unity_eval_video_skips_existing_video_unless_forced(tmp_path: Path) -> 
     assert "[tandt/truck:video] Command:" in forced
 
 
+
+def test_wait_for_unity_project_release_outlasts_exiting_import_workers(tmp_path: Path) -> None:
+    from msbench import unity_video
+
+    worker = [(4242, "Unity -batchMode -name AssetImportWorkerHW0 -projectPath unity")]
+    states = iter([worker, worker, []])
+    with patch.object(unity_video, "find_running_unity_processes", side_effect=lambda _p: next(states)):
+        assert unity_video.wait_for_unity_project_release(tmp_path, timeout_s=5.0, poll_s=0.0) == []
+    with patch.object(unity_video, "find_running_unity_processes", return_value=worker):
+        assert unity_video.wait_for_unity_project_release(tmp_path, timeout_s=0.0, poll_s=0.0) == worker
+
 if __name__ == "__main__":
     unittest.main()

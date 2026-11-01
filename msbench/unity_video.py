@@ -244,6 +244,25 @@ def clear_stale_unity_locks(unity_project: Path) -> list[Path]:
     return removed
 
 
+def wait_for_unity_project_release(
+    unity_project: Path | None,
+    timeout_s: float = 60.0,
+    poll_s: float = 1.0,
+) -> list[tuple[int, str]]:
+    """Wait for Unity processes on ``unity_project`` to exit; return any left.
+
+    A batch Editor's AssetImportWorker children outlive it by a few seconds, so
+    back-to-back runs (e.g. both deployment conditions) would otherwise see a
+    conflict that resolves on its own.
+    """
+    deadline = time.monotonic() + max(float(timeout_s), 0.0)
+    while True:
+        running = find_running_unity_processes(unity_project)
+        if not running or time.monotonic() >= deadline:
+            return running
+        time.sleep(poll_s)
+
+
 def terminate_existing_unity_processes(unity_project: Path | None = None) -> list[int]:
     """Terminate existing Unity processes using the given project."""
     import signal
@@ -643,7 +662,7 @@ def run_unity_video_for_scene(
             time.sleep(1.0)
             clear_stale_unity_locks(unity_project)
     else:
-        conflicting = find_running_unity_processes(unity_project)
+        conflicting = wait_for_unity_project_release(unity_project)
         if conflicting:
             pids_desc = "\n".join(f"  - PID {p}: {c[:90]}..." for p, c in conflicting)
             raise RuntimeError(
