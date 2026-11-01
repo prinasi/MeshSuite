@@ -97,6 +97,17 @@ normal/depth priors. On DTU, T²-Splat's own mesh is scored after removing small
 components, as upstream `create_ply.py --clean --geometry-only` does. As in the
 paper, there are no NeRF-Synthetic configs.
 
+Reproduced results match the paper: Mip-NeRF 360 bicycle 23.95 PSNR / 0.705 SSIM
+(paper 23.96 / 0.709), Tanks & Temples truck 22.94 / 0.836 (22.91 / 0.836), and DTU
+scan24 Chamfer distance 0.54 (0.56). MeshSuite's LPIPS (VGG, inputs scaled to
+[-1, 1], as for every method) is about 0.03 higher than the paper's, which comes
+from upstream's 3DGS-style metric fed [0, 1] images: on the same renders, bicycle
+0.277 vs 0.249 and truck 0.197 vs 0.166 (paper 0.247 and 0.167).
+
+The Mip-NeRF 360 presets need a GPU with about 24 GB (bicycle peaks at 24 GB; garden
+runs out of memory on 12 GB in the restricted Delaunay step). DTU and truck fit in
+12 GB.
+
 ```bash
 pip install -e ".[t2splat]" && pip install --no-build-isolation ./submodules/effrdel
 MSBENCH_CUDA_BACKENDS=t2splat,simple-knn python setup.py build_ext --inplace
