@@ -461,8 +461,13 @@ namespace MeshSuite.UnityNative
             // reflection of the COLMAP raster basis, so carry that reflection
             // explicitly in the projection instead of mirroring pixels after
             // rendering.
+            // The horizontal focal term comes from fx, not from the aspect ratio:
+            // COLMAP pixels need not be square (fx != fy, e.g. T&T truck has
+            // fx/fy = 1.006), and the native renderers use fovX = 2 atan(W / 2fx)
+            // and fovY = 2 atan(H / 2fy) independently. Deriving fovX from fovY
+            // and the aspect would stretch the image horizontally.
             Matrix4x4 projection = camera.projectionMatrix;
-            projection.m00 = -projection.m00;
+            projection.m00 = -(float)(2.0 * intr.Fx / intr.Width);
             camera.projectionMatrix = projection;
         }
 

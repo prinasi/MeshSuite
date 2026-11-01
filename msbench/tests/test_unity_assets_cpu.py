@@ -607,5 +607,21 @@ class LegacyUnityVulkanPatchTests(unittest.TestCase):
         )
 
 
+
+def test_unity_cameras_take_the_horizontal_focal_term_from_fx() -> None:
+    """COLMAP pixels need not be square (T&T truck: fx/fy = 1.006).
+
+    The native renderers use fovX = 2 atan(W / 2fx) and fovY = 2 atan(H / 2fy)
+    independently, so Unity's m00 must be 2fx/W (negated for the COLMAP raster
+    basis), not the aspect-derived value, or frames stretch horizontally.
+    """
+    scripts = Path(__file__).resolve().parents[2] / "unity" / "Assets" / "MeshSuite" / "Scripts"
+    capture = (scripts / "ColmapBatchCapture.cs").read_text()
+    video = (scripts / "TriAssetVideoBatchCapture.cs").read_text()
+    assert "projection.m00 = -(float)(2.0 * intr.Fx / intr.Width);" in capture
+    assert "projection.m00 = -projection.m00;" not in capture
+    assert "fx = frame.intrinsics[0];" in video
+    assert "projection.m00 = fx > 0f ? -(2.0f * fx / width) : -projection.m00;" in video
+
 if __name__ == "__main__":
     unittest.main()
