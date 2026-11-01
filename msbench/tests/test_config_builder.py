@@ -519,4 +519,4 @@ def test_dtu_trains_every_method_on_all_views():
             native_cfg = yaml.safe_load((repo / native).read_text())
             assert native_cfg["dataset"]["hold_test_set"] is False, path
         methods.add(method)
-    assert {"2dts", "diffsoup", "exmesh", "mesh-splatting", "triangle-splatting"} <= methods
+    assert {"2dts", "diffsoup", "exmesh", "mesh-splatting", "t2splat", "triangle-splatting"} <= methods
