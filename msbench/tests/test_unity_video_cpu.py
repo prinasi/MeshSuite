@@ -259,5 +259,55 @@ class UnityVideoTrajectoryTests(unittest.TestCase):
         self.assertTrue((proj / "ProjectSettings").is_dir())
 
 
+def _unity_eval_video_dry_run(tmp_path: Path, *extra: str) -> str:
+    import subprocess
+    import sys
+
+    repo = Path(__file__).resolve().parents[2]
+    scene = tmp_path / "data" / "truck"
+    (scene / "sparse" / "0").mkdir(parents=True, exist_ok=True)
+    for name in ("cameras.bin", "images.bin"):
+        (scene / "sparse" / "0" / name).write_bytes(b"")
+    (scene / "images").mkdir(exist_ok=True)
+    Image.new("RGB", (4, 4)).save(scene / "images" / "000001.png")
+    config = tmp_path / "configs" / "t2splat" / "tandt" / "truck.yaml"
+    config.parent.mkdir(parents=True, exist_ok=True)
+    config.write_text(
+        f"dataset:\n  root: {scene}\n  image_dir: images\n  resolution: 1\n"
+        f"output:\n  dir: {tmp_path / 'out' / 'truck'}\n"
+    )
+    result = subprocess.run(
+        ["bash", str(repo / "single_unity_eval.sh"), "t2splat", "tandt/truck", "cpu",
+         "--config-root", str(tmp_path / "configs"), "--unity", "/bin/true",
+         "--unity-project", str(repo / "unity"), "--python", sys.executable,
+         "--video", "--skip-export", "--skip-unity-patch", "--skip-capture",
+         "--skip-profile", "--skip-metrics", "--dry-run", *extra],
+        cwd=repo, capture_output=True, text=True, check=True,
+    )
+    return result.stdout
+
+
+def test_unity_eval_video_uses_scene_config_trajectory(tmp_path: Path) -> None:
+    out = _unity_eval_video_dry_run(tmp_path, "--standard-engine")
+    video = next(line for line in out.splitlines() if line.startswith("[tandt/truck:video] Command:"))
+    # render.video settings and the dataset protocol come from the scene config,
+    # as for the native `msbench render video` into <output.dir>/video.
+    assert f"--config {tmp_path / 'configs' / 't2splat' / 'tandt' / 'truck.yaml'}" in video
+    assert f"--dataset {tmp_path / 'data' / 'truck'}" in video
+    assert f"--output-dir {tmp_path / 'out' / 'truck' / 'unity_standard_engine' / 'video'}" in video
+    assert "--standard-engine" in video
+
+
+def test_unity_eval_video_skips_existing_video_unless_forced(tmp_path: Path) -> None:
+    video = tmp_path / "out" / "truck" / "unity_custom_engine" / "video" / "render_traj.mp4"
+    video.parent.mkdir(parents=True)
+    video.write_bytes(b"mp4")
+    skipped = _unity_eval_video_dry_run(tmp_path)
+    assert "Video complete; skipping" in skipped
+    assert "[tandt/truck:video] Command:" not in skipped
+    forced = _unity_eval_video_dry_run(tmp_path, "--force-video")
+    assert "[tandt/truck:video] Command:" in forced
+
+
 if __name__ == "__main__":
     unittest.main()
