@@ -67,6 +67,8 @@ def canonical_method(method: str) -> str:
         "trianglesplatting": "triangle-splatting",
         "mesh-splatting": "mesh-splatting",
         "meshsplatting": "mesh-splatting",
+        "t2splat": "t2splat",
+        "t2-splat": "t2splat",
         "diffsoup": "diffsoup",
     }
     try:
@@ -85,7 +87,7 @@ def resolve_checkpoint(method: str, checkpoint: str | Path) -> Path:
     if not path.is_dir():
         raise FileNotFoundError(f"Checkpoint does not exist: {path}")
 
-    if method in {"triangle-splatting", "mesh-splatting"}:
+    if method in {"triangle-splatting", "mesh-splatting", "t2splat"}:
         direct = [
             path / "point_cloud_state_dict.pt",
             path / "ckpt" / "point_cloud_state_dict.pt",
@@ -161,6 +163,8 @@ def export_triasset(
                 checkpoint_path,
                 opacity_floor_override=mesh_opacity_floor,
             )
+        elif method == "t2splat":
+            renderer = _export_t2splat(writer, payload)
         elif method == "2dts":
             renderer = _export_d2ts(writer, payload, gamma_rescale_override=d2ts_gamma_rescale)
         else:
@@ -336,6 +340,121 @@ def _export_mesh_splatting(
             "opaque-terminal-solid" if terminal_solid_eligible else "portability-baseline"
         ),
         "active_sh_degree": int(state.get("active_sh_degree", 0)),
+    }
+
+
+# T²-Splat evaluates checkpoints through TriangleModel.load_parameters, which
+# fixes the opacity floor (upstream render.py and Stage II both use it).
+T2SPLAT_OPACITY_FLOOR = 0.999
+# Upstream render.py and Stage II render at 4x supersampling; the per-triangle
+# Mip LOD is computed at that resolution.
+T2SPLAT_NATIVE_RENDER_SCALING = 4
+
+
+def t2splat_mip_pyramid(face_textures: torch.Tensor) -> tuple[torch.Tensor, list[int], list[int]]:
+    """Packed residual Mip pyramid, as ``TriangleModel.build_mip_pyramid`` builds it.
+
+    Returns ``(packed [F, texels_per_face, 3], level_resolutions, level_offsets)``,
+    where offsets count texels from the start of each face's block and every
+    level is stored row-major (row = barycentric ``wC``, column = ``wB``).
+    """
+    if face_textures.ndim != 4 or face_textures.shape[1] != face_textures.shape[2] or face_textures.shape[3] != 3:
+        raise ValueError(f"T²-Splat face_textures must be [F,R,R,3], got {tuple(face_textures.shape)}")
+    levels = [face_textures.float()]
+    while levels[-1].shape[1] > 1:
+        down = torch.nn.functional.avg_pool2d(levels[-1].permute(0, 3, 1, 2), 2)
+        levels.append(down.permute(0, 2, 3, 1).contiguous())
+    resolutions = [int(level.shape[1]) for level in levels]
+    offsets = [0]
+    for res in resolutions[:-1]:
+        offsets.append(offsets[-1] + res * res)
+    faces = face_textures.shape[0]
+    packed = torch.cat([level.reshape(faces, -1, 3) for level in levels], dim=1)
+    return packed, resolutions, offsets
+
+
+def _pack_half_pairs(values: torch.Tensor) -> torch.Tensor:
+    """IEEE half floats packed little-endian as uint32 words (Unity f16tof32)."""
+    flat = values.detach().cpu().reshape(-1).to(torch.float16)
+    if flat.numel() % 2:
+        flat = torch.cat([flat, flat.new_zeros(1)])
+    halves = flat.view(torch.int16).to(torch.int32) & 0xFFFF
+    words = halves[0::2] | (halves[1::2] << 16)
+    return words.to(torch.int32)
+
+
+def _export_t2splat(writer: _PackageWriter, state: Any) -> dict[str, Any]:
+    """MeshSplatting's indexed-mesh buffers plus T²-Splat's residual Mip-textures."""
+    state = _expect_dict(state, "t2splat")
+    vertices = _required_tensor(state, "triangles_points", "t2splat")
+    faces = _required_tensor(state, "_triangle_indices", "t2splat")
+    vertex_weight_logits = _required_tensor(state, "vertex_weight", "t2splat")
+    sigma_logits = _required_value(state, "sigma", "t2splat")
+    writer.tensor("positions", vertices, "indexed-mesh positions")
+    writer.tensor("indices", faces, "triangle indices", dtype=torch.int32)
+    writer.tensor("vertex_weight_logits", vertex_weight_logits, "per-vertex opacity weight logits")
+    writer.tensor("sigma_logits", sigma_logits, "mesh splat sigma logits")
+    writer.tensor("sh_dc", _required_tensor(state, "features_dc", "t2splat"), "per-vertex SH DC")
+    writer.tensor("sh_rest", _required_tensor(state, "features_rest", "t2splat"), "per-vertex SH residual")
+    writer.tensor(
+        "triangle_opacity",
+        mesh_splatting_triangle_opacity(vertex_weight_logits, faces, opacity_floor=T2SPLAT_OPACITY_FLOOR),
+        "per-triangle activated opacity: minimum of the three activated vertex weights",
+    )
+    sigma = math.exp(_scalar_float(sigma_logits, "t2splat sigma"))
+    texture: dict[str, Any] = {"face_texture": "none"}
+    face_textures = state.get("face_textures")
+    if face_textures is not None:
+        face_textures = torch.as_tensor(face_textures).detach().float()
+        if face_textures.shape[0] != faces.shape[0]:
+            raise ValueError("t2splat face_textures must have one texture per face")
+        use_mip = bool(state.get("use_mip_texture", True))
+        if use_mip:
+            packed, resolutions, offsets = t2splat_mip_pyramid(face_textures)
+        else:
+            packed = face_textures.reshape(face_textures.shape[0], -1, 3)
+            resolutions, offsets = [int(face_textures.shape[1])], [0]
+        writer.tensor(
+            "face_mip_textures",
+            _pack_half_pairs(packed),
+            "per-face residual RGB Mip pyramid, IEEE half pairs packed in uint32 words",
+        )
+        texture = {
+            "face_texture": "residual_rgb_mip" if use_mip else "residual_rgb",
+            "face_tex_res": int(face_textures.shape[1]),
+            "face_mip_levels": len(resolutions),
+            "face_mip_resolutions": resolutions,
+            "face_mip_offsets": offsets,
+            "face_mip_texels_per_face": int(packed.shape[1]),
+            "face_mip_encoding": "float16_pairs_in_uint32",
+            "face_texture_sampling": "bilinear(wB*(R-1), wC*(R-1)); trilinear across levels",
+            "face_mip_lod": "per-triangle log2(max screen-space texel footprint) at native render scaling",
+            "native_render_scaling": T2SPLAT_NATIVE_RENDER_SCALING,
+        }
+    terminal_solid_eligible = T2SPLAT_OPACITY_FLOOR >= 0.999 and sigma <= 1e-3
+    return {
+        "renderer": "t2splat",
+        "primitive_topology": "indexed-triangles",
+        "source_vertex_count": int(vertices.shape[0]),
+        "primitive_count": int(faces.shape[0]),
+        "opacity_activation": "opacity_floor+(1-opacity_floor)*sigmoid",
+        "opacity_floor": T2SPLAT_OPACITY_FLOOR,
+        "opacity_floor_source": "t2splat_load_parameters",
+        "triangle_opacity_reduction": "min_after_activation",
+        "triangle_opacity_buffer": "triangle_opacity",
+        "sigma_activation": "exp",
+        "sigma": sigma,
+        "terminal_solid_eligible": terminal_solid_eligible,
+        "terminal_solid_condition": "opacity_floor>=0.999 and exp(sigma_logits)<=0.001",
+        "native_coverage_space": "screen_space_projected_incenter",
+        "native_compositing": "tile_depth_sorted_front_to_back",
+        "requires_per_camera_depth_sort": True,
+        "unity_method_aware_requires_per_camera_depth_sort": not terminal_solid_eligible,
+        "unity_method_aware_status": (
+            "opaque-terminal-solid" if terminal_solid_eligible else "portability-baseline"
+        ),
+        "active_sh_degree": int(state.get("active_sh_degree", 0)),
+        **texture,
     }
 
 

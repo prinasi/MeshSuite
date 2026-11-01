@@ -258,10 +258,10 @@ def _apply_max_primitive_limit(config: dict[str, Any]) -> dict[str, Any]:
                 cap_value = config[key]
                 break
 
-    # 2. Fall back to generic max_primitives (mesh-splatting is excluded;
-    #    it uses only the native max_points vertex safeguard).
+    # 2. Fall back to generic max_primitives (mesh-splatting and T²-Splat are
+    #    excluded; they use only the native max_points vertex safeguard).
     if cap_value is None:
-        if method_type in {"mesh-splatting", "mesh_splatting"}:
+        if method_type in {"mesh-splatting", "mesh_splatting", "t2splat"}:
             return config
         cap_value = trainer.get("max_primitives", config.get("max_primitives"))
 

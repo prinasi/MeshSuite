@@ -1,0 +1,17 @@
+# @format
+
+_base_:
+  - ../../base/tandt.yaml
+  - ../../base/t2splat.yaml
+  - ../../base/t2splat-tandt.yaml
+
+experiment:
+  name: t2splat_train
+
+dataset:
+  scene: train
+  resolution: 1
+
+trainer:
+  # Keep training images in host memory (GPU memory only; no effect on results).
+  data_device: cpu

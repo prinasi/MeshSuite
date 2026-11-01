@@ -9,7 +9,12 @@ import logging
 from scipy.spatial import Delaunay
 import igl
 
-def run(input_verts: np.ndarray, input_faces: np.ndarray, verbose: bool = False, orient: bool = False):
+def run(input_verts: np.ndarray,
+        input_faces: np.ndarray,
+        verbose: bool = False,
+        orient: bool = False,
+        return_debug: bool = False,
+        face_selector=None):
     """
     Run Restricted Delaunay Triangulation on the input mesh and save the result to the output path.
     
@@ -77,10 +82,27 @@ def run(input_verts: np.ndarray, input_faces: np.ndarray, verbose: bool = False,
 
     # Export result
     start_time = time.time()
-    hit_faces = faces[hit].cpu().numpy()
-    if orient:
+    faces_np = faces.detach().cpu().numpy().astype(np.int64)
+    hit_np = hit.detach().cpu().numpy().astype(bool)
+    selected_faces = faces_np[hit_np]
+    hit_faces = selected_faces.copy()
+    selector_stats = None
+    if face_selector is not None:
+        hit_faces, selector_stats = face_selector(verts, input_faces, selected_faces)
+    if orient and face_selector is None:
         hit_faces = np.array(igl.bfs_orient(hit_faces)[0])
     end_time = time.time()
     logging.info(f"[Get OUTPUT Faces] {end_time - start_time} sec | #H: {hit_faces.shape[0]}")
     
+    if return_debug:
+        debug = {
+            "input_faces": np.asarray(input_faces, dtype=np.int64),
+            "candidate_faces": faces_np,
+            "selected_faces": selected_faces,
+            "rejected_faces": faces_np[~hit_np],
+            "selector_stats": selector_stats,
+            "output_faces": hit_faces.astype(np.int64),
+        }
+        return hit_faces, debug
+
     return hit_faces

@@ -163,6 +163,7 @@ def get_ext_modules() -> list[Extension]:
 
     tri_root = CSRC_ROOT / "triangle_splatting_rasterization"
     mesh_root = CSRC_ROOT / "mesh_splatting_rasterization"
+    t2splat_root = CSRC_ROOT / "t2splat_rasterization"
     d2ts_root = CSRC_ROOT / "d2ts_rasterization"
     knn_root = CSRC_ROOT / "simple_knn"
     diffsoup_root = CSRC_ROOT / "diffsoup_core"
@@ -209,6 +210,26 @@ def get_ext_modules() -> list[Extension]:
             extra_compile_args={"nvcc": [f"-I{mesh_glm_include}", "--use_fast_math"]},
         ))
 
+    # -- T²-Splat rasterization (MeshSplatting + residual Mip-textures) --
+    if _should_build("t2splat"):
+        extensions.append(CUDAExtension(
+            name="msbench.vendor._cmod.t2splat_rasterization._C",
+            sources=_rel_sources(
+                t2splat_root,
+                [
+                    "cuda_rasterizer/rasterizer_impl.cu",
+                    "cuda_rasterizer/forward.cu",
+                    "cuda_rasterizer/backward.cu",
+                    "cuda_rasterizer/utils.cu",
+                    "cuda_rasterizer/adam.cu",
+                    "rasterize_points.cu",
+                    "ext.cpp",
+                ],
+            ),
+            # GLM is header-only; share MeshSplatting's vendored copy.
+            extra_compile_args={"nvcc": [f"-I{mesh_glm_include}", "--use_fast_math"]},
+        ))
+
     # -- 2DTS rasterization ------------------------------------------
     if _should_build("2dts"):
         extensions.append(CUDAExtension(
@@ -252,7 +273,7 @@ def get_ext_modules() -> list[Extension]:
         print(
             f"[MeshSuite] MSBENCH_CUDA_BACKENDS='{_ONLY_BACKENDS}' "
             "did not match any known backend.  Available: "
-            "triangle-splatting, mesh-splatting, 2dts, simple-knn, diffsoup"
+            "triangle-splatting, mesh-splatting, t2splat, 2dts, simple-knn, diffsoup"
         )
 
     return extensions

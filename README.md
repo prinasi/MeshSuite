@@ -27,6 +27,7 @@ MeshSuite provides a single, consistent evaluation framework for comparing diffe
 | MeshSplatting                | `MeshSplattingAdapter`     | Config/train/render/eval/profile/export support |
 | DiffSoup                     | `DiffSoupAdapter`          | Config/train/render/eval/export support; In-shader Micro-MLP support |
 | ExMesh                       | `ExMeshAdapter`            | Native training/render/eval/profile/export; DTU and NeRF-Synthetic configs; beyond the paper |
+| T²-Splat                     | `T2SplatAdapter`           | Native two-stage training/render/eval/profile/mesh export; Mip-NeRF 360, Tanks & Temples and DTU configs; beyond the paper |
 
 ### ExMesh
 
@@ -68,6 +69,51 @@ monocular depth priors from `data/dtu/<scan>/mono_priors/da3/`.
 The initialization is built automatically before training, on the same views as
 ExMesh training, and cached under `outputs/exmesh-preprocess/`. ExMesh needs the
 `exmesh` extra (`pip install -e ".[exmesh]"`).
+
+### T²-Splat
+
+[T²-Splat](https://github.com/t2-splat/T2Splat) (adaptive-topology mesh splatting
+with texture residuals, NeurIPS 2026) goes beyond the MeshSuite paper (arXiv v5),
+which does not evaluate it.
+
+T²-Splat extends MeshSplatting. Stage I optimizes a connected mesh: Safe RDT
+remeshing, Dynamic Topology Evolution (edge collapse / vertex split) and visibility
+pruning. Stage II freezes the mesh and fits residual per-face Mip-textures. The
+upstream code (commit `b1b44d1`) is vendored under `msbench/vendor/t2splat`, and its
+CUDA rasterizer is built as the `t2splat` backend.
+
+It uses the same dataset configs as every other method (for example, DTU: all
+views, 1/2 resolution, foreground on white). Its method settings reproduce the
+authors' per-scene repository presets (upstream `configs/common.yaml` and
+`configs/<dataset>.yaml`):
+
+- Mip-NeRF 360 and Tanks & Temples: 30k geometry and 5k texture iterations
+  with 8×8 Mip-textures.
+- DTU: the 20k-iteration, geometry-only per-scene best preset.
+
+`msbench/tests/test_t2splat.py` checks every scene config against the options
+that upstream's `scripts/run_pipeline.py` resolves. No method uses external
+normal/depth priors. On DTU, T²-Splat's own mesh is scored after removing small
+components, as upstream `create_ply.py --clean --geometry-only` does. As in the
+paper, there are no NeRF-Synthetic configs.
+
+Reproduced results match the paper: Mip-NeRF 360 bicycle 23.95 PSNR / 0.705 SSIM
+(paper 23.96 / 0.709), Tanks & Temples truck 22.94 / 0.836 (22.91 / 0.836), and DTU
+scan24 Chamfer distance 0.54 (0.56). MeshSuite's LPIPS (VGG, inputs scaled to
+[-1, 1], as for every method) is about 0.03 higher than the paper's, which comes
+from upstream's 3DGS-style metric fed [0, 1] images: on the same renders, bicycle
+0.277 vs 0.249 and truck 0.197 vs 0.166 (paper 0.247 and 0.167).
+
+The Mip-NeRF 360 presets need a GPU with about 24 GB (bicycle peaks at 24 GB; garden
+runs out of memory on 12 GB in the restricted Delaunay step). DTU and truck fit in
+12 GB.
+
+```bash
+pip install -e ".[t2splat]" && pip install --no-build-isolation ./submodules/effrdel
+MSBENCH_CUDA_BACKENDS=t2splat,simple-knn python setup.py build_ext --inplace
+bash single_train.sh t2splat dtu/all 0
+bash single_train.sh t2splat mipnerf360/all 0
+```
 
 ## Installation
 
@@ -142,7 +188,7 @@ MSBENCH_CUDA_BACKENDS=triangle-splatting,mesh-splatting,2dts,simple-knn pip inst
 MSBENCH_CUDA_BACKENDS=triangle-splatting,simple-knn pip install -e ".[dev]" --no-build-isolation
 ```
 
-Supported backend identifiers: `triangle-splatting`, `mesh-splatting`, `2dts`, `simple-knn`, `diffsoup`.
+Supported backend identifiers: `triangle-splatting`, `mesh-splatting`, `t2splat`, `2dts`, `simple-knn`, `diffsoup`.
 
 #### 4. Additional Build Environment Variables
 | Environment Variable | Description | Default |
@@ -644,6 +690,7 @@ The `adapter.checkpoint` template in each method base config points at `ckpt/`:
 | MeshSplatting      | `outputs/{method}/{dataset}/{scene}/ckpt/point_cloud/iteration_{max_steps}` |
 | DiffSoup           | `outputs/{method}/{dataset}/{scene}/ckpt/final_params.pt`     |
 | ExMesh             | `outputs/{method}/{dataset}/{scene}/ckpt/final.pt`             |
+| T²-Splat           | `outputs/{method}/{dataset}/{scene}/ckpt/point_cloud/iteration_{max_steps}` |
 
 
 ## Project Structure

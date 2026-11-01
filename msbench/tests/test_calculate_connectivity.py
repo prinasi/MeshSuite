@@ -139,3 +139,38 @@ def test_single_connectivity_reads_exmesh_exported_mesh(tmp_path):
     result = json.loads((out / "connectivity_metrics.json").read_text())
     assert result["counts"]["boundary_edges"] == 0
     assert result["components"]["count"] == 1
+
+
+def test_single_connectivity_reads_t2splat_checkpoint(tmp_path):
+    import torch
+
+    # T²-Splat checkpoints store the trained indexed mesh like MeshSplatting.
+    out = tmp_path / "outputs/t2splat/mipnerf360/garden"
+    ckpt = out / "ckpt/point_cloud/iteration_35000"
+    ckpt.mkdir(parents=True)
+    torch.save(
+        {
+            "triangles_points": torch.tensor([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]], dtype=torch.float32),
+            "_triangle_indices": torch.tensor([[0, 1, 2], [0, 2, 3]], dtype=torch.int32),
+        },
+        ckpt / "point_cloud_state_dict.pt",
+    )
+    config = tmp_path / "configs/t2splat/mipnerf360/garden.yaml"
+    config.parent.mkdir(parents=True)
+    config.write_text(
+        "dataset: {name: mipnerf360, scene: garden}\n"
+        "adapter: {type: t2splat, checkpoint: %s}\n"
+        "output: {dir: %s}\n" % (ckpt, out)
+    )
+
+    root = Path(__file__).resolve().parents[2]
+    subprocess.run(
+        ["bash", str(root / "single_connectivity.sh"), "T2-Splat", "mipnerf360/garden",
+         "--config_root", str(tmp_path / "configs"), "--python", sys.executable,
+         "--connectivity_script", str(root / "tools/calculate_connectivity.py")],
+        cwd=tmp_path, check=True, capture_output=True, text=True,
+    )
+    result = json.loads((out / "connectivity_metrics.json").read_text())
+    assert result["method"] == "t2splat"
+    assert result["counts"]["boundary_edges"] == 4
+    assert result["components"]["count"] == 1

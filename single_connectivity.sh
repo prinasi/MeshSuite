@@ -50,6 +50,7 @@ Examples:
   bash $0 mesh-splatting dtu/all --format markdown --summary_output connectivity_dtu.md
   bash $0 mesh-splatting all --format csv --summary_output connectivity_all.csv
   bash $0 exmesh dtu/all --format latex
+  bash $0 t2splat mipnerf360/all
 
 Options:
   --config_root PATH       Config root                              (default: ${CONFIG_ROOT})
@@ -102,6 +103,7 @@ canonical_method() {
     name="${name//_/-}"
     case "${name}" in
         meshsplatting) echo "mesh-splatting" ;;
+        t2-splat|t2splat) echo "t2splat" ;;
         *) echo "${name}" ;;
     esac
 }
@@ -503,8 +505,8 @@ fi
 
 METHOD_ID="$(canonical_method "$1")"
 shift
-if [[ "${METHOD_ID}" != "mesh-splatting" && "${METHOD_ID}" != "exmesh" ]]; then
-    echo "Currently only MeshSplatting and ExMesh connectivity are supported, got: ${METHOD_ID}" >&2
+if [[ "${METHOD_ID}" != "mesh-splatting" && "${METHOD_ID}" != "t2splat" && "${METHOD_ID}" != "exmesh" ]]; then
+    echo "Currently only MeshSplatting, T²-Splat and ExMesh connectivity are supported, got: ${METHOD_ID}" >&2
     exit 1
 fi
 

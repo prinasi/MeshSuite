@@ -1,0 +1,17 @@
+# @format
+
+_base_:
+  - ../../base/dtu.yaml
+  - ../../base/t2splat.yaml
+  - ../../base/t2splat-dtu.yaml
+
+experiment:
+  name: t2splat_scan65
+
+dataset:
+  scene: scan65
+
+trainer:
+  # Per-scene exception in upstream configs/dtu.yaml.
+  prune_triangles_threshold: 0.14
+  final_visibility_threshold: 0.5

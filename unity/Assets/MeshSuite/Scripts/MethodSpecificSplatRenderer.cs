@@ -8,7 +8,7 @@ using UnityEngine.Rendering;
 namespace MeshSuite.UnityNative
 {
     /// <summary>
-    /// Unity Metal portability renderer for mesh-splatting and 2DTS.  It binds
+    /// Unity Metal portability renderer for mesh-splatting, T²-Splat and 2DTS.  It binds
     /// their exported learned buffers and evaluates their declared appearance
     /// semantics at draw time; it is not a claim of CUDA-rasterizer equivalence.
     /// </summary>
@@ -16,11 +16,12 @@ namespace MeshSuite.UnityNative
     {
         public Camera TargetCamera;
         public Shader SplatShader;
-        ComputeBuffer positions, indices, opacity, sigma, dc, rest;
+        ComputeBuffer positions, indices, opacity, sigma, dc, rest, faceMip;
         Material material;
         CommandBuffer msBenchDrawCommands;
         Camera msBenchCommandCamera;
-        int primitiveCount, mode, activeShDegree;
+        int primitiveCount, mode, activeShDegree, faceTexRes, faceMipLevels, faceTexelsPerFace;
+        float lodPixelScale = 1f;
         float gamma = 1f, gammaVertexRescale = 1f, opacityFloor;
         bool ready, rawCode;
         string status = "Waiting to load method-specific renderer";
@@ -41,7 +42,8 @@ namespace MeshSuite.UnityNative
             string method = TriAssetRuntimeOptions.Get("-method", "");
             if (method == "mesh-splatting") mode = 1;
             else if (method == "2dts") mode = 2;
-            else { Fail("MethodSpecificSplatRenderer supports mesh-splatting and 2dts only."); yield break; }
+            else if (method == "t2splat") mode = 3;
+            else { Fail("MethodSpecificSplatRenderer supports mesh-splatting, t2splat and 2dts only."); yield break; }
             string manifest = Path.Combine(AssetDirectory ?? "", "manifest.json");
             if (!File.Exists(manifest)) { Fail("manifest.json is missing."); yield break; }
             string json = File.ReadAllText(manifest);
@@ -50,6 +52,10 @@ namespace MeshSuite.UnityNative
             gamma = ReadFloat(json, "gamma", 1f);
             gammaVertexRescale = ReadFloat(json, "gamma_vertex_rescale", 1f);
             opacityFloor = Mathf.Clamp01(ReadFloat(json, "opacity_floor", 0f));
+            faceTexRes = ReadInt(json, "face_tex_res", 0);
+            faceMipLevels = ReadInt(json, "face_mip_levels", 0);
+            faceTexelsPerFace = ReadInt(json, "face_mip_texels_per_face", 0);
+            lodPixelScale = ReadFloat(json, "native_render_scaling", 1f);
             if (primitiveCount <= 0) { Fail("Invalid primitive_count."); yield break; }
             string b = Path.Combine(AssetDirectory, "buffers");
             status = "Loading learned render buffers";
@@ -62,10 +68,22 @@ namespace MeshSuite.UnityNative
             positions = Upload(sourcePositions);
             indices = Upload(sourceIndices);
             triangleOrderBuffer = Upload(triangleOrder);
-            opacity = Upload(ReadFloat(Path.Combine(b, mode == 1 ? "vertex_weight_logits.bin" : "opacity_logits.bin")));
+            bool meshMode = mode == 1 || mode == 3;
+            opacity = Upload(ReadFloat(Path.Combine(b, meshMode ? "vertex_weight_logits.bin" : "opacity_logits.bin")));
             dc = Upload(ReadFloat(Path.Combine(b, "sh_dc.bin")));
             rest = Upload(ReadFloat(Path.Combine(b, "sh_rest.bin")));
-            if (mode == 1) sigma = Upload(ReadFloat(Path.Combine(b, "sigma_logits.bin")));
+            if (meshMode) sigma = Upload(ReadFloat(Path.Combine(b, "sigma_logits.bin")));
+            bool hasFaceTexture = mode == 3 && faceMipLevels > 0;
+            if (hasFaceTexture)
+            {
+                // Per-face residual Mip pyramid: RGB halves packed two per uint32.
+                int[] packed = ReadInt(Path.Combine(b, "face_mip_textures.bin"));
+                long expectedWords = ((long)primitiveCount * faceTexelsPerFace * 3 + 1) / 2;
+                if (faceTexRes < 1 || faceTexelsPerFace < 1 || packed.LongLength != expectedWords)
+                { Fail("face_mip_textures.bin does not match the manifest texture layout."); yield break; }
+                faceMip = Upload(packed);
+            }
+            else if (mode == 3) faceMip = Upload(new int[1]);
             // The released Mesh-Splatting checkpoint is in its terminal solid
             // regime (sigma -> 1e-4 and opacity floor -> 0.9999).  In that
             // regime a depth-writing hardware pass is the stable limiting form
@@ -73,10 +91,13 @@ namespace MeshSuite.UnityNative
             // learned degree-3 SH field; only sub-0.1% residual transmission is
             // intentionally collapsed to hardware visibility.  Do not route
             // 2DTS here: its learned coverage remains genuinely transparent.
-            string shaderName = mode == 1 ? "MeshSuite/MeshSplatTerminalSolid" : "MeshSuite/MethodSpecificSplat";
+            // T²-Splat's Stage I mesh is the same terminal-solid MeshSplatting
+            // surface; its pass adds the Stage II residual per-face Mip-textures.
+            string shaderName = mode == 1 ? "MeshSuite/MeshSplatTerminalSolid"
+                : mode == 3 ? "MeshSuite/T2SplatTerminalSolid" : "MeshSuite/MethodSpecificSplat";
             usesSortedTriangleOrder = shaderName == "MeshSuite/MethodSpecificSplat";
             SplatShader = SplatShader != null ? SplatShader : Shader.Find(shaderName);
-            if (SplatShader == null) { Fail("MeshSuite/MethodSpecificSplat shader was not found."); yield break; }
+            if (SplatShader == null) { Fail(shaderName + " shader was not found."); yield break; }
             material = new Material(SplatShader) { hideFlags = HideFlags.HideAndDontSave };
             material.SetBuffer("_Positions", positions); material.SetBuffer("_Indices", indices);
             if (usesSortedTriangleOrder) material.SetBuffer("_TriangleOrder", triangleOrderBuffer);
@@ -87,9 +108,19 @@ namespace MeshSuite.UnityNative
             material.SetFloat("_OpacityFloor", opacityFloor);
             material.SetFloat("_GammaVertexRescale", gammaVertexRescale);
             material.SetInt("_RawCode", 1);
+            if (mode == 3)
+            {
+                material.SetBuffer("_FaceMip", faceMip);
+                material.SetInt("_HasFaceTexture", hasFaceTexture ? 1 : 0);
+                material.SetInt("_FaceTexRes", Mathf.Max(faceTexRes, 1));
+                material.SetInt("_FaceMipLevels", Mathf.Max(faceMipLevels, 1));
+                material.SetInt("_FaceTexelsPerFace", Mathf.Max(faceTexelsPerFace, 1));
+                material.SetFloat("_LodPixelScale", lodPixelScale);
+            }
             RefreshTriangleOrder(TargetCamera, force: true);
             ready = true; status = $"Method-specific {method} renderer ready ({primitiveCount:N0} primitives)";
-            if (mode == 1) Debug.Log($"[MeshSuite] MeshSplatting opacityFloor={opacityFloor:F6}.");
+            if (meshMode) Debug.Log($"[MeshSuite] {method} opacityFloor={opacityFloor:F6}.");
+            if (mode == 3) Debug.Log($"[MeshSuite] T²-Splat face textures: res={faceTexRes}, levels={faceMipLevels}, lodPixelScale={lodPixelScale}.");
             Debug.Log("[MeshSuite] " + status);
         }
 
@@ -213,6 +244,6 @@ namespace MeshSuite.UnityNative
         static int[] ReadInt(string p) { byte[] raw=File.ReadAllBytes(p); if ((raw.Length&3)!=0) throw new InvalidDataException(p); int[] v=new int[raw.Length/4]; Buffer.BlockCopy(raw,0,v,0,raw.Length); return v; }
         static ComputeBuffer Upload(Array values) { ComputeBuffer b=new ComputeBuffer(values.Length,4,ComputeBufferType.Raw); b.SetData(values); return b; }
         void Fail(string msg) { status="ERROR: "+msg; Debug.LogError("[MeshSuite] "+msg); }
-        void OnDestroy() { RemoveMsBenchCameraDraw(); ready=false; positions?.Release(); indices?.Release(); triangleOrderBuffer?.Release(); opacity?.Release(); sigma?.Release(); dc?.Release(); rest?.Release(); if(material!=null) Destroy(material); }
+        void OnDestroy() { RemoveMsBenchCameraDraw(); ready=false; positions?.Release(); indices?.Release(); triangleOrderBuffer?.Release(); opacity?.Release(); sigma?.Release(); dc?.Release(); rest?.Release(); faceMip?.Release(); if(material!=null) Destroy(material); }
     }
 }

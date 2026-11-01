@@ -14,6 +14,7 @@ __all__ = [
     "D2TSAdapter",
     "TriangleSplattingAdapter",
     "MeshSplattingAdapter",
+    "T2SplatAdapter",
     "DiffSoupAdapter",
 ]
 
@@ -31,6 +32,10 @@ def __getattr__(name: str):
         from msbench.renderers.mesh_splatting_adapter import MeshSplattingAdapter
 
         return MeshSplattingAdapter
+    if name == "T2SplatAdapter":
+        from msbench.renderers.t2splat_adapter import T2SplatAdapter
+
+        return T2SplatAdapter
     if name == "DiffSoupAdapter":
         from msbench.renderers.diffsoup_adapter import DiffSoupAdapter
 

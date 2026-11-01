@@ -48,6 +48,7 @@ namespace MeshSuite.UnityNative.Editor
         {
             bool methodSpecific = GetArgument("-method-specific") != null;
             if (methodSpecific && (String.Equals(method, "mesh-splatting", StringComparison.OrdinalIgnoreCase)
+                || String.Equals(method, "t2splat", StringComparison.OrdinalIgnoreCase)
                 || String.Equals(method, "2dts", StringComparison.OrdinalIgnoreCase)
                 || String.Equals(method, "diffsoup", StringComparison.OrdinalIgnoreCase)))
             {
@@ -56,6 +57,7 @@ namespace MeshSuite.UnityNative.Editor
             }
             bool standardMeshMethod = GetArgument("-standard-mesh") != null
                 || String.Equals(method, "mesh-splatting", StringComparison.OrdinalIgnoreCase)
+                || String.Equals(method, "t2splat", StringComparison.OrdinalIgnoreCase)
                 || String.Equals(method, "2dts", StringComparison.OrdinalIgnoreCase)
                 || String.Equals(method, "diffsoup", StringComparison.OrdinalIgnoreCase);
             if (!standardMeshMethod)

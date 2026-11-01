@@ -91,11 +91,11 @@ def validate_triasset(
         raise ValueError("standard engine deployment SH-DC appearance requires the sh_dc buffer")
     if manifest.get("method") == "diffsoup" and standard["supported"]:
         raise ValueError("DiffSoup standard engine deployment requires an explicit appearance bake")
-    if manifest.get("method") == "mesh-splatting":
+    if manifest.get("method") in {"mesh-splatting", "t2splat"}:
         for required in ("indices", "vertex_weight_logits", "triangle_opacity"):
             if required not in buffers:
                 raise ValueError(
-                    f"mesh-splatting package is stale or incomplete: missing {required!r}; re-export it"
+                    f"{manifest.get('method')} package is stale or incomplete: missing {required!r}; re-export it"
                 )
         faces = _memmap(root, buffers["indices"])
         logits = _memmap(root, buffers["vertex_weight_logits"]).reshape(-1)
