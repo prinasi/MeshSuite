@@ -430,12 +430,14 @@ namespace MeshSuite.UnityNative
             camera.ResetProjectionMatrix();
             camera.aspect = (float)width / height;
 
+            float fx = 0f;
             float fy = 0f;
             float cx = width * 0.5f;
             float cy = height * 0.5f;
 
             if (frame.intrinsics != null && frame.intrinsics.Count >= 2)
             {
+                fx = frame.intrinsics[0];
                 fy = frame.intrinsics[1];
                 if (frame.intrinsics.Count >= 4)
                 {
@@ -456,8 +458,10 @@ namespace MeshSuite.UnityNative
             camera.nearClipPlane = 0.01f;
             camera.farClipPlane = 300f;
 
+            // Horizontal focal term from fx (non-square COLMAP pixels, fx != fy),
+            // as the native renderers' independent fovX; see ColmapBatchCapture.
             Matrix4x4 projection = camera.projectionMatrix;
-            projection.m00 = -projection.m00;
+            projection.m00 = fx > 0f ? -(2.0f * fx / width) : -projection.m00;
 
             if (Math.Abs(cx - width * 0.5f) > 0.01f || Math.Abs(cy - height * 0.5f) > 0.01f)
             {
