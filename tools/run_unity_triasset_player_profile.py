@@ -14,6 +14,8 @@ from pathlib import Path
 
 from PIL import Image
 
+from msbench.unity_video import DEPLOYMENT_MSAA_SAMPLES
+
 
 SCENES = ("bicycle", "bonsai", "counter", "flowers", "garden", "kitchen", "room", "stump", "treehill")
 INDOOR_SCENES = frozenset(("bonsai", "counter", "kitchen", "room"))
@@ -366,6 +368,11 @@ def validate_profile(
     views = payload.get("views", [])
     if len(views) != expected_views:
         raise RuntimeError(f"Unity Player profile has {len(views)} views, expected {expected_views}: {path}")
+    if payload.get("msaa_samples") != DEPLOYMENT_MSAA_SAMPLES:
+        raise RuntimeError(
+            f"Unity Player profile used {payload.get('msaa_samples')}x MSAA; the deployment protocol "
+            f"requires {DEPLOYMENT_MSAA_SAMPLES}x: {path}"
+        )
     cpu_samples = sum(len(view.get("cpu_frame_samples_ms", [])) for view in views)
     expected_samples = expected_views * expected_frames
     if cpu_samples < expected_samples:
@@ -532,6 +539,7 @@ def main() -> int:
             "dataset": str(dataset),
             "resolution": [width, height],
             "execution_mode": "profile",
+            "msaa_samples": DEPLOYMENT_MSAA_SAMPLES,
             "profile": {
                 "run": args.profile_run,
                 "views": args.profile_views,

@@ -17,7 +17,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from msbench.unity_video import unity_namespace
+from msbench.unity_video import DEPLOYMENT_MSAA_SAMPLES, unity_namespace
 
 
 SCENES = ("bicycle", "bonsai", "counter", "flowers", "garden", "kitchen", "room", "stump", "treehill")
@@ -65,6 +65,20 @@ def validate_captured_images(output: Path, *, newer_than: float | None = None) -
         )
 
 
+def validate_capture_msaa(output: Path) -> None:
+    """Reject captures that Unity did not render with the protocol's MSAA."""
+    settings_path = output / "capture_settings.json"
+    if not settings_path.is_file():
+        raise RuntimeError(f"Unity capture did not record its render settings: {settings_path}")
+    settings = json.loads(settings_path.read_text())
+    for key in ("msaa_samples", "timing_msaa_samples"):
+        if settings.get(key) != DEPLOYMENT_MSAA_SAMPLES:
+            raise RuntimeError(
+                f"Unity capture used {key}={settings.get(key)}; the deployment protocol requires "
+                f"{DEPLOYMENT_MSAA_SAMPLES}x MSAA ({settings_path})"
+            )
+
+
 def unity_failure_summary(log_path: Path, *, max_lines: int = 12) -> str:
     """Return the useful tail of a Unity failure without dumping its crash trace."""
     if not log_path.is_file():
@@ -95,6 +109,11 @@ def validate_runtime_profile(path: Path, *, expected_views: int, newer_than: flo
         )
     if not all(view.get("cpu_frame_samples_ms") for view in views):
         raise RuntimeError(f"Unity runtime profile has incomplete CPU timing samples: {path}")
+    if payload.get("msaa_samples") != DEPLOYMENT_MSAA_SAMPLES:
+        raise RuntimeError(
+            f"Unity runtime profile used {payload.get('msaa_samples')}x MSAA; the deployment protocol "
+            f"requires {DEPLOYMENT_MSAA_SAMPLES}x: {path}"
+        )
 
 
 def main() -> int:
@@ -186,6 +205,7 @@ def main() -> int:
             "dataset": str(dataset),
             "resolution": [width, height],
             "execution_mode": "profile" if args.profile_only else "capture",
+            "msaa_samples": DEPLOYMENT_MSAA_SAMPLES,
             "profile": {
                 "run": args.profile_run,
                 "views": args.profile_views,
@@ -253,6 +273,7 @@ def main() -> int:
             )
         else:
             validate_captured_images(output, newer_than=capture_started)
+            validate_capture_msaa(output)
     return 0
 
 

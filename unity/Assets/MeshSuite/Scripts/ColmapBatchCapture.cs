@@ -58,6 +58,36 @@ namespace MeshSuite.UnityNative
 
         bool running;
 
+        // Deployment protocol: every Unity render target (held-out image capture,
+        // FPS timing, Player profile, trajectory video) renders with 2x MSAA, the
+        // project's active (Ultra) quality level. It is set on each target rather
+        // than left to the quality level: with RenderTexture.antiAliasing at its
+        // default, the 8-bit timing targets were anti-aliased but the float image
+        // target was not, so image metrics and FPS silently used different settings.
+        public const int DeploymentMsaaSamples = 2;
+
+        /// <summary>Create a linear deployment render target with the protocol's MSAA.</summary>
+        public static RenderTexture CreateDeploymentTarget(int width, int height, RenderTextureFormat format)
+        {
+            RenderTexture target = new RenderTexture(width, height, 24, format, RenderTextureReadWrite.Linear)
+            {
+                antiAliasing = DeploymentMsaaSamples,
+            };
+            target.Create();
+            int effective = EffectiveMsaaSamples(target);
+            if (effective != DeploymentMsaaSamples)
+                Debug.LogError($"[MeshSuite] {format} render targets support {effective}x MSAA; the deployment protocol requires {DeploymentMsaaSamples}x.");
+            else
+                Debug.Log($"[MeshSuite] Deployment render target {width}x{height} {format}: {effective}x MSAA.");
+            return target;
+        }
+
+        /// <summary>MSAA samples the GPU actually uses for this target.</summary>
+        public static int EffectiveMsaaSamples(RenderTexture target)
+        {
+            return Math.Min(target.antiAliasing, SystemInfo.GetRenderTextureSupportedMSAASampleCount(target.descriptor));
+        }
+
         [Serializable]
         sealed class ViewProfile
         {
@@ -94,6 +124,7 @@ namespace MeshSuite.UnityNative
             public long unity_total_reserved_bytes;
             public bool frame_timing_available;
             public bool draw_call_counter_available;
+            public int msaa_samples;
             public List<ViewProfile> views = new List<ViewProfile>();
         }
 
@@ -168,8 +199,7 @@ namespace MeshSuite.UnityNative
             // declared background has been composited.  ARGB32 loses the
             // low-alpha colour contribution before that operation and washes
             // out the native code-value image on white backgrounds.
-            RenderTexture target = new RenderTexture(OutputWidth, OutputHeight, 24, RenderTextureFormat.ARGBFloat, RenderTextureReadWrite.Linear);
-            target.Create();
+            RenderTexture target = CreateDeploymentTarget(OutputWidth, OutputHeight, RenderTextureFormat.ARGBFloat);
             Texture2D readback = new Texture2D(OutputWidth, OutputHeight, TextureFormat.RGBAFloat, false, true);
             Texture2D encoded = new Texture2D(OutputWidth, OutputHeight, TextureFormat.RGBA32, false, true);
             bool wasEnabled = CaptureCamera.enabled;
@@ -180,8 +210,9 @@ namespace MeshSuite.UnityNative
             CaptureCamera.targetTexture = target;
             bool previousRawOutput = Renderer is TriangleSplattingTriAssetRenderer triangle && triangle.OutputRawCodeValues;
             Renderer.SetOutputRawCodeValues(true);
-            RenderTexture fpsTarget = new RenderTexture(OutputWidth, OutputHeight, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
-            fpsTarget.Create();
+            RenderTexture fpsTarget = CreateDeploymentTarget(OutputWidth, OutputHeight, RenderTextureFormat.ARGB32);
+            int captureMsaa = EffectiveMsaaSamples(target);
+            int timingMsaa = EffectiveMsaaSamples(fpsTarget);
 
             for (int i = 0; i < views.Count; ++i)
             {
@@ -225,6 +256,8 @@ namespace MeshSuite.UnityNative
             Destroy(encoded);
             File.WriteAllText(Path.Combine(OutputRoot, "manifest.csv"), manifest.ToString());
             File.WriteAllText(Path.Combine(OutputRoot, "fps_per_test_view.csv"), fpsCsv.ToString());
+            File.WriteAllText(Path.Combine(OutputRoot, "capture_settings.json"),
+                $"{{\n  \"msaa_samples\": {captureMsaa},\n  \"timing_msaa_samples\": {timingMsaa}\n}}\n");
             File.WriteAllText(completionPath, "complete\n");
             Debug.Log($"[MeshSuite] COLMAP capture complete: {views.Count} views at {OutputWidth}x{OutputHeight}; output={OutputRoot}");
             running = false;
@@ -264,8 +297,8 @@ namespace MeshSuite.UnityNative
             CaptureCamera.enabled = false;
             CaptureCamera.clearFlags = CameraClearFlags.SolidColor;
             CaptureCamera.backgroundColor = new Color(0f, 0f, 0f, 0f);
-            RenderTexture target = new RenderTexture(OutputWidth, OutputHeight, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
-            target.Create();
+            RenderTexture target = CreateDeploymentTarget(OutputWidth, OutputHeight, RenderTextureFormat.ARGB32);
+            report.msaa_samples = EffectiveMsaaSamples(target);
             CaptureCamera.targetTexture = target;
             Renderer.SetOutputRawCodeValues(true);
             QualitySettings.vSyncCount = 0;

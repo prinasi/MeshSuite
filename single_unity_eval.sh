@@ -316,6 +316,14 @@ if protocol_path.is_file():
     protocol = json.loads(protocol_path.read_text())
     if protocol.get("resolution") != [expected[0], expected[1]]:
         raise SystemExit(1)
+# Captures made before the explicit 2x MSAA protocol record no render settings.
+from msbench.unity_video import DEPLOYMENT_MSAA_SAMPLES
+settings_path = result / "capture_settings.json"
+if not settings_path.is_file():
+    raise SystemExit(1)
+settings = json.loads(settings_path.read_text())
+if settings.get("msaa_samples") != DEPLOYMENT_MSAA_SAMPLES or settings.get("timing_msaa_samples") != DEPLOYMENT_MSAA_SAMPLES:
+    raise SystemExit(1)
 raise SystemExit(0)
 PY
 }
@@ -370,8 +378,12 @@ reference = Path(sys.argv[6])
 if not path.is_file():
     raise SystemExit(1)
 try:
-    views = json.loads(path.read_text()).get("views", [])
+    payload = json.loads(path.read_text())
+    views = payload.get("views", [])
 except Exception:
+    raise SystemExit(1)
+from msbench.unity_video import DEPLOYMENT_MSAA_SAMPLES
+if payload.get("msaa_samples") != DEPLOYMENT_MSAA_SAMPLES:
     raise SystemExit(1)
 if len(views) != expected_views:
     raise SystemExit(1)

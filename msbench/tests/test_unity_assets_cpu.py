@@ -623,5 +623,67 @@ def test_unity_cameras_take_the_horizontal_focal_term_from_fx() -> None:
     assert "fx = frame.intrinsics[0];" in video
     assert "projection.m00 = fx > 0f ? -(2.0f * fx / width) : -projection.m00;" in video
 
+
+def test_every_unity_render_target_uses_the_deployment_msaa() -> None:
+    """Image capture, FPS timing, Player profile and video all render with 2x MSAA.
+
+    Left to the quality level, Unity anti-aliased the 8-bit timing targets but
+    not the float image target, so the setting must be explicit on each target.
+    """
+    import re
+
+    from msbench.unity_video import DEPLOYMENT_MSAA_SAMPLES
+
+    scripts = Path(__file__).resolve().parents[2] / "unity" / "Assets" / "MeshSuite" / "Scripts"
+    capture = (scripts / "ColmapBatchCapture.cs").read_text()
+    video = (scripts / "TriAssetVideoBatchCapture.cs").read_text()
+    match = re.search(r"public const int DeploymentMsaaSamples = (\d+);", capture)
+    assert match and int(match.group(1)) == DEPLOYMENT_MSAA_SAMPLES == 2
+    assert "antiAliasing = DeploymentMsaaSamples," in capture
+    for path in scripts.glob("*.cs"):
+        text = path.read_text()
+        # The only RenderTexture constructor is the one inside CreateDeploymentTarget.
+        expected = 1 if path.name == "ColmapBatchCapture.cs" else 0
+        assert text.count("new RenderTexture(") == expected, path.name
+    assert capture.count("CreateDeploymentTarget(OutputWidth, OutputHeight, RenderTextureFormat.") == 3
+    assert video.count("ColmapBatchCapture.CreateDeploymentTarget(") == 2
+    assert "report.msaa_samples = EffectiveMsaaSamples(target);" in capture
+    assert '"capture_settings.json"' in capture
+
+
+def test_unity_outputs_without_deployment_msaa_are_rejected(tmp_path: Path) -> None:
+    import pytest
+
+    from tools.run_unity_triasset_eval import validate_capture_msaa, validate_runtime_profile
+    from tools.run_unity_triasset_player_profile import validate_profile
+
+    with pytest.raises(RuntimeError, match="did not record its render settings"):
+        validate_capture_msaa(tmp_path)
+    settings = tmp_path / "capture_settings.json"
+    settings.write_text(json.dumps({"msaa_samples": 1, "timing_msaa_samples": 2}))
+    with pytest.raises(RuntimeError, match="msaa_samples=1"):
+        validate_capture_msaa(tmp_path)
+    settings.write_text(json.dumps({"msaa_samples": 2, "timing_msaa_samples": 2}))
+    validate_capture_msaa(tmp_path)
+
+    view = {"cpu_frame_samples_ms": [1.0, 1.0], "gpu_frame_samples_ms": [1.0, 1.0]}
+    profile = tmp_path / "runtime_profile_run_01.json"
+    for samples, ok in ((None, False), (1, False), (2, True)):
+        payload = {"views": [view]}
+        if samples is not None:
+            payload["msaa_samples"] = samples
+        profile.write_text(json.dumps(payload))
+        checks = (
+            lambda: validate_runtime_profile(profile, expected_views=1, newer_than=0.0),
+            lambda: validate_profile(profile, expected_views=1, expected_frames=2, newer_than=0.0,
+                                     require_gpu_timing=True, gpu_timing_min_fraction=0.5),
+        )
+        for check in checks:
+            if ok:
+                check()
+            else:
+                with pytest.raises(RuntimeError, match="MSAA"):
+                    check()
+
 if __name__ == "__main__":
     unittest.main()

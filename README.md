@@ -469,6 +469,14 @@ and GPU rendering: `1000 /` the median wall-clock engine frame time. GPU frame
 latency (P50/P95) and renderer graphics allocations (`Alloc.`) are reported
 separately.
 
+Every Unity render target (held-out images, FPS timing, Player profiles and
+videos) uses 2× MSAA, the Unity project's active quality level, for both
+deployment settings. Each capture records the sample count Unity actually used
+(`capture_settings.json`, and `msaa_samples` in each runtime profile), and the
+scripts reject or re-capture results that were not rendered with 2× MSAA. Results
+captured before this was made explicit had anti-aliased FPS targets but
+non-anti-aliased images, and need to be re-captured.
+
 ### Standard engine deployment
 
 Use `--standard-engine` to render a conventional opaque vertex-colored Unity Mesh;

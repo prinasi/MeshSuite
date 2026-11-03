@@ -26,6 +26,9 @@ from PIL import Image
 
 
 STREAM_MAGIC = 0x4D534256  # "MSBV" in little-endian uint32
+# MSAA samples of every Unity deployment render target (image capture, FPS
+# timing, Player profile, video); mirrors ColmapBatchCapture.DeploymentMsaaSamples.
+DEPLOYMENT_MSAA_SAMPLES = 2
 SCENES = ("bicycle", "bonsai", "counter", "flowers", "garden", "kitchen", "room", "stump", "treehill")
 INDOOR_SCENES = frozenset(("bonsai", "counter", "kitchen", "room"))
 

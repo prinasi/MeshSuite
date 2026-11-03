@@ -183,8 +183,7 @@ namespace MeshSuite.UnityNative
                 rawFileStream.Write(header, 0, 20);
             }
 
-            RenderTexture target = new RenderTexture(defaultWidth, defaultHeight, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
-            target.Create();
+            RenderTexture target = ColmapBatchCapture.CreateDeploymentTarget(defaultWidth, defaultHeight, RenderTextureFormat.ARGB32);
 
             bool wasEnabled = CaptureCamera.enabled;
             RenderTexture previousTarget = CaptureCamera.targetTexture;
@@ -236,8 +235,7 @@ namespace MeshSuite.UnityNative
                         defaultHeight = frameHeight;
                         target.Release();
                         Destroy(target);
-                        target = new RenderTexture(defaultWidth, defaultHeight, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
-                        target.Create();
+                        target = ColmapBatchCapture.CreateDeploymentTarget(defaultWidth, defaultHeight, RenderTextureFormat.ARGB32);
                         CaptureCamera.targetTexture = target;
                         rgbBuffer = new byte[defaultWidth * defaultHeight * 3];
                     }
