@@ -398,5 +398,65 @@ def test_unity_eval_rescores_metrics_older_than_the_capture(tmp_path: Path) -> N
     os.utime(metrics, None)
     assert "Metrics complete; skipping" in dry_run()
 
+
+def _stale_msbench(tmp_path: Path) -> Path:
+    """An older msbench (no DEPLOYMENT_MSAA_SAMPLES), as installed from another checkout."""
+    stale = tmp_path / "other_checkout"
+    (stale / "msbench").mkdir(parents=True)
+    (stale / "msbench" / "__init__.py").write_text("")
+    (stale / "msbench" / "unity_video.py").write_text(
+        "LEGACY_UNITY_NAMESPACE = 'MeshSplatBench'\n"
+        "def unity_namespace(project):\n    return 'MeshSuite'\n"
+    )
+    return stale
+
+
+def test_unity_tools_import_their_own_checkout(tmp_path: Path) -> None:
+    import os
+    import subprocess
+    import sys
+
+    repo = Path(__file__).resolve().parents[2]
+    env = dict(os.environ, PYTHONPATH=str(_stale_msbench(tmp_path)))
+    for tool in ("run_unity_triasset_eval.py", "run_unity_triasset_player_profile.py",
+                 "build_unity_profile_player.py", "patch_legacy_unity_vulkan.py",
+                 "run_unity_triasset_video.py", "export_unity_triasset.py"):
+        result = subprocess.run([sys.executable, str(repo / "tools" / tool), "--help"],
+                                cwd=tmp_path, env=env, capture_output=True, text=True)
+        assert result.returncode == 0, f"{tool}: {result.stderr[-400:]}"
+
+
+def test_unity_export_uses_this_checkouts_exporter_by_default(tmp_path: Path) -> None:
+    import os
+    import subprocess
+    import sys
+
+    repo = Path(__file__).resolve().parents[2]
+    (tmp_path / "ckpt").mkdir()
+    config = tmp_path / "configs" / "t2splat" / "tandt" / "truck.yaml"
+    config.parent.mkdir(parents=True)
+    config.write_text(
+        f"dataset:\n  root: {tmp_path / 'data'}\noutput:\n  dir: {tmp_path / 'out'}\n"
+        f"adapter:\n  type: t2splat\n  checkpoint: {tmp_path / 'ckpt'}\n"
+    )
+
+    # An installed msbench command, which may run another checkout's code.
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "msbench").write_text("#!/bin/sh\nexit 0\n")
+    (bin_dir / "msbench").chmod(0o755)
+
+    def dry_run(**env: str) -> str:
+        environment = {k: v for k, v in os.environ.items() if k != "MSBENCH_CMD"} | env
+        environment["PATH"] = f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}"
+        return subprocess.run(
+            ["bash", str(repo / "single_export_unity.sh"), "t2splat", "tandt/truck", "cpu",
+             "--config-root", str(tmp_path / "configs"), "--python", sys.executable, "--dry-run", "--force"],
+            cwd=repo, env=environment, capture_output=True, text=True, check=True,
+        ).stdout
+
+    assert f"{repo / 'tools' / 'export_unity_triasset.py'} --method t2splat" in dry_run()
+    assert "msbench export-unity --method t2splat" in dry_run(MSBENCH_CMD="msbench")
+
 if __name__ == "__main__":
     unittest.main()

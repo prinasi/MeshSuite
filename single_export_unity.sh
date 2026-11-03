@@ -172,7 +172,9 @@ resolve_python_bin() {
 }
 
 resolve_tb_cmd() {
-    if command -v "${TB_CMD}" >/dev/null 2>&1; then
+    # The msbench command runs whichever checkout the environment installed, so
+    # by default export with this checkout's exporter; MSBENCH_CMD selects one.
+    if [[ -n "${MSBENCH_CMD:-}" ]] && command -v "${TB_CMD}" >/dev/null 2>&1; then
         TB_CMD_ARR=("${TB_CMD}")
         TB_EXPORT_ARGS=(export-unity)
     else

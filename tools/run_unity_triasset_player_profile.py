@@ -14,6 +14,12 @@ from pathlib import Path
 
 from PIL import Image
 
+# Import this checkout's msbench, even when the environment installed
+# (e.g. in editable mode) a different checkout.
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if sys.path[:1] != [str(REPO_ROOT)]:
+    sys.path.insert(0, str(REPO_ROOT))
+
 from msbench.unity_video import DEPLOYMENT_MSAA_SAMPLES
 
 
