@@ -356,5 +356,47 @@ def test_unity_eval_recaptures_captures_without_deployment_msaa(tmp_path: Path) 
     assert "Capture complete; skipping" in dry_run()
 
 
+def test_unity_eval_rescores_metrics_older_than_the_capture(tmp_path: Path) -> None:
+    import os
+    import subprocess
+    import sys
+
+    from tools.evaluate_deployment_images import EVALUATOR_REVISION
+
+    repo = Path(__file__).resolve().parents[2]
+    scene = tmp_path / "data" / "truck"
+    (scene / "sparse" / "0").mkdir(parents=True)
+    for name in ("cameras.bin", "images.bin"):
+        (scene / "sparse" / "0" / name).write_bytes(b"")
+    (scene / "images").mkdir()
+    Image.new("RGB", (4, 4)).save(scene / "images" / "000001.png")
+    run = tmp_path / "out" / "truck"
+    config = tmp_path / "configs" / "t2splat" / "tandt" / "truck.yaml"
+    config.parent.mkdir(parents=True)
+    config.write_text(f"dataset:\n  root: {scene}\n  image_dir: images\n  resolution: 1\noutput:\n  dir: {run}\n")
+    capture = run / "unity_custom_engine"
+    (capture / "test").mkdir(parents=True)
+    frame = capture / "test" / "000001.png"
+    Image.new("RGB", (4, 4)).save(frame)
+    metrics = capture / "metrics_summary.json"
+    metrics.write_text(json.dumps({
+        "protocol": {"evaluator_revision": EVALUATOR_REVISION, "ground_truth": str(scene / "images")},
+        "test": {"psnr": 20.0, "ssim": 0.5, "lpips_vgg": 0.3},
+    }))
+
+    def dry_run() -> str:
+        return subprocess.run(
+            ["bash", str(repo / "single_unity_eval.sh"), "t2splat", "tandt/truck", "cpu",
+             "--config-root", str(tmp_path / "configs"), "--unity", "/bin/true",
+             "--unity-project", str(repo / "unity"), "--python", sys.executable,
+             "--skip-export", "--skip-unity-patch", "--skip-capture", "--skip-profile", "--dry-run"],
+            cwd=repo, capture_output=True, text=True, check=True,
+        ).stdout
+
+    os.utime(metrics, (1_000, 1_000))  # scored before the frames were (re-)captured
+    assert "[tandt/truck:metrics] Command:" in dry_run()
+    os.utime(metrics, None)
+    assert "Metrics complete; skipping" in dry_run()
+
 if __name__ == "__main__":
     unittest.main()

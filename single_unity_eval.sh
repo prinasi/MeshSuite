@@ -356,6 +356,13 @@ if protocol.get("evaluator_revision") != EVALUATOR_REVISION:
 ground_truth = protocol.get("ground_truth")
 if not ground_truth or Path(ground_truth).resolve() != reference:
     raise SystemExit(1)
+# Scores of an earlier capture are stale once the frames are re-captured.
+frames = [
+    item for item in (path.parent / "test").glob("*")
+    if item.suffix.lower() in {".png", ".jpg", ".jpeg"}
+]
+if frames and path.stat().st_mtime < max(item.stat().st_mtime for item in frames):
+    raise SystemExit(1)
 raise SystemExit(0 if required.issubset(test) else 1)
 PY
 }
