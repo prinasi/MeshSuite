@@ -491,9 +491,20 @@ for method in 2dts triangle-splatting mesh-splatting diffsoup; do
 done
 ```
 
-Methods whose exported manifest does not declare a comparable standard engine
-deployment appearance (DiffSoup) are rejected instead of producing misleading
-numbers.
+Packages whose manifest does not declare a comparable standard engine deployment
+appearance are rejected instead of producing misleading numbers.
+
+DiffSoup has no vertex-color field, so `--standard-engine` first bakes its neural
+textures (beyond the v5 manuscript). `tools/bake_diffsoup_standard_asset.py`
+averages the decoder output of every lattice texel over the training views that see
+it, then writes a separate package to `unity_baked/diffsoup.triasset`: the unchanged
+triangle soup with a view-independent RGBA atlas. Unity draws it with a plain
+textured alpha-cutout material (`MeshSuite/StandardTextureCutoutRaw`), so the MLP is
+gone from the runtime, and `Asset MiB` covers the baked mesh only. Unlike the other
+methods' opaque vertex-colored meshes, this keeps an alpha test: DiffSoup's 15k
+triangles have too few vertices to carry its appearance. The bake needs CUDA and the
+scene's COLMAP dataset, and `--force-export` re-bakes. A Player built before the
+cutout shader existed needs `--force-player-build`.
 
 ### Runtime profile details
 

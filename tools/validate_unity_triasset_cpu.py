@@ -87,9 +87,16 @@ def validate_triasset(
     standard = rendering.get("standard_engine")
     if not isinstance(standard, dict) or not isinstance(standard.get("supported"), bool):
         raise ValueError("manifest must declare standard_engine.supported")
-    if standard["supported"] and "sh_dc" not in buffers:
+    baked_texture = standard.get("appearance") == "baked_texture_cutout"
+    if standard["supported"] and baked_texture:
+        if "uvs" not in buffers:
+            raise ValueError("baked texture appearance requires the uvs buffer")
+        atlas = (standard.get("atlas") or {}).get("file")
+        if not atlas or not (root / atlas).is_file():
+            raise ValueError(f"baked texture appearance is missing its atlas: {atlas!r}")
+    elif standard["supported"] and "sh_dc" not in buffers:
         raise ValueError("standard engine deployment SH-DC appearance requires the sh_dc buffer")
-    if manifest.get("method") == "diffsoup" and standard["supported"]:
+    if manifest.get("method") == "diffsoup" and standard["supported"] and not baked_texture:
         raise ValueError("DiffSoup standard engine deployment requires an explicit appearance bake")
     if manifest.get("method") in {"mesh-splatting", "t2splat"}:
         for required in ("indices", "vertex_weight_logits", "triangle_opacity"):

@@ -660,14 +660,15 @@ def _standard_engine_contract(method: str) -> dict[str, Any]:
 
     Standard engine deployment renders an opaque vertex-coloured Unity Mesh.
     DiffSoup has no SH-DC/vertex-colour field. Rendering it as a white mesh is an
-    import diagnostic, not a comparable standard engine deployment appearance.
+    import diagnostic, not a comparable standard engine deployment appearance;
+    its standard mesh is the separate package written by ``msbench.unity_bake``.
     """
 
     if method == "diffsoup":
         return {
             "supported": False,
             "appearance": "none",
-            "reason": "requires a fixed-budget texture or vertex-colour bake",
+            "reason": "raw neural features; bake a texture with tools/bake_diffsoup_standard_asset.py",
         }
     return {
         "supported": True,

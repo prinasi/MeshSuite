@@ -9,6 +9,7 @@ cd "${REPO_ROOT}"
 
 CONFIG_ROOT="configs"
 ASSET_SUBDIR="unity_native"
+ASSET_SUBDIR_EXPLICIT=0
 METHOD=""
 GPU_ID=""
 UNITY_BIN="${UNITY:-}"
@@ -94,11 +95,13 @@ Options:
   --unity-project PATH     Unity project root (default: \$PROJECT or \$UNITY_PROJECT)
   --datasets-root PATH     Override all dataset roots with PATH/<scene>
   --config-root PATH       Config root (default: ${CONFIG_ROOT})
-  --asset-subdir NAME      Per-run asset directory (default: ${ASSET_SUBDIR})
+  --asset-subdir NAME      Per-run asset directory (default: ${ASSET_SUBDIR}; DiffSoup's
+                           baked standard engine package defaults to unity_baked)
   --output-name NAME       Unity output folder under each scene output.dir
                            (default: unity_custom_engine or unity_standard_engine by setting)
   --custom-engine          Custom engine deployment: method-aware Unity renderer (default)
-  --standard-engine        Standard engine deployment: opaque vertex-colored Unity Mesh
+  --standard-engine        Standard engine deployment: conventional Unity Mesh, opaque
+                           vertex-colored (DiffSoup: baked textures with alpha cutout)
                            (automatically switches output/report naming unless overridden)
   --profile-runs N         Independent profile runs per scene (default: ${PROFILE_RUNS})
   --profile-views N        Views per profile run (default: ${PROFILE_VIEWS})
@@ -493,7 +496,7 @@ while [[ "$#" -gt 0 ]]; do
         --unity-project|--unity_project|--project) require_value "$@"; UNITY_PROJECT_DIR="$2"; shift 2 ;;
         --datasets-root|--datasets_root) require_value "$@"; DATASETS_ROOT_OVERRIDE="$2"; shift 2 ;;
         --config-root|--config_root) require_value "$@"; CONFIG_ROOT="$2"; shift 2 ;;
-        --asset-subdir|--asset_subdir|--output-subdir|--output_subdir) require_value "$@"; ASSET_SUBDIR="$2"; shift 2 ;;
+        --asset-subdir|--asset_subdir|--output-subdir|--output_subdir) require_value "$@"; ASSET_SUBDIR="$2"; ASSET_SUBDIR_EXPLICIT=1; shift 2 ;;
         --output-name|--output_name) require_value "$@"; OUTPUT_NAME="$2"; OUTPUT_NAME_EXPLICIT=1; shift 2 ;;
         --method) require_value "$@"; METHOD="$2"; shift 2 ;;
         --custom-engine|--custom_engine) CONDITION="custom-engine"; shift ;;
@@ -599,6 +602,14 @@ if [[ "${CONDITION}" == "standard-engine" && "${OUTPUT_NAME_EXPLICIT}" -eq 0 ]];
     OUTPUT_NAME="unity_standard_engine"
 fi
 
+# DiffSoup has no standard appearance until its neural textures are baked, and the
+# baked mesh is a package of its own instead of an export of the raw tensors.
+BAKE_DIFFSOUP=0
+if [[ "${CONDITION}" == "standard-engine" && "${METHOD_ID}" == "diffsoup" ]]; then
+    BAKE_DIFFSOUP=1
+    [[ "${ASSET_SUBDIR_EXPLICIT}" -eq 1 ]] || ASSET_SUBDIR="unity_baked"
+fi
+
 if [[ "${GPU_ID}" == "cpu" ]]; then
     CUDA_DEVICE_VALUE=""
     [[ -n "${LPIPS_DEVICE}" ]] || LPIPS_DEVICE="cpu"
@@ -622,7 +633,7 @@ if [[ "${NEEDS_UNITY}" -eq 1 ]]; then
     UNITY_PROJECT_DIR="$(abs_path "${UNITY_PROJECT_DIR}")"
 fi
 
-if [[ "${SKIP_EXPORT}" -eq 0 ]]; then
+if [[ "${SKIP_EXPORT}" -eq 0 && "${BAKE_DIFFSOUP}" -eq 0 ]]; then
     EXPORT_CMD=("bash" "${REPO_ROOT}/single_export_unity.sh" "${METHOD_ID}")
     EXPORT_CMD+=("${EXPANDED_TARGETS[@]}" "${GPU_ID}")
     EXPORT_CMD+=(--config-root "${CONFIG_ROOT}" --output-subdir "${ASSET_SUBDIR}" --python "${PYTHON_BIN}")
@@ -727,6 +738,23 @@ for target in "${EXPANDED_TARGETS[@]}"; do
     REF_PATH="${DATASET_PATH}/${REF_IMAGE_DIR}"
     if [[ "${REF_IMAGE_DIR}" != "${REFERENCE_IMAGE_DIR_OVERRIDE:-${IMAGE_DIR}}" ]]; then
         echo "[${LABEL}] Reference image dir resolved to ${REF_IMAGE_DIR} (config requested ${IMAGE_DIR})"
+    fi
+
+    if [[ "${BAKE_DIFFSOUP}" -eq 1 && "${SKIP_EXPORT}" -eq 0 ]]; then
+        if [[ "${FORCE_EXPORT}" -eq 1 || ! -f "${TRI_ASSET}/manifest.json" ]]; then
+            BAKE_CMD=(env "CUDA_VISIBLE_DEVICES=${CUDA_DEVICE_VALUE}" "${PYTHON_BIN}" "tools/bake_diffsoup_standard_asset.py"
+                --checkpoint "${MODEL_PATH}"
+                --dataset "${DATASET_PATH}"
+                --downscale "${TRAINER_DOWNSCALE:-4}"
+                --output "${TRI_ASSET}")
+            [[ "${FORCE_EXPORT}" -eq 1 ]] && BAKE_CMD+=(--force)
+            if ! run_command "${LABEL}:bake" "${BAKE_CMD[@]}"; then
+                if handle_failure "${LABEL}" "DiffSoup texture bake failed"; then continue; fi
+                break
+            fi
+        else
+            echo "[${LABEL}] Baked asset exists; skipping: ${TRI_ASSET}"
+        fi
     fi
 
     if [[ "${DRY_RUN}" -eq 0 && ! -f "${TRI_ASSET}/manifest.json" ]]; then

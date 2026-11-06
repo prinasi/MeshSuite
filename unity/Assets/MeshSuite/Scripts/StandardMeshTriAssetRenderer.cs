@@ -8,7 +8,8 @@ namespace MeshSuite.UnityNative
 {
     /// <summary>
     /// Unity MeshRenderer deployment path: a method-agnostic indexed Mesh
-    /// baseline with baked DC vertex color.
+    /// baseline with baked DC vertex color, or a baked RGBA atlas drawn with a
+    /// plain textured alpha-cutout material when the package provides one.
     /// </summary>
     public sealed class StandardMeshTriAssetRenderer : TriAssetRenderer
     {
@@ -17,6 +18,7 @@ namespace MeshSuite.UnityNative
 
         Mesh mesh;
         Material material;
+        Texture2D atlas;
         MeshFilter meshFilter;
         MeshRenderer meshRenderer;
         bool ready;
@@ -41,6 +43,14 @@ namespace MeshSuite.UnityNative
             string positionsPath = Path.Combine(buffers, "positions.bin");
             string indicesPath = Path.Combine(buffers, "indices.bin");
             string dcPath = Path.Combine(buffers, "sh_dc.bin");
+            string atlasPath = Path.Combine(AssetDirectory, "atlas.png");
+            string uvPath = Path.Combine(buffers, "uvs.bin");
+            bool textured = File.Exists(atlasPath);
+            if (textured && !File.Exists(uvPath))
+            {
+                Fail("Baked atlas requires the uvs buffer.");
+                yield break;
+            }
             if (!File.Exists(positionsPath) || !File.Exists(indicesPath))
             {
                 Fail("Standard Mesh baseline requires positions and indices buffers.");
@@ -59,14 +69,32 @@ namespace MeshSuite.UnityNative
             if (indices.Length % 3 != 0) { Fail("indices.bin is not triangle data."); yield break; }
             int triangleCount = indices.Length / 3;
 
-            status = File.Exists(dcPath) ? "Baking SH DC to standard vertex RGB" : "No standard color field; using default white material";
+            status = textured ? "Loading baked atlas" : File.Exists(dcPath) ? "Baking SH DC to standard vertex RGB" : "No standard color field; using default white material";
             yield return null;
             Vector3[] vertices = new Vector3[vertexCount];
             Color32[] colors = new Color32[vertexCount];
             const float c0 = 0.28209479177387814f;
             for (int i = 0, p = 0; i < vertexCount; ++i, p += 3)
                 vertices[i] = new Vector3(positions[p], positions[p + 1], positions[p + 2]);
-            if (File.Exists(dcPath))
+            Vector2[] uvs = null;
+            if (textured)
+            {
+                float[] rawUvs = ReadFloatArray(uvPath);
+                if (rawUvs.Length != vertexCount * 2) { Fail("uvs.bin is not per-vertex float2 data."); yield break; }
+                uvs = new Vector2[vertexCount];
+                for (int i = 0, p = 0; i < vertexCount; ++i, p += 2)
+                    uvs[i] = new Vector2(rawUvs[p], rawUvs[p + 1]);
+                // Native image code values: linear, so no sRGB decode on sampling.
+                atlas = new Texture2D(2, 2, TextureFormat.RGBA32, false, true)
+                {
+                    name = "MeshSuite baked atlas",
+                    filterMode = FilterMode.Bilinear,
+                    wrapMode = TextureWrapMode.Clamp,
+                    anisoLevel = 0
+                };
+                if (!atlas.LoadImage(File.ReadAllBytes(atlasPath), true)) { Fail("Could not decode " + atlasPath); yield break; }
+            }
+            else if (File.Exists(dcPath))
             {
                 float[] dc = ReadFloatArray(dcPath);
                 if (dc.Length == vertexCount * 3)
@@ -96,18 +124,21 @@ namespace MeshSuite.UnityNative
             yield return null;
             mesh = new Mesh { name = "MeshSuite standard mesh compatibility baseline", indexFormat = IndexFormat.UInt32 };
             mesh.vertices = vertices;
-            mesh.colors32 = colors;
+            if (textured) mesh.uv = uvs;
+            else mesh.colors32 = colors;
             mesh.SetIndices(indices, MeshTopology.Triangles, 0, false);
             mesh.RecalculateBounds();
             vertices = null;
             colors = null;
+            uvs = null;
             indices = null;
             GC.Collect();
 
-            const string shaderName = "MeshSuite/StandardVertexColorRaw";
-            VertexColorShader = VertexColorShader != null ? VertexColorShader : Shader.Find(shaderName);
-            if (VertexColorShader == null) { Fail(shaderName + " shader was not found."); yield break; }
-            material = new Material(VertexColorShader) { hideFlags = HideFlags.HideAndDontSave };
+            string shaderName = textured ? "MeshSuite/StandardTextureCutoutRaw" : "MeshSuite/StandardVertexColorRaw";
+            Shader shader = textured ? Shader.Find(shaderName) : (VertexColorShader != null ? VertexColorShader : Shader.Find(shaderName));
+            if (shader == null) { Fail(shaderName + " shader was not found."); yield break; }
+            material = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
+            if (textured) material.mainTexture = atlas;
             meshFilter = GetComponent<MeshFilter>();
             if (meshFilter == null) meshFilter = gameObject.AddComponent<MeshFilter>();
             meshRenderer = GetComponent<MeshRenderer>();
@@ -119,7 +150,7 @@ namespace MeshSuite.UnityNative
             meshRenderer.lightProbeUsage = LightProbeUsage.Off;
             meshRenderer.reflectionProbeUsage = ReflectionProbeUsage.Off;
             ready = true;
-            status = $"Standard indexed Mesh ready: {vertexCount:N0} vertices, {triangleCount:N0} triangles" + (File.Exists(dcPath) ? "; DC vertex color" : "; default white (no standard appearance field)");
+            status = $"Standard indexed Mesh ready: {vertexCount:N0} vertices, {triangleCount:N0} triangles" + (textured ? $"; baked {atlas.width}x{atlas.height} atlas" : File.Exists(dcPath) ? "; DC vertex color" : "; default white (no standard appearance field)");
             Debug.Log("[MeshSuite] " + status);
         }
 
@@ -173,6 +204,7 @@ namespace MeshSuite.UnityNative
             if (meshRenderer != null) meshRenderer.sharedMaterial = null;
             if (mesh != null) Destroy(mesh);
             if (material != null) Destroy(material);
+            if (atlas != null) Destroy(atlas);
         }
     }
 }
