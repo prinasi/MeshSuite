@@ -136,7 +136,7 @@ def test_d2ts_export_keeps_vertex_sh_and_gamma(tmp_path: Path):
     assert manifest["rendering"]["vertex_color"] is True
     assert manifest["rendering"]["gamma"] == 1.7
     assert manifest["rendering"]["gamma_rescale"] is True
-    assert manifest["rendering"]["gamma_rescale_source"] == "legacy_inferred_from_gamma"
+    assert manifest["rendering"]["gamma_rescale_source"] == "native_default"
     assert 0.0 < manifest["rendering"]["gamma_vertex_rescale"] < 1.0
     assert manifest["rendering"]["background_color"] == "white"
     assert manifest["buffers"]["sh_dc"]["shape"] == [1, 3, 1, 3]

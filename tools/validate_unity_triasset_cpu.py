@@ -125,6 +125,8 @@ def validate_triasset(
             "reduction": rendering.get("triangle_opacity_reduction"),
         }
 
+    if manifest.get("method") == "2dts" and rendering.get("gamma_rescale_source") == "legacy_inferred_from_gamma":
+        raise ValueError("2dts gamma_rescale was inferred from gamma; re-export with the current MeshSuite exporter")
     if manifest.get("method") == "2dts" and rendering.get("gamma_rescale"):
         gamma = float(rendering["gamma"])
         beta = 1.0 / gamma

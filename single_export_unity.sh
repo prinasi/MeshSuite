@@ -251,6 +251,7 @@ for target in "${EXPANDED_TARGETS[@]}"; do
     MODEL_PATH="$(config_value "${CONFIG_FILE}" "output.dir")"
     CHECKPOINT="$(config_value "${CONFIG_FILE}" "adapter.checkpoint")"
     BACKGROUND_COLOR="$(config_value "${CONFIG_FILE}" "adapter.render_params.bg_color")"
+    D2TS_GAMMA_RESCALE="$(config_value "${CONFIG_FILE}" "adapter.render_params.gamma_rescale")"
     if [[ -z "${MODEL_PATH}" ]]; then
         echo "[${DATASET}/${SCENE}] Config missing output.dir: ${CONFIG_FILE}" >&2
         FAILED=1
@@ -289,6 +290,7 @@ for target in "${EXPANDED_TARGETS[@]}"; do
     fi
     CMD+=(--method "${METHOD_ID}" --checkpoint "${CHECKPOINT}" --output "${OUTPUT}")
     [[ -n "${BACKGROUND_COLOR}" ]] && CMD+=(--background-color "${BACKGROUND_COLOR}")
+    [[ "${METHOD_ID}" == "2dts" && "${D2TS_GAMMA_RESCALE}" == "False" ]] && CMD+=(--no-d2ts-gamma-rescale)
     [[ "${FORCE}" -eq 1 || "${REPLACE_INCOMPLETE}" -eq 1 ]] && CMD+=(--force)
     if [[ "${GPU_ID}" == "cpu" ]]; then
         DEVICE_LABEL="cpu (CUDA hidden)"

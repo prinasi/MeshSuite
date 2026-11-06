@@ -82,6 +82,7 @@ Shader "MeshSuite/TriangleSplattingMetalBaseline"
                 nointerpolation float3 color : TEXCOORD1;
                 nointerpolation float opacity : TEXCOORD2;
                 nointerpolation float sigma : TEXCOORD3;
+                nointerpolation float3 edgeScale : TEXCOORD4;
             };
 
             Varyings Vert(uint vertexId : SV_VertexID)
@@ -100,13 +101,41 @@ Shader "MeshSuite/TriangleSplattingMetalBaseline"
                 o.barycentric = corner == 0 ? float3(1,0,0) : (corner == 1 ? float3(0,1,0) : float3(0,0,1));
                 o.opacity = rcp(1.0 + exp(-OpacityValue(tri)));
                 o.sigma = 0.01 + exp(clamp(SigmaValue(tri), -20.0, 20.0));
-                o.color = EvalSh3(tri, normalize(center - _WorldSpaceCameraPos));
+                // The native rasterizer's SH position is the comma expression
+                // (glm::vec3)(center.x, center.y, center.z), which is vec3(center.z)
+                // (triangle_splatting_rasterization forward.cu). Training optimized
+                // the SH coefficients under that input, so deployment reproduces it.
+                o.color = EvalSh3(tri, normalize(center.zzz - _WorldSpaceCameraPos));
+
+                float4 clip0 = mul(UNITY_MATRIX_VP, float4(p0, 1.0));
+                float4 clip1 = mul(UNITY_MATRIX_VP, float4(p1, 1.0));
+                float4 clip2 = mul(UNITY_MATRIX_VP, float4(p2, 1.0));
+                float4 clipCenter = mul(UNITY_MATRIX_VP, float4(center, 1.0));
+                float2 s0 = (clip0.xy / clip0.w) * 0.5 * _ScreenParams.xy;
+                float2 s1 = (clip1.xy / clip1.w) * 0.5 * _ScreenParams.xy;
+                float2 s2 = (clip2.xy / clip2.w) * 0.5 * _ScreenParams.xy;
+                float2 sc = (clipCenter.xy / clipCenter.w) * 0.5 * _ScreenParams.xy;
+                float a = length(s1 - s2), b = length(s0 - s2), c = length(s0 - s1);
+                float perimeter = a + b + c;
+                // The native window is the edge distance over the screen-space inradius,
+                // so it peaks at the incenter. barycentric_i = d_i / h_i and h_i / r = perimeter / side_i.
+                o.edgeScale = perimeter / max(float3(a, b, c), 1e-6);
+
+                // The native rasterizer's culling rules (forward.cu).
+                float2 e1 = s1 - s0, e2 = s2 - s0;
+                float inradius = abs(e1.x * e2.y - e1.y * e2.x) / max(perimeter, 1e-6);
+                float extent = max(length(s0 - sc), max(length(s1 - sc), length(s2 - sc)));
+                float3 normal = normalize(cross(p1 - p0, p2 - p0));
+                float cosine = abs(dot(normal, normalize(center - _WorldSpaceCameraPos)));
+                if (clipCenter.w <= 0.2 || o.opacity < 0.01 || inradius < 1.0 || extent < 1.0 || extent > 1600.0 || cosine < 0.001)
+                    o.position = float4(2, 2, 2, 1);
                 return o;
             }
 
             float4 Frag(Varyings i) : SV_Target
             {
-                float phi = saturate(3.0 * min(i.barycentric.x, min(i.barycentric.y, i.barycentric.z)));
+                float3 scaled = i.barycentric * i.edgeScale;
+                float phi = saturate(min(scaled.x, min(scaled.y, scaled.z)));
                 float coverage = pow(max(phi, 1e-6), i.sigma);
                 float alpha = min(0.99, i.opacity * coverage);
                 clip(alpha - (1.0 / 255.0));

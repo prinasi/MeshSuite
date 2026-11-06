@@ -564,10 +564,10 @@ def _export_d2ts(
         gamma_rescale = bool(checkpoint_gamma_rescale)
         gamma_rescale_source = "checkpoint"
     else:
-        # Native MeshSuite 2DTS configs enable gamma_rescale when gamma is
-        # annealed.  Old tuple checkpoints did not serialize the flag.
-        gamma_rescale = gamma > 1.0
-        gamma_rescale_source = "legacy_inferred_from_gamma"
+        # Tuple checkpoints do not serialize the flag; every native 2DTS config
+        # enables it, at any gamma (msbench.core.config).
+        gamma_rescale = True
+        gamma_rescale_source = "native_default"
     gamma_vertex_rescale = _d2ts_gamma_vertex_rescale(gamma) if gamma_rescale else 1.0
     triangles = _required_tensor(state, "_vertex", "2dts")
     if triangles.ndim != 3 or triangles.shape[1:] != (3, 3):
@@ -597,7 +597,7 @@ def _export_d2ts(
         "gamma_rescale_source": gamma_rescale_source,
         "gamma_vertex_rescale": gamma_vertex_rescale,
         "vertex_color": bool(f_dc.ndim == 4),
-        "native_coverage_space": "screen_space_barycentric",
+        "native_coverage_space": "perspective_correct_barycentric",
         "native_compositing": "depth_sorted_front_to_back",
         "requires_per_camera_depth_sort": True,
         "unity_method_aware_requires_per_camera_depth_sort": True,
