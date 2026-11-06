@@ -56,6 +56,7 @@ namespace MeshSuite.UnityNative
             faceMipLevels = ReadInt(json, "face_mip_levels", 0);
             faceTexelsPerFace = ReadInt(json, "face_mip_texels_per_face", 0);
             lodPixelScale = ReadFloat(json, "native_render_scaling", 1f);
+            bool d2tsSolid = mode == 2 && Regex.IsMatch(json, "\"terminal_solid_eligible\"\\s*:\\s*true");
             if (primitiveCount <= 0) { Fail("Invalid primitive_count."); yield break; }
             string b = Path.Combine(AssetDirectory, "buffers");
             status = "Loading learned render buffers";
@@ -89,12 +90,15 @@ namespace MeshSuite.UnityNative
             // regime a depth-writing hardware pass is the stable limiting form
             // of the native front-to-back compositor.  It still evaluates the
             // learned degree-3 SH field; only sub-0.1% residual transmission is
-            // intentionally collapsed to hardware visibility.  Do not route
-            // 2DTS here: its learned coverage remains genuinely transparent.
+            // intentionally collapsed to hardware visibility.  A volumetric 2DTS
+            // model must not take this route, its learned coverage remains
+            // genuinely transparent; the export marks the opaque strategy's
+            // binarised, gamma-annealed triangles as eligible.
             // T²-Splat's Stage I mesh is the same terminal-solid MeshSplatting
             // surface; its pass adds the Stage II residual per-face Mip-textures.
             string shaderName = mode == 1 ? "MeshSuite/MeshSplatTerminalSolid"
-                : mode == 3 ? "MeshSuite/T2SplatTerminalSolid" : "MeshSuite/MethodSpecificSplat";
+                : mode == 3 ? "MeshSuite/T2SplatTerminalSolid"
+                : d2tsSolid ? "MeshSuite/D2TSTerminalSolid" : "MeshSuite/MethodSpecificSplat";
             usesSortedTriangleOrder = shaderName == "MeshSuite/MethodSpecificSplat";
             SplatShader = SplatShader != null ? SplatShader : Shader.Find(shaderName);
             if (SplatShader == null) { Fail(shaderName + " shader was not found."); yield break; }
@@ -107,6 +111,8 @@ namespace MeshSuite.UnityNative
             material.SetInt("_ShDegree", activeShDegree); material.SetFloat("_Gamma", gamma);
             material.SetFloat("_OpacityFloor", opacityFloor);
             material.SetFloat("_GammaVertexRescale", gammaVertexRescale);
+            // Native window G = exp(-0.5 ecc^(2 gamma)) crosses 1/2 at this ecc.
+            material.SetFloat("_SolidVertexScale", gammaVertexRescale * Mathf.Pow(2f * Mathf.Log(2f), 0.5f / gamma));
             material.SetInt("_RawCode", 1);
             if (mode == 3)
             {

@@ -22,6 +22,11 @@ def export_unity(
         "--d2ts-gamma-rescale/--no-d2ts-gamma-rescale",
         help="Override the non-serialized 2DTS gamma-rescale flag for a legacy checkpoint.",
     ),
+    d2ts_ste_threshold: float | None = typer.Option(
+        None,
+        "--d2ts-ste-threshold",
+        help="2DTS opaque strategy threshold (adapter.render_params.ste_threshold): keep only triangles at or above it and deploy them as solid.",
+    ),
     background_color: str | None = typer.Option(
         None,
         "--background-color",
@@ -45,6 +50,7 @@ def export_unity(
             overwrite=force,
             mesh_opacity_floor=mesh_opacity_floor,
             d2ts_gamma_rescale=d2ts_gamma_rescale,
+            d2ts_ste_threshold=d2ts_ste_threshold,
             background_color=background_color,
         )
     except (FileNotFoundError, FileExistsError, KeyError, TypeError, ValueError) as exc:

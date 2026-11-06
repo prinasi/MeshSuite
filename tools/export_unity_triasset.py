@@ -19,6 +19,7 @@ def main() -> int:
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--mesh-opacity-floor", type=float)
     parser.add_argument("--background-color", choices=("black", "white"))
+    parser.add_argument("--d2ts-ste-threshold", type=float)
     gamma = parser.add_mutually_exclusive_group()
     gamma.add_argument(
         "--d2ts-gamma-rescale", dest="d2ts_gamma_rescale", action="store_true"
@@ -36,6 +37,7 @@ def main() -> int:
         overwrite=args.force,
         mesh_opacity_floor=args.mesh_opacity_floor,
         d2ts_gamma_rescale=args.d2ts_gamma_rescale,
+        d2ts_ste_threshold=args.d2ts_ste_threshold,
         background_color=args.background_color,
     )
     print(f"Unity-native asset: {package.path}")

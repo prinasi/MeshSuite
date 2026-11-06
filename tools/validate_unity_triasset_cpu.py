@@ -134,6 +134,14 @@ def validate_triasset(
             raise ValueError(f"gamma_vertex_rescale is {actual}, expected {expected}")
         result["d2ts_gamma_rescale"] = actual
 
+    if manifest.get("method") == "2dts" and rendering.get("terminal_solid_eligible"):
+        threshold = rendering.get("ste_threshold")
+        if not isinstance(threshold, float) or not 0.0 < threshold < 1.0:
+            raise ValueError(f"terminal-solid 2dts package has invalid ste_threshold {threshold!r}")
+        if rendering["unity_method_aware_requires_per_camera_depth_sort"]:
+            raise ValueError("terminal-solid 2dts package must not request a per-camera depth sort")
+        result["d2ts_ste_threshold"] = threshold
+
     if verify_checkpoint_hash:
         source = manifest.get("source") or {}
         checkpoint = Path(source.get("checkpoint", ""))
