@@ -203,7 +203,13 @@ def target_from_config(path: Path) -> MetricsTarget:
     eval_cfg = cfg.get("eval", {}) or {}
 
     method = canonical_method(
-        str(adapter_cfg.get("type") or trainer_cfg.get("type") or trainer_cfg.get("name") or path.parent.name)
+        str(
+            output_cfg.get("method")
+            or adapter_cfg.get("type")
+            or trainer_cfg.get("type")
+            or trainer_cfg.get("name")
+            or path.parent.name
+        )
     )
     dataset = canonical_dataset(
         str(dataset_cfg.get("name") or _infer_dataset_from_root(dataset_cfg.get("root")) or "unknown")

@@ -471,14 +471,19 @@ def _format_context(config: Mapping[str, Any]) -> dict[str, Any]:
     if canonical_method == "d2ts":
         canonical_method = "2dts"
 
-    method_template_val = raw_method_str
+    # output.method names a variant of a method that needs its own output tree
+    # (e.g. 2dts-opaque) while keeping the adapter and trainer it runs on.
+    output_cfg = config.get("output", {})
+    output_method = output_cfg.get("method") if isinstance(output_cfg, Mapping) else None
+
+    method_template_val = str(output_method) if output_method else raw_method_str
     cap = trainer_cfg.get("max_primitives")
     if (
         cap is not None
         and int(cap) > 0
         and canonical_method in {"triangle-splatting", "2dts"}
     ):
-        method_template_val = f"abl/{canonical_method}-{int(cap)}"
+        method_template_val = f"abl/{output_method or canonical_method}-{int(cap)}"
 
     max_steps = trainer_cfg.get("max_steps", "")
 
