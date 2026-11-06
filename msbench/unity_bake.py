@@ -286,8 +286,11 @@ def write_baked_package(
     output: str | Path,
     *,
     overwrite: bool = False,
+    background_color: str | None = None,
 ) -> Path:
     """Write the standard engine deployment package of a baked DiffSoup model."""
+    if background_color is None:
+        background_color = "white" if checkpoint.get("white_background") else "black"
     output_path = Path(output).expanduser()
     if output_path.suffix != PACKAGE_SUFFIX:
         output_path = output_path.with_name(output_path.name + PACKAGE_SUFFIX)
@@ -340,7 +343,7 @@ def write_baked_package(
                 "generic_mesh_equivalent": True,
                 "unity_profile_name": "method-aware",
                 "cuda_equivalent": False,
-                "background_color": "white" if checkpoint.get("white_background") else "black",
+                "background_color": background_color,
                 "renderer": "standard-engine-mesh",
                 "primitive_topology": "indexed-triangles",
                 "primitive_count": int(num_triangles),

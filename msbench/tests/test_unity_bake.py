@@ -259,3 +259,15 @@ def test_eval_wrapper_rebakes_an_existing_package_only_when_forced(tmp_path: Pat
     forced = _wrapper_dry_run(tmp_path, "--standard-engine", "--force-export")
     assert "tools/bake_diffsoup_standard_asset.py" in forced
     assert "--force" in forced
+
+
+@pytest.mark.parametrize(
+    "checkpoint_flag, requested, expected",
+    [(False, "white", "white"), (True, "black", "black"), (True, None, "white"), (False, None, "black")],
+)
+def test_baked_package_background_can_override_the_checkpoint(tmp_path: Path, checkpoint_flag, requested, expected):
+    checkpoint, path = _checkpoint(tmp_path, triangles=1)
+    checkpoint["white_background"] = checkpoint_flag
+    baked = torch.rand(1, _sample_count(LEVEL), 3)
+    package = write_baked_package(checkpoint, path, baked, {}, tmp_path / "baked", background_color=requested)
+    assert json.loads((Path(package) / "manifest.json").read_text())["rendering"]["background_color"] == expected
