@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -201,6 +202,33 @@ def test_cutout_shader_is_always_included_in_players():
     assert f"guid: {guid}, type: 3" in graphics
 
 
+def _wrapper_dry_run(tmp_path: Path, *extra: str) -> str:
+    """Dry-run the eval wrapper on a throwaway scene, independent of real outputs."""
+    scene = tmp_path / "data" / "room"
+    (scene / "sparse" / "0").mkdir(parents=True, exist_ok=True)
+    for name in ("cameras.bin", "images.bin"):
+        (scene / "sparse" / "0" / name).write_bytes(b"")
+    (scene / "images_4").mkdir(exist_ok=True)
+    Image.new("RGB", (4, 4)).save(scene / "images_4" / "000001.png")
+    config = tmp_path / "configs" / "diffsoup" / "mipnerf360" / "room.yaml"
+    config.parent.mkdir(parents=True, exist_ok=True)
+    config.write_text(
+        f"dataset:\n  root: {scene}\n  image_dir: images_4\n  resolution: 1\n"
+        f"trainer:\n  downscale: 4\n"
+        f"output:\n  dir: {tmp_path / 'out' / 'room'}\n"
+    )
+    return subprocess.run(
+        [
+            "bash", str(REPO / "single_unity_eval.sh"), "diffsoup", "mipnerf360/room", "0",
+            "--config-root", str(tmp_path / "configs"), "--python", sys.executable,
+            "--unity", str(tmp_path / "unity"), "--unity-project", str(tmp_path),
+            "--skip-player-build", "--unity-player", str(tmp_path / "player"),
+            "--skip-unity-patch", "--dry-run", *extra,
+        ],
+        cwd=REPO, capture_output=True, text=True, check=True,
+    ).stdout
+
+
 @pytest.mark.parametrize(
     "extra, baked, subdir",
     [
@@ -210,18 +238,24 @@ def test_cutout_shader_is_always_included_in_players():
     ],
 )
 def test_eval_wrapper_bakes_only_diffsoup_standard_engine(tmp_path: Path, extra, baked, subdir):
-    out = subprocess.run(
-        [
-            "bash", str(REPO / "single_unity_eval.sh"), "diffsoup", "mipnerf360/room", "0",
-            "--unity", str(tmp_path / "unity"), "--unity-project", str(tmp_path),
-            "--skip-player-build", "--unity-player", str(tmp_path / "player"),
-            "--skip-unity-patch", "--dry-run", *extra,
-        ],
-        cwd=REPO, capture_output=True, text=True, check=True,
-    ).stdout
+    out = _wrapper_dry_run(tmp_path, *extra)
     assert ("tools/bake_diffsoup_standard_asset.py" in out) is baked
     assert ("single_export_unity.sh" in out) is not baked
     assert f"--asset-subdir {subdir}" in out
     if baked:
-        assert f"{subdir}/diffsoup.triasset" in out
+        assert f"--output {tmp_path / 'out' / 'room' / subdir / 'diffsoup.triasset'}" in out
         assert "--downscale 4" in out
+
+
+def test_eval_wrapper_rebakes_an_existing_package_only_when_forced(tmp_path: Path):
+    asset = tmp_path / "out" / "room" / "unity_baked" / "diffsoup.triasset"
+    asset.mkdir(parents=True)
+    (asset / "manifest.json").write_text("{}")
+
+    skipped = _wrapper_dry_run(tmp_path, "--standard-engine")
+    assert "Baked asset exists; skipping" in skipped
+    assert "tools/bake_diffsoup_standard_asset.py" not in skipped
+
+    forced = _wrapper_dry_run(tmp_path, "--standard-engine", "--force-export")
+    assert "tools/bake_diffsoup_standard_asset.py" in forced
+    assert "--force" in forced
