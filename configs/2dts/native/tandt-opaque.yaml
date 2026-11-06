@@ -1,13 +1,19 @@
 # Mesh-oriented 2DTS on Tanks & Temples: upstream config/TanksAndTemples_VanillaTS.yaml
 # (GaodeRender/triangle-splatting eef0120), despite its name the authors' solidifying preset.
-# Differences: the shared hold-out protocol, no T&T F-score point cloud, and no neighbour views
-# or consistency loss (upstream's weights are 0, so loading those views only costs time).
+# Differences:
+# - The schedule the paper states for its mesh setting (arXiv v3 Sec. 4.3): 30K iterations, with
+#   gamma 1 for 20K and then 1 to 50 over 10K, instead of this preset's 40K. Learning-rate decay
+#   ends where the anneal starts, as in upstream's mesh presets.
+# - The shared hold-out protocol.
+# - No T&T F-score point cloud.
+# - No neighbour views or consistency loss (upstream's weights are 0, so loading those views
+#   only costs time).
 lr_delay_steps: &LR_DELAY_STEPS 2_000
 lr_delay_mult: &LR_DELAY_MULT 1.0
-lr_max_steps: &LR_MAX_STEPS 30_000
-total_iter: &TOTAL_ITER 40_000
-solidify_start_iter: &SOLIDIFY_START_ITER 30_000
-solidify_end_iter: &SOLIDIFY_END_ITER 40_000
+lr_max_steps: &LR_MAX_STEPS 20_000
+total_iter: &TOTAL_ITER 30_000
+solidify_start_iter: &SOLIDIFY_START_ITER 20_000
+solidify_end_iter: &SOLIDIFY_END_ITER 30_000
 
 dataset:
     type: "Colmap"

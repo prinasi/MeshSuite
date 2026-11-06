@@ -1,13 +1,14 @@
-# Mesh-oriented 2DTS on Mip-NeRF 360. Upstream ships no preset for this pairing, so this is its
-# Tanks & Temples mesh preset (tandt-opaque.yaml), the closest official recipe for a real
-# COLMAP capture, with the one setting upstream's vanilla presets vary between these datasets
-# and the mesh preset keeps: scale_pruning.radii_threshold from MipNerf360_VanillaTS.yaml.
+# Mesh-oriented 2DTS on Mip-NeRF 360. Neither the paper nor upstream gives a mesh setup for this
+# dataset, so this follows tandt-opaque.yaml: the paper's 30K mesh schedule (arXiv v3 Sec. 4.3)
+# on upstream's closest recipe for a real COLMAP capture. It differs in one setting that upstream's
+# vanilla presets vary between these datasets: scale_pruning.radii_threshold from
+# MipNerf360_VanillaTS.yaml.
 lr_delay_steps: &LR_DELAY_STEPS 2_000
 lr_delay_mult: &LR_DELAY_MULT 1.0
-lr_max_steps: &LR_MAX_STEPS 30_000
-total_iter: &TOTAL_ITER 40_000
-solidify_start_iter: &SOLIDIFY_START_ITER 30_000
-solidify_end_iter: &SOLIDIFY_END_ITER 40_000
+lr_max_steps: &LR_MAX_STEPS 20_000
+total_iter: &TOTAL_ITER 30_000
+solidify_start_iter: &SOLIDIFY_START_ITER 20_000
+solidify_end_iter: &SOLIDIFY_END_ITER 30_000
 
 dataset:
     type: "Colmap"

@@ -46,7 +46,7 @@ def test_opaque_scene_shares_the_volumetric_protocol_and_budget(dataset: str, sc
     assert cfg["d2ts"]["strategy"] == "opaque"
     assert volumetric["d2ts"]["strategy"] == "volumetric"
     assert cfg["trainer"]["type"] == cfg["adapter"]["type"] == "2dts"
-    assert cfg["trainer"]["max_steps"] == 40_000
+    assert cfg["trainer"]["max_steps"] == 30_000
 
     render = cfg["adapter"]["render_params"]
     assert (render["ste_threshold"], render["sort_level"], render["gamma_rescale"]) == (0.3, 2, True)
@@ -76,22 +76,24 @@ def test_primitive_cap_keeps_the_variant_in_the_ablation_path(tmp_path: Path):
 
 
 @pytest.mark.parametrize("dataset", SCENES)
-def test_native_presets_follow_the_upstream_mesh_recipe(dataset: str):
+def test_native_presets_follow_the_paper_schedule_and_upstream_recipe(dataset: str):
     native = yaml.safe_load((REPO / f"configs/2dts/native/{dataset}-opaque.yaml").read_text())
     model, update, trainer = native["model"], native["model"]["model_update"], native["trainer"]
 
     # Shared dataset protocol, not upstream's train-on-everything setting.
     assert native["dataset"]["hold_test_set"] is True
     assert native["dataset"]["hold_interval"] == 8
+    # The paper's mesh setting (arXiv v3 Sec. 4.3); learning-rate decay ends at the anneal.
+    assert update["gamma_schedule"] == {"start_iter": 20_000, "end_iter": 30_000, "gamma_init": 1.0, "gamma_final": 50.0}
+    assert trainer["iterations"] == 30_000
+    assert model["optimizer"]["vertex"]["max_steps"] == 20_000
+    assert model["max_sh_degree"] == 3
     # Upstream config/TanksAndTemples_VanillaTS.yaml.
     assert (model["sort_level"], model["ste_threshold"], model["gamma_rescale"]) == (2, 0.3, True)
-    assert model["max_sh_degree"] == 3
     assert model["sampling"]["init_opacity"] == 0.5
-    assert model["optimizer"]["vertex"]["max_steps"] == 30_000
     assert (model["optimizer"]["vertex"]["v_init"], model["optimizer"]["vertex"]["v_final"]) == (0.0012, 0.00002)
     assert model["optimizer"]["opacity"]["v_final"] == 0.001
     assert model["optimizer"]["f_rest"]["v_init"] == 0.0002
-    assert update["gamma_schedule"] == {"start_iter": 30_000, "end_iter": 40_000, "gamma_init": 1.0, "gamma_final": 50.0}
     assert update["opacity_reset"]["reset_value"] == 0.29
     assert update["densification"]["split_scale_threshold"] == 0.01
     assert update["contribution_pruning"]["interval_iter"] == -1
@@ -112,7 +114,7 @@ def test_native_presets_follow_the_upstream_mesh_recipe(dataset: str):
 
 
 @pytest.mark.parametrize("dataset,scene", [("mipnerf360", "bicycle"), ("tandt", "truck")])
-def test_resolved_native_config_solidifies_over_the_last_quarter(dataset: str, scene: str, tmp_path: Path, monkeypatch):
+def test_resolved_native_config_solidifies_over_the_last_third(dataset: str, scene: str, tmp_path: Path, monkeypatch):
     monkeypatch.chdir(REPO)
     cfg = load_config(REPO / f"configs/2dts-opaque/{dataset}/{scene}.yaml")
     native = _build_d2ts_native_config(
@@ -122,20 +124,20 @@ def test_resolved_native_config_solidifies_over_the_last_quarter(dataset: str, s
         max_steps=cfg["trainer"]["max_steps"],
     )
 
-    assert native.trainer.iterations == 40_000
+    assert native.trainer.iterations == 30_000
     assert native.model.ste_threshold == 0.3
     assert native.model.sort_level == 2
-    assert native.model.model_update.gamma_schedule.start_iter == 30_000
-    assert native.model.model_update.gamma_schedule.end_iter == 40_000
+    assert native.model.model_update.gamma_schedule.start_iter == 20_000
+    assert native.model.model_update.gamma_schedule.end_iter == 30_000
     assert native.model.model_update.densification.target_point_num == cfg["d2ts"]["target_point_num"]
     assert native.trainer.save_pcd_iterations is None
-    assert native.trainer.save_mesh_iterations == [40_000]
-    assert native.trainer.checkpoint_iterations == [40_000]
+    assert native.trainer.save_mesh_iterations == [30_000]
+    assert native.trainer.checkpoint_iterations == [30_000]
     assert native.trainer.eval_interval_iter == 0
 
 
 def test_export_keeps_only_the_triangles_the_native_renderer_draws(tmp_path: Path):
-    checkpoint = tmp_path / "40000.ckpt"
+    checkpoint = tmp_path / "30000.ckpt"
     _write_checkpoint(checkpoint, [0.9, 0.2, 0.3, 0.29, 0.5])
 
     package = export_triasset("2dts", checkpoint, tmp_path / "solid", d2ts_ste_threshold=0.3)

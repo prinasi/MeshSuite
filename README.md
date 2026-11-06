@@ -511,15 +511,17 @@ cutout shader existed needs `--force-player-build`.
 `configs/2dts/` trains 2DTS as the volumetric radiance field its paper evaluates on
 Mip-NeRF 360 and Tanks & Temples. `2dts-opaque` trains the same scenes with the same
 dataset protocol and primitive budgets, but ends on solid triangles: gamma anneals
-from 1 to 50 over the last 10k of 40k iterations, opacity is binarised at 0.3, and
+from 1 to 50 over the last 10k of 30k iterations, opacity is binarised at 0.3, and
 the renderer sorts per pixel. Its outputs stay separate, in `outputs/2dts-opaque/`
 and `outputs/unity_reports/2dts-opaque/`.
 
-Tanks & Temples uses the authors' mesh preset
-(`config/TanksAndTemples_VanillaTS.yaml`). The authors publish no such preset or
-results for Mip-NeRF 360, so `configs/2dts/native/mipnerf360-opaque.yaml` applies the
-same recipe and takes `scale_pruning.radii_threshold` from their Mip-NeRF 360 preset.
-This configuration is beyond the v5 manuscript.
+The schedule is the one the paper states for its mesh setting (arXiv v3, Sec. 4.3),
+which it evaluates on NeRF-Synthetic and DTU only. Tanks & Temples takes its other
+settings from the authors' mesh preset (`config/TanksAndTemples_VanillaTS.yaml`,
+which itself runs 40k iterations). The authors publish no such preset or results for
+Mip-NeRF 360, so `configs/2dts/native/mipnerf360-opaque.yaml` applies the same recipe
+and takes `scale_pruning.radii_threshold` from their Mip-NeRF 360 preset. This
+configuration is beyond the v5 manuscript.
 
 ```bash
 # De facto renderer: train, render the held-out views, score them.
