@@ -506,6 +506,47 @@ triangles have too few vertices to carry its appearance. The bake needs CUDA and
 scene's COLMAP dataset, and `--force-export` re-bakes. A Player built before the
 cutout shader existed needs `--force-player-build`.
 
+### Mesh-oriented 2DTS (`2dts-opaque`)
+
+`configs/2dts/` trains 2DTS as the volumetric radiance field its paper evaluates on
+Mip-NeRF 360 and Tanks & Temples. `2dts-opaque` trains the same scenes with the same
+dataset protocol and primitive budgets, but ends on solid triangles: gamma anneals
+from 1 to 50 over the last 10k of 40k iterations, opacity is binarised at 0.3, and
+the renderer sorts per pixel. Its outputs stay separate, in `outputs/2dts-opaque/`
+and `outputs/unity_reports/2dts-opaque/`.
+
+Tanks & Temples uses the authors' mesh preset
+(`config/TanksAndTemples_VanillaTS.yaml`). The authors publish no such preset or
+results for Mip-NeRF 360, so `configs/2dts/native/mipnerf360-opaque.yaml` applies the
+same recipe and takes `scale_pruning.radii_threshold` from their Mip-NeRF 360 preset.
+This configuration is beyond the v5 manuscript.
+
+```bash
+# De facto renderer: train, render the held-out views, score them.
+bash single_train.sh 2dts-opaque mipnerf360/all 0
+bash single_train.sh 2dts-opaque tandt/all 0
+
+# Custom and standard engine deployment.
+for dataset in mipnerf360 tandt; do
+  ./single_unity_eval.sh 2dts-opaque "$dataset/all" 0 --unity "$UNITY" --unity-project unity \
+    --report-name "unity_metrics_report_$dataset"
+  ./single_unity_eval.sh 2dts-opaque "$dataset/all" 0 --unity "$UNITY" --unity-project unity \
+    --report-name "unity_metrics_report_$dataset" --standard-engine
+done
+
+python3 tools/format_metrics.py --method 2dts-opaque --dataset mipnerf360/all
+python3 tools/format_metrics.py --method 2dts-opaque --dataset tandt/all
+```
+
+The export applies the threshold the native renderer uses
+(`adapter.render_params.ste_threshold`), so both deployments draw only the triangles
+it draws. Standard engine deployment colors them with SH DC. Custom engine deployment
+keeps the degree-3 SH and uses `MeshSuite/D2TSTerminalSolid`, a depth-buffered pass in
+place of the sorted alpha blending used for volumetric 2DTS. The deployments' 2x MSAA
+smooths hard triangle edges that the single-sample native renderer keeps, so custom
+engine deployment can score slightly above the de facto renderer. A Player built
+before that shader existed needs `--force-player-build`.
+
 ### Runtime profile details
 
 By default, FPS and GPU latency are measured with the standalone Player:
@@ -582,6 +623,9 @@ configs/2dts/
 ├── dtu/scan24.yaml
 ├── mipnerf360/bicycle.yaml
 ├── native/dtu.yaml
+└── tandt/truck.yaml
+configs/2dts-opaque/
+├── mipnerf360/bicycle.yaml
 └── tandt/truck.yaml
 configs/exmesh/
 ├── dtu/scan24.yaml

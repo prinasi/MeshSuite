@@ -1,4 +1,20 @@
 # @format
 
+# Mesh-oriented 2DTS: gamma anneals to 50 and opacity is binarised through the
+# straight-through threshold, so training ends on solid triangles. The first
+# 30k iterations match the volumetric run; the last 10k solidify.
+
+trainer:
+  max_steps: 40000
+
+adapter:
+  render_params:
+    gamma_rescale: true
+    ste_threshold: 0.3
+    sort_level: 2
+
+output:
+  method: 2dts-opaque
+
 d2ts:
   strategy: opaque

@@ -88,8 +88,18 @@ canonical_method() {
         meshsplatting) echo "mesh-splatting" ;;
         t2-splat|t2splat) echo "t2splat" ;;
         2dts|d2ts) echo "2dts" ;;
+        2dts-opaque|d2ts-opaque) echo "2dts-opaque" ;;
         diffsoup) echo "diffsoup" ;;
         *) echo "${name}" ;;
+    esac
+}
+
+# 2dts-opaque is 2DTS trained under the opaque strategy: it has its own configs,
+# outputs and reports, but runs on the 2dts package format and Unity renderers.
+engine_method() {
+    case "$1" in
+        2dts-opaque) echo "2dts" ;;
+        *) echo "$1" ;;
     esac
 }
 
@@ -228,6 +238,7 @@ else
     TARGETS=("${POSITIONAL[@]:0:$((${#POSITIONAL[@]} - 1))}")
 fi
 METHOD_ID="$(canonical_method "${METHOD}")"
+ENGINE_METHOD_ID="$(engine_method "${METHOD_ID}")"
 GPU_ID="$(lower "${GPU_ID}")"
 if [[ "${GPU_ID}" != "cpu" && ! "${GPU_ID}" =~ ^[0-9]+$ ]]; then
     echo "Invalid gpu_id: ${GPU_ID}. Expected a non-negative integer or 'cpu'." >&2
@@ -251,13 +262,14 @@ for target in "${EXPANDED_TARGETS[@]}"; do
     MODEL_PATH="$(config_value "${CONFIG_FILE}" "output.dir")"
     CHECKPOINT="$(config_value "${CONFIG_FILE}" "adapter.checkpoint")"
     BACKGROUND_COLOR="$(config_value "${CONFIG_FILE}" "adapter.render_params.bg_color")"
+    STE_THRESHOLD="$(config_value "${CONFIG_FILE}" "adapter.render_params.ste_threshold")"
     if [[ -z "${MODEL_PATH}" ]]; then
         echo "[${DATASET}/${SCENE}] Config missing output.dir: ${CONFIG_FILE}" >&2
         FAILED=1
         [[ "${CONTINUE_ON_ERROR}" -eq 1 ]] && continue || break
     fi
     [[ -n "${CHECKPOINT}" ]] || CHECKPOINT="${MODEL_PATH}/ckpt"
-    OUTPUT="${MODEL_PATH}/${OUTPUT_SUBDIR}/${METHOD_ID}"
+    OUTPUT="${MODEL_PATH}/${OUTPUT_SUBDIR}/${ENGINE_METHOD_ID}"
     PACKAGE="${OUTPUT}.triasset"
     REPLACE_INCOMPLETE=0
     if [[ -f "${PACKAGE}/manifest.json" && "${FORCE}" -eq 0 ]]; then
@@ -287,8 +299,9 @@ for target in "${EXPANDED_TARGETS[@]}"; do
     if [[ "${#TB_EXPORT_ARGS[@]}" -gt 0 ]]; then
         CMD+=("${TB_EXPORT_ARGS[@]}")
     fi
-    CMD+=(--method "${METHOD_ID}" --checkpoint "${CHECKPOINT}" --output "${OUTPUT}")
+    CMD+=(--method "${ENGINE_METHOD_ID}" --checkpoint "${CHECKPOINT}" --output "${OUTPUT}")
     [[ -n "${BACKGROUND_COLOR}" ]] && CMD+=(--background-color "${BACKGROUND_COLOR}")
+    [[ -n "${STE_THRESHOLD}" && "${STE_THRESHOLD}" != "None" ]] && CMD+=(--d2ts-ste-threshold "${STE_THRESHOLD}")
     [[ "${FORCE}" -eq 1 || "${REPLACE_INCOMPLETE}" -eq 1 ]] && CMD+=(--force)
     if [[ "${GPU_ID}" == "cpu" ]]; then
         DEVICE_LABEL="cpu (CUDA hidden)"

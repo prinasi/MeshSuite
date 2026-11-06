@@ -195,6 +195,7 @@ canonical_method() {
         meshsplatting) echo "mesh-splatting" ;;
         t2-splat|t2splat) echo "t2splat" ;;
         2dts|d2ts) echo "2dts" ;;
+        2dts-opaque|d2ts-opaque) echo "2dts-opaque" ;;
         *) echo "${name}" ;;
     esac
 }
@@ -334,7 +335,7 @@ get_effective_cap() {
         mesh-splatting|mesh_splatting)
             cap="${CAP_MESH_SPLATTING}"
             ;;
-        2dts|d2ts)
+        2dts|d2ts|2dts-opaque)
             cap="${CAP_2DTS:-${CAP_MAX_PRIMITIVES}}"
             ;;
         *)
