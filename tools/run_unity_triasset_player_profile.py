@@ -418,6 +418,7 @@ def main() -> int:
     parser.add_argument("--asset-subdir", default="unity_native")
     parser.add_argument("--reference-image-dir")
     parser.add_argument("--scenes", nargs="*", default=SCENES)
+    parser.add_argument("--holdout", type=int, default=8, help="Every Nth sorted view is a test view; 1 keeps them all.")
     parser.add_argument("--profile-run", type=int, default=1)
     parser.add_argument("--profile-views", type=int, default=3)
     parser.add_argument("--profile-warmup", type=int, default=60)
@@ -569,6 +570,7 @@ def main() -> int:
             "-output", str(output),
             "-triasset-width", str(width),
             "-triasset-height", str(height),
+            "-holdout", str(args.holdout),
             "-profile-only", "1",
             "-profile-run", str(args.profile_run),
             "-profile-views", str(args.profile_views),

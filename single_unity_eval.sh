@@ -25,6 +25,7 @@ SHOW_PLAYER_OUTPUT=0
 FORCE_PLAYER_BUILD=0
 SKIP_PLAYER_BUILD=0
 DATASETS_ROOT_OVERRIDE="${DATASETS:-}"
+UNITY_REPLAY_ROOT="${UNITY_REPLAY_ROOT:-outputs/unity_replay}"
 OUTPUT_NAME="unity_custom_engine"
 OUTPUT_NAME_EXPLICIT=0
 CONDITION="custom-engine"
@@ -149,9 +150,10 @@ Options:
   --python PATH            Python executable
   -h, --help               Show this help
 
-This wrapper currently requires COLMAP sparse binaries for Unity camera replay.
-It will skip/fail early on DTU or synthetic layouts that do not provide
-sparse/0/cameras.bin and sparse/0/images.bin.
+Unity camera replay reads COLMAP sparse binaries. NeRF-Synthetic scenes get a derived
+replay scene under UNITY_REPLAY_ROOT (default: outputs/unity_replay) holding the official
+test views and ground truth composited on the configured background. Other layouts
+without sparse/0/cameras.bin and sparse/0/images.bin, such as DTU, fail early.
 EOF
 }
 
@@ -747,6 +749,8 @@ for target in "${EXPANDED_TARGETS[@]}"; do
                 --dataset "${DATASET_PATH}"
                 --downscale "${TRAINER_DOWNSCALE:-4}"
                 --output "${TRI_ASSET}")
+            BAKE_BACKGROUND="$(config_value "${CONFIG_FILE}" "adapter.render_params.bg_color")"
+            [[ -n "${BAKE_BACKGROUND}" ]] && BAKE_CMD+=(--background-color "${BAKE_BACKGROUND}")
             [[ "${FORCE_EXPORT}" -eq 1 ]] && BAKE_CMD+=(--force)
             if ! run_command "${LABEL}:bake" "${BAKE_CMD[@]}"; then
                 if handle_failure "${LABEL}" "DiffSoup texture bake failed"; then continue; fi
@@ -761,18 +765,39 @@ for target in "${EXPANDED_TARGETS[@]}"; do
         if handle_failure "${LABEL}" "Unity asset missing after export stage: ${TRI_ASSET}"; then continue; fi
         break
     fi
-    if [[ ! -f "${DATASET_PATH}/sparse/0/cameras.bin" || ! -f "${DATASET_PATH}/sparse/0/images.bin" ]]; then
-        if handle_failure "${LABEL}" "Unity camera replay requires COLMAP sparse/0/cameras.bin and images.bin: ${DATASET_PATH}"; then continue; fi
+    UNITY_SCENE_NAME="$(basename "${MODEL_PATH}")"
+    UNITY_DATASET_PATH="${DATASET_PATH}"
+    UNITY_HOLDOUT=8
+    if [[ "${DATASET}" == "nerf_synthetic" ]]; then
+        UNITY_DATASET_PATH="$(abs_path "${UNITY_REPLAY_ROOT}")/${DATASET}/${UNITY_SCENE_NAME}"
+        UNITY_HOLDOUT=1
+        REF_IMAGE_DIR="images"
+        REF_PATH="${UNITY_DATASET_PATH}/${REF_IMAGE_DIR}"
+        REPLAY_BACKGROUND="$(config_value "${CONFIG_FILE}" "dataset.background")"
+        REPLAY_CMD=("${PYTHON_BIN}" "tools/prepare_unity_replay.py"
+            --dataset "${DATASET_PATH}"
+            --output "${UNITY_DATASET_PATH}"
+            --background "${REPLAY_BACKGROUND:-white}")
+        if ! run_command "${LABEL}:replay" "${REPLAY_CMD[@]}"; then
+            if handle_failure "${LABEL}" "Unity replay scene could not be prepared: ${UNITY_DATASET_PATH}"; then continue; fi
+            break
+        fi
+    fi
+    if [[ "${DRY_RUN}" -eq 1 && "${UNITY_DATASET_PATH}" != "${DATASET_PATH}" ]]; then
+        : # The replay scene is only written by a real run.
+    elif [[ ! -f "${UNITY_DATASET_PATH}/sparse/0/cameras.bin" || ! -f "${UNITY_DATASET_PATH}/sparse/0/images.bin" ]]; then
+        if handle_failure "${LABEL}" "Unity camera replay requires COLMAP sparse/0/cameras.bin and images.bin: ${UNITY_DATASET_PATH}"; then continue; fi
         break
     fi
-    if ! has_images "${REF_PATH}"; then
+    if [[ "${DRY_RUN}" -eq 1 && "${UNITY_DATASET_PATH}" != "${DATASET_PATH}" ]]; then
+        : # The replay scene's images are only written by a real run.
+    elif ! has_images "${REF_PATH}"; then
         if handle_failure "${LABEL}" "Reference images missing: ${REF_PATH}"; then continue; fi
         break
     fi
 
     UNITY_OUTPUTS_ROOT="$(dirname "${MODEL_PATH}")"
-    UNITY_DATASETS_ROOT="$(dirname "${DATASET_PATH}")"
-    UNITY_SCENE_NAME="$(basename "${MODEL_PATH}")"
+    UNITY_DATASETS_ROOT="$(dirname "${UNITY_DATASET_PATH}")"
     CONDITION_ARG="--custom-engine"
     [[ "${CONDITION}" == "standard-engine" ]] && CONDITION_ARG="--standard-engine"
 
@@ -788,6 +813,7 @@ for target in "${EXPANDED_TARGETS[@]}"; do
                 --output-name "${OUTPUT_NAME}"
                 --scenes "${UNITY_SCENE_NAME}"
                 --reference-image-dir "${REF_IMAGE_DIR}"
+                --holdout "${UNITY_HOLDOUT}"
                 --test-only
                 --fps-warmup "${FPS_WARMUP}"
                 --fps-frames "${FPS_FRAMES}"
@@ -816,6 +842,7 @@ for target in "${EXPANDED_TARGETS[@]}"; do
                         --output-name "${OUTPUT_NAME}"
                         --scenes "${UNITY_SCENE_NAME}"
                         --reference-image-dir "${REF_IMAGE_DIR}"
+                        --holdout "${UNITY_HOLDOUT}"
                         --profile-run "${run}"
                         --profile-views "${PROFILE_VIEWS}"
                         --profile-warmup "${PROFILE_WARMUP}"
@@ -838,6 +865,7 @@ for target in "${EXPANDED_TARGETS[@]}"; do
                         --output-name "${OUTPUT_NAME}"
                         --scenes "${UNITY_SCENE_NAME}"
                         --reference-image-dir "${REF_IMAGE_DIR}"
+                        --holdout "${UNITY_HOLDOUT}"
                         --profile-only
                         --profile-run "${run}"
                         --profile-views "${PROFILE_VIEWS}"

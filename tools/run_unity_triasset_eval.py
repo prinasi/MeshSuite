@@ -137,6 +137,7 @@ def main() -> int:
         help="Dataset image directory used for capture resolution and ground truth. Defaults to MipNeRF360 convention.",
     )
     parser.add_argument("--scenes", nargs="*", default=SCENES)
+    parser.add_argument("--holdout", type=int, default=8, help="Every Nth sorted view is a test view; 1 keeps them all.")
     parser.add_argument("--fps-warmup", type=int, default=3)
     parser.add_argument("--fps-frames", type=int, default=12)
     parser.add_argument("--test-only", action="store_true", help="Capture only LLFF held-out views.")
@@ -159,7 +160,7 @@ def main() -> int:
     args.unity_project = args.unity_project.resolve()
     args.outputs_root = args.outputs_root.resolve()
     args.datasets_root = args.datasets_root.resolve()
-    for name in ("fps_warmup", "fps_frames", "profile_run", "profile_views", "profile_warmup", "profile_frames"):
+    for name in ("holdout", "fps_warmup", "fps_frames", "profile_run", "profile_views", "profile_warmup", "profile_frames"):
         if getattr(args, name) <= 0:
             parser.error(f"--{name.replace('_', '-')} must be positive")
     try:
@@ -235,6 +236,7 @@ def main() -> int:
             "-executeMethod", f"{unity_namespace(args.unity_project)}.UnityNative.Editor.TriAssetBatchRunner.Run",
             "-method", args.method, "-triasset", str(triasset), "-dataset", str(dataset), "-output", str(output),
             "-triasset-width", str(width), "-triasset-height", str(height),
+            "-holdout", str(args.holdout),
             "-fps-warmup", str(args.fps_warmup), "-fps-frames", str(args.fps_frames),
             "-logFile", str(log_path),
         ]

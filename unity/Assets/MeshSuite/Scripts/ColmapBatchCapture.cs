@@ -134,6 +134,7 @@ namespace MeshSuite.UnityNative
             OutputRoot = TriAssetRuntimeOptions.Get("-output", OutputRoot);
             OutputWidth = TriAssetRuntimeOptions.GetInt("-triasset-width", OutputWidth);
             OutputHeight = TriAssetRuntimeOptions.GetInt("-triasset-height", OutputHeight);
+            Holdout = Mathf.Max(1, TriAssetRuntimeOptions.GetInt("-holdout", Holdout));
             FpsWarmupFrames = TriAssetRuntimeOptions.GetInt("-fps-warmup", FpsWarmupFrames);
             FpsTimedFrames = TriAssetRuntimeOptions.GetInt("-fps-frames", FpsTimedFrames);
             TestOnly = TriAssetRuntimeOptions.Has("-test-only");

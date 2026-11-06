@@ -395,6 +395,12 @@ test-view images for PSNR/SSIM/LPIPS, and profile FPS, GPU latency and memory th
 Linux standalone Development Player. The workflow is designed for completed
 config-driven runs under `outputs/{method}/{dataset}/{scene}`.
 
+Unity replays cameras from COLMAP binaries. On NeRF-Synthetic, the wrapper first writes
+a derived scene under `outputs/unity_replay/nerf_synthetic/<scene>` (`UNITY_REPLAY_ROOT`
+overrides the root) holding the official test views and their ground truth composited on
+the configured background, and scores every one of them. DTU has no such scene and fails
+early.
+
 ### Unity project setup
 
 Install Unity with Linux standalone build support. 
