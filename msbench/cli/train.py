@@ -362,6 +362,8 @@ def _train_from_structured_config(
             method_name in {"triangle-splatting", "mesh-splatting"},
         )
     )
+    if method_name == "triangle-splatting" and not native_loop and trainer_cfg.get("game_engine"):
+        raise ValueError("trainer.game_engine is implemented only by the native triangle-splatting loop")
     if method_name == "triangle-splatting" and native_loop:
         summary = run_with_training_stats(
             lambda: _run_triangle_splatting_native_config(
@@ -626,6 +628,8 @@ def _triangle_splatting_native_argv(
         argv.append("--no_dome")
     if bool(trainer_cfg.get("outdoor", False)):
         argv.append("--outdoor")
+    if bool(trainer_cfg.get("game_engine", False)):
+        argv.append("--game_engine")
     if quiet:
         argv.append("--quiet")
     latest = find_latest_point_cloud_checkpoint(output_dir)

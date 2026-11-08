@@ -1,0 +1,16 @@
+# @format
+
+_base_:
+  - ../../base/tandt.yaml
+  - ../../base/triangle-splatting.yaml
+  - ../../base/triangle-splatting-game-engine.yaml
+
+experiment:
+  name: triangle_splatting_game_engine_truck
+
+dataset:
+  scene: truck
+  resolution: 1
+
+trainer:
+  outdoor: true

@@ -1,0 +1,17 @@
+# @format
+
+_base_:
+  - ../../base/mipnerf360.yaml
+  - ../../base/triangle-splatting.yaml
+  - ../../base/triangle-splatting-game-engine.yaml
+
+experiment:
+  name: triangle_splatting_game_engine_treehill
+
+dataset:
+  scene: treehill
+  image_dir: images_4
+  resolution: 1
+
+trainer:
+  outdoor: true

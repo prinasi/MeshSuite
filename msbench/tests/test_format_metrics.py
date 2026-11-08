@@ -42,3 +42,26 @@ output:
     assert row.init_cd == 1.25
     assert header[header.index("CD") + 1] == "Init CD"
     assert cells[header.index("Init CD")] == "1.2500"
+
+
+def test_rows_of_checkpoints_trained_elsewhere_have_no_training_stats(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    (run_dir / "metrics.json").write_text(
+        json.dumps({"aggregate": {"psnr_mean": 19.3}, "inference": {"gpu_fps": 50.0}, "training": None})
+    )
+    config = tmp_path / "bicycle.yaml"
+    config.write_text(
+        f"""
+dataset: {{name: mipnerf360, root: data/mipnerf360/bicycle, scene: bicycle}}
+trainer: {{type: triangle-splatting}}
+output:
+  dir: {run_dir}
+  metrics_file: {run_dir / "metrics.json"}
+"""
+    )
+
+    row = read_row(target_from_config(config))
+
+    assert row.psnr == 19.3 and row.fps == 50.0
+    assert row.training_time_s is None and row.training_memory_mib is None

@@ -85,6 +85,7 @@ canonical_method() {
     name="${name//_/-}"
     case "${name}" in
         trianglesplatting) echo "triangle-splatting" ;;
+        trianglesplatting-game-engine|ts-game-engine) echo "triangle-splatting-game-engine" ;;
         meshsplatting) echo "mesh-splatting" ;;
         t2-splat|t2splat) echo "t2splat" ;;
         2dts|d2ts) echo "2dts" ;;
@@ -94,11 +95,14 @@ canonical_method() {
     esac
 }
 
-# 2dts-opaque is 2DTS trained under the opaque strategy: it has its own configs,
-# outputs and reports, but runs on the 2dts package format and Unity renderers.
+# Method variants have their own configs, outputs and reports, but run on their
+# base method's package format and Unity renderers: 2dts-opaque is 2DTS trained
+# under the opaque strategy, and triangle-splatting-game-engine is Triangle
+# Splatting trained with the official train_game_engine.py recipe.
 engine_method() {
     case "$1" in
         2dts-opaque) echo "2dts" ;;
+        triangle-splatting-game-engine) echo "triangle-splatting" ;;
         *) echo "$1" ;;
     esac
 }
