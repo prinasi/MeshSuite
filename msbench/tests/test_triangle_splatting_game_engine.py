@@ -149,7 +149,10 @@ def test_single_train_flag_rejects_other_methods():
     assert "--train_game_engine applies only to triangle-splatting" in result.stderr
 
 
-@pytest.mark.parametrize("script", ["single_export_unity.sh", "single_unity_eval.sh", "single_unity_video.sh"])
+UNITY_SCRIPTS = ["single_export_unity.sh", "single_unity_eval.sh", "single_unity_video.sh"]
+
+
+@pytest.mark.parametrize("script", UNITY_SCRIPTS)
 def test_unity_scripts_map_every_variant_to_its_base_method(script):
     # A second engine_method() definition silently replaces the first in bash.
     assert (REPO / script).read_text().count("\nengine_method() {") == 1
@@ -161,7 +164,20 @@ def test_unity_scripts_map_every_variant_to_its_base_method(script):
     assert out.split() == ["2dts", "triangle-splatting", "2dts", "triangle-splatting"]
 
 
-def test_unity_eval_deploys_the_variant_as_triangle_splatting(tmp_path: Path):
+@pytest.mark.parametrize("script", UNITY_SCRIPTS)
+def test_unity_scripts_reject_train_game_engine_for_other_methods(script):
+    result = subprocess.run(
+        ["bash", str(REPO / script), "2dts", "mipnerf360/bicycle", "0", "--train_game_engine"],
+        cwd=REPO, capture_output=True, text=True,
+    )
+    assert result.returncode == 1
+    assert "--train_game_engine applies only to triangle-splatting" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "method_args", [(VARIANT,), ("triangle-splatting", "--train_game_engine")], ids=["method", "flag"]
+)
+def test_unity_eval_deploys_the_variant_as_triangle_splatting(tmp_path: Path, method_args):
     scene = tmp_path / "data" / "garden"
     (scene / "sparse" / "0").mkdir(parents=True)
     for name in ("cameras.bin", "images.bin"):
@@ -174,7 +190,7 @@ def test_unity_eval_deploys_the_variant_as_triangle_splatting(tmp_path: Path):
     config.write_text(f"dataset:\n  root: {scene}\noutput:\n  dir: {out_dir}\n")
     out = subprocess.run(
         [
-            "bash", str(REPO / "single_unity_eval.sh"), VARIANT, "mipnerf360/garden", "0",
+            "bash", str(REPO / "single_unity_eval.sh"), method_args[0], "mipnerf360/garden", "0", *method_args[1:],
             "--config-root", str(tmp_path / "configs"), "--python", sys.executable,
             "--unity", str(tmp_path / "unity"), "--unity-project", str(tmp_path),
             "--skip-player-build", "--unity-player", str(tmp_path / "player"),

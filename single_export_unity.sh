@@ -30,6 +30,7 @@ TB_CMD_ARR=()
 TB_EXPORT_ARGS=()
 FORCE=0
 DRY_RUN=0
+TRAIN_GAME_ENGINE=0
 CONTINUE_ON_ERROR=0
 EXPORTED=0
 SKIPPED=0
@@ -61,6 +62,8 @@ Options:
   --method NAME            Method when using the target-first form
   --force                  Replace an existing .triasset package
   --continue-on-error      Export later scenes after an individual failure
+  --train_game_engine      Triangle Splatting only: use the train_game_engine.py variant,
+                           same as method triangle-splatting-game-engine
   --dry-run                Print resolved commands without exporting
   --python PATH            Python executable for config loading/fallback CLI
   -h, --help               Show this help
@@ -223,6 +226,7 @@ while [[ "$#" -gt 0 ]]; do
         --method) require_value "$@"; METHOD="$2"; shift 2 ;;
         --force) FORCE=1; shift ;;
         --continue-on-error) CONTINUE_ON_ERROR=1; shift ;;
+        --train_game_engine|--train-game-engine) TRAIN_GAME_ENGINE=1; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
         --python) require_value "$@"; PYTHON_BIN="$2"; shift 2 ;;
         -h|--help) usage; exit 0 ;;
@@ -242,6 +246,15 @@ else
     TARGETS=("${POSITIONAL[@]:0:$((${#POSITIONAL[@]} - 1))}")
 fi
 METHOD_ID="$(canonical_method "${METHOD}")"
+if [[ "${TRAIN_GAME_ENGINE}" -eq 1 ]]; then
+    case "${METHOD_ID}" in
+        triangle-splatting|triangle-splatting-game-engine) METHOD_ID="triangle-splatting-game-engine" ;;
+        *)
+            echo "--train_game_engine applies only to triangle-splatting, not ${METHOD_ID}" >&2
+            exit 1
+            ;;
+    esac
+fi
 ENGINE_METHOD_ID="$(engine_method "${METHOD_ID}")"
 GPU_ID="$(lower "${GPU_ID}")"
 if [[ "${GPU_ID}" != "cpu" && ! "${GPU_ID}" =~ ^[0-9]+$ ]]; then
