@@ -56,6 +56,7 @@ FORCE_METRICS=0
 FORCE_VIDEO=0
 CONTINUE_ON_ERROR=0
 DRY_RUN=0
+TRAIN_GAME_ENGINE=0
 REPORT_NAME="unity_metrics_report"
 
 if [[ -n "${PYTHON_BIN:-}" ]]; then
@@ -146,6 +147,8 @@ Options:
   --force-video            Re-render the --video trajectory video
   --skip-unity-patch       Do not patch legacy Unity project for Linux/Vulkan
   --continue-on-error      Continue with later scenes after a failure
+  --train_game_engine      Triangle Splatting only: use the train_game_engine.py variant,
+                           same as method triangle-splatting-game-engine
   --dry-run                Print resolved commands without running them
   --python PATH            Python executable
   -h, --help               Show this help
@@ -555,6 +558,7 @@ while [[ "$#" -gt 0 ]]; do
         --force-metrics|--force_metrics) FORCE_METRICS=1; shift ;;
         --skip-unity-patch|--skip_unity_patch) SKIP_UNITY_PATCH=1; shift ;;
         --continue-on-error) CONTINUE_ON_ERROR=1; shift ;;
+        --train_game_engine|--train-game-engine) TRAIN_GAME_ENGINE=1; shift ;;
         --dry-run|--dry_run) DRY_RUN=1; shift ;;
         --python) require_value "$@"; PYTHON_BIN="$2"; shift 2 ;;
         -h|--help) usage; exit 0 ;;
@@ -575,6 +579,15 @@ else
 fi
 
 METHOD_ID="$(canonical_method "${METHOD}")"
+if [[ "${TRAIN_GAME_ENGINE}" -eq 1 ]]; then
+    case "${METHOD_ID}" in
+        triangle-splatting|triangle-splatting-game-engine) METHOD_ID="triangle-splatting-game-engine" ;;
+        *)
+            echo "--train_game_engine applies only to triangle-splatting, not ${METHOD_ID}" >&2
+            exit 1
+            ;;
+    esac
+fi
 ENGINE_METHOD_ID="$(engine_method "${METHOD_ID}")"
 GPU_ID="$(lower "${GPU_ID}")"
 PROFILE_RUNTIME="$(lower "${PROFILE_RUNTIME}")"

@@ -29,6 +29,7 @@ WRITE_FRAMES=0
 FORCE_UNITY=0
 CONTINUE_ON_ERROR=0
 DRY_RUN=0
+TRAIN_GAME_ENGINE=0
 REFERENCE_IMAGE_DIR_OVERRIDE=""
 
 if [[ -n "${PYTHON_BIN:-}" ]]; then
@@ -79,6 +80,8 @@ Options:
   --config-root PATH       Config root (default: configs)
   --datasets-root PATH     Override dataset root with PATH/<scene>
   --continue-on-error      Keep running subsequent scenes when a scene fails
+  --train_game_engine      Triangle Splatting only: use the train_game_engine.py variant,
+                           same as method triangle-splatting-game-engine
   --dry-run                Print commands without launching Unity
   -h, --help               Show this help message
 EOF
@@ -138,6 +141,7 @@ while [[ $# -gt 0 ]]; do
         --force-unity|--force_unity) FORCE_UNITY=1; shift ;;
         --reference-image-dir|--reference_image_dir) require_value "$@"; REFERENCE_IMAGE_DIR_OVERRIDE="$2"; shift 2 ;;
         --continue-on-error) CONTINUE_ON_ERROR=1; shift ;;
+        --train_game_engine|--train-game-engine) TRAIN_GAME_ENGINE=1; shift ;;
         --dry-run|--dry_run) DRY_RUN=1; shift ;;
         --python) require_value "$@"; PYTHON_BIN="$2"; shift 2 ;;
         -h|--help) usage; exit 0 ;;
@@ -166,6 +170,15 @@ else
 fi
 
 METHOD_ID="$(canonical_method "${METHOD}")"
+if [[ "${TRAIN_GAME_ENGINE}" -eq 1 ]]; then
+    case "${METHOD_ID}" in
+        triangle-splatting|triangle-splatting-game-engine) METHOD_ID="triangle-splatting-game-engine" ;;
+        *)
+            echo "--train_game_engine applies only to triangle-splatting, not ${METHOD_ID}" >&2
+            exit 1
+            ;;
+    esac
+fi
 ENGINE_METHOD_ID="$(engine_method "${METHOD_ID}")"
 if [[ -z "${OUTPUT_NAME}" ]]; then
     OUTPUT_NAME="unity_custom_engine"
