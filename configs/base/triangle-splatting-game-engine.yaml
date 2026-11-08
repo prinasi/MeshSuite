@@ -1,0 +1,13 @@
+# @format
+
+# Triangle Splatting trained for game engines with the official repository's
+# train_game_engine.py. After densification an extra loss pushes triangles towards
+# opaque, sharp ones, and pruning also drops transparent triangles (opacity <= 0.1,
+# then <= 0.7 after 29K) and soft ones (sigma >= 1 after 28K). Every other setting
+# is the triangle-splatting scene config's.
+
+trainer:
+  game_engine: true
+
+output:
+  method: triangle-splatting-game-engine

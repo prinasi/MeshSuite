@@ -92,11 +92,14 @@ require_value() {
     fi
 }
 
-# 2dts-opaque is 2DTS trained under the opaque strategy: it has its own configs,
-# outputs and reports, but runs on the 2dts package format and Unity renderers.
+# Method variants have their own configs, outputs and reports, but run on their
+# base method's package format and Unity renderers: 2dts-opaque is 2DTS trained
+# under the opaque strategy, and triangle-splatting-game-engine is Triangle
+# Splatting trained with the official train_game_engine.py recipe.
 engine_method() {
     case "$1" in
         2dts-opaque) echo "2dts" ;;
+        triangle-splatting-game-engine) echo "triangle-splatting" ;;
         *) echo "$1" ;;
     esac
 }
@@ -104,6 +107,7 @@ engine_method() {
 canonical_method() {
     case "$(echo "$1" | tr '[:upper:]' '[:lower:]' | tr '_' '-')" in
         triangle-splatting|trianglesplatting|triangle_splatting|ts) echo "triangle-splatting" ;;
+        triangle-splatting-game-engine|trianglesplatting-game-engine|ts-game-engine) echo "triangle-splatting-game-engine" ;;
         mesh-splatting|meshsplatting|mesh_splatting|ms) echo "mesh-splatting" ;;
         2dts|d2ts) echo "2dts" ;;
         2dts-opaque|d2ts-opaque) echo "2dts-opaque" ;;

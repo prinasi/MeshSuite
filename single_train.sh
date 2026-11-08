@@ -63,6 +63,7 @@ EXPLICIT_SKIP_NVS_METRICS=0
 EXPLICIT_SKIP_CD_METRICS=0
 EXPLICIT_SKIP_VIDEO=0
 FORCE_RETRAIN=0
+TRAIN_GAME_ENGINE=0
 FORCE_RERUN_EXISTING=0
 
 SUMMARY_ROWS=()
@@ -101,6 +102,7 @@ Examples:
   bash $0 triangle-splatting mipnerf360/all 0
   bash $0 triangle-splatting all 0
   bash $0 t2splat dtu/all 0           # T²-Splat: mipnerf360, tandt and dtu only
+  bash $0 triangle-splatting mipnerf360/all 0 --train_game_engine
 
 Legacy form still works:
   bash $0 garden 0 --method triangle-splatting
@@ -129,6 +131,10 @@ Options:
   --cap_triangle_splatting NUM  Limit for triangle-splatting
   --cap_mesh_splatting NUM      Limit for mesh-splatting
   --cap_2dts NUM                Limit for 2dts
+  --train_game_engine      Triangle Splatting only: train with the official repository's
+                           train_game_engine.py recipe (opaque, solid triangles). Same as
+                           method triangle-splatting-game-engine; outputs go to
+                           outputs/triangle-splatting-game-engine/<dataset>/<scene>
   --dtu_eval_mode MODE     Override DTU mode for this run: foreground (masked) or full (unmasked)
   --dtu-foreground         Shortcut for --dtu_eval_mode foreground (default in dtu.yaml)
   --dtu-masked             Alias for --dtu-foreground
@@ -192,6 +198,7 @@ canonical_method() {
     name="${name//_/-}"
     case "${name}" in
         trianglesplatting) echo "triangle-splatting" ;;
+        trianglesplatting-game-engine|ts-game-engine) echo "triangle-splatting-game-engine" ;;
         meshsplatting) echo "mesh-splatting" ;;
         t2-splat|t2splat) echo "t2splat" ;;
         2dts|d2ts) echo "2dts" ;;
@@ -329,7 +336,7 @@ get_effective_cap() {
     local method_id="$1"
     local cap=""
     case "${method_id}" in
-        triangle-splatting|triangle_splatting)
+        triangle-splatting|triangle_splatting|triangle-splatting-game-engine)
             cap="${CAP_TRIANGLE_SPLATTING:-${CAP_MAX_PRIMITIVES}}"
             ;;
         mesh-splatting|mesh_splatting)
@@ -1083,6 +1090,7 @@ while [[ $# -gt 0 ]]; do
         --cap_triangle_splatting|--cap-triangle-splatting) require_value "$@"; CAP_TRIANGLE_SPLATTING="$2"; shift 2 ;;
         --cap_mesh_splatting|--cap-mesh-splatting) require_value "$@"; CAP_MESH_SPLATTING="$2"; shift 2 ;;
         --cap_2dts|--cap-2dts|--cap_d2ts|--cap-d2ts) require_value "$@"; CAP_2DTS="$2"; shift 2 ;;
+        --train_game_engine|--train-game-engine) TRAIN_GAME_ENGINE=1; shift ;;
         --python)            require_value "$@"; PYTHON_BIN="$2"; shift 2 ;;
         -h|--help)           usage; exit 0 ;;
         *)
@@ -1115,6 +1123,15 @@ else
 fi
 
 METHOD_ID="$(canonical_method "${METHOD}")"
+if [[ "${TRAIN_GAME_ENGINE}" -eq 1 ]]; then
+    case "${METHOD_ID}" in
+        triangle-splatting|triangle-splatting-game-engine) METHOD_ID="triangle-splatting-game-engine" ;;
+        *)
+            echo "--train_game_engine applies only to triangle-splatting, not ${METHOD_ID}" >&2
+            exit 1
+            ;;
+    esac
+fi
 
 # Resolve stage flags. With no explicit stage request, run the full pipeline.
 if [[ "${HAS_STAGE_REQUEST}" -eq 1 ]]; then

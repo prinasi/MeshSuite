@@ -263,9 +263,10 @@ def read_row(target: MetricsTarget) -> MetricsRow:
     )
     if metrics_path.exists():
         data = _read_json(metrics_path)
-        aggregate = data.get("aggregate", {}) if isinstance(data, dict) else {}
-        inference = data.get("inference", {}) if isinstance(data, dict) else {}
-        training = data.get("training", {}) if isinstance(data, dict) else {}
+        # A checkpoint trained elsewhere has no training stats ("training": null).
+        aggregate = (data.get("aggregate") if isinstance(data, dict) else None) or {}
+        inference = (data.get("inference") if isinstance(data, dict) else None) or {}
+        training = (data.get("training") if isinstance(data, dict) else None) or {}
         row.psnr = _number(aggregate.get("psnr_mean"))
         row.ssim = _number(aggregate.get("ssim_mean"))
         row.lpips = _number(aggregate.get("lpips_mean"))

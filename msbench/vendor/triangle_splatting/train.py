@@ -36,6 +36,42 @@ try:
 except ImportError:
     TENSORBOARD_FOUND = False
 
+# Game-engine mode reproduces the official train_game_engine.py. After densification
+# it pushes triangles towards opaque, sharp ones and prunes the rest, so the result
+# can be exported as solid triangles. Its iteration milestones assume 30K iterations.
+GAME_ENGINE_SIGMA_PRUNE_AFTER = 28_000
+GAME_ENGINE_FINAL_OPACITY_AFTER = 29_000
+
+
+def game_engine_opacity_dead(iteration: int) -> float:
+    """Opacity below which train_game_engine.py prunes after densification."""
+    return 0.7 if iteration > GAME_ENGINE_FINAL_OPACITY_AFTER else 0.1
+
+
+def final_dead_mask(triangles, opt, *, iteration, number_of_views, new_round, game_engine=False):
+    """Triangles pruned at a post-densification interval."""
+    opacity_dead = game_engine_opacity_dead(iteration) if game_engine else opt.opacity_dead
+    opacity_mask = (triangles.get_opacity <= opacity_dead).squeeze()
+    if number_of_views < 250 or not new_round:
+        dead_mask = torch.logical_or(
+            (triangles.importance_score < opt.importance_threshold).squeeze(),
+            opacity_mask,
+        )
+    else:
+        dead_mask = opacity_mask
+
+    if game_engine and iteration > GAME_ENGINE_SIGMA_PRUNE_AFTER:
+        dead_mask = torch.logical_or(dead_mask, (triangles.get_sigma >= 1.0).squeeze())
+    if not new_round:
+        dead_mask = torch.logical_or(dead_mask, (triangles.triangle_area < 2).squeeze())
+    if dead_mask.all():
+        dead_mask = opacity_mask.clone()
+        if dead_mask.all():
+            keep_count = max(1, int(0.1 * triangles._opacity.shape[0]))
+            keep_idx = torch.topk(triangles.get_opacity.squeeze(), k=keep_count, largest=True).indices
+            dead_mask[keep_idx] = False
+    return dead_mask
+
 
 def build_parser():
     parser = ArgumentParser(description="MeshSuite triangle-splatting trainer")
@@ -52,6 +88,12 @@ def build_parser():
     parser.add_argument("--load_iteration", type=int, default=None)
     parser.add_argument("--no_dome", action="store_true", default=False)
     parser.add_argument("--outdoor", action="store_true", default=False)
+    parser.add_argument(
+        "--game_engine",
+        action="store_true",
+        default=False,
+        help="Train opaque, solid triangles as the official train_game_engine.py does",
+    )
     return parser, model_params, opt_params, pipe_params
 
 
@@ -181,6 +223,7 @@ def training(
     *,
     no_dome,
     outdoor,
+    game_engine=False,
     testing_iterations,
     save_iterations,
     checkpoint,
@@ -304,6 +347,12 @@ def training(
         loss = loss_image + loss_opacity + normal_loss + dist_loss
         if iteration < opt.densify_until_iter:
             loss = loss + loss_size
+        elif game_engine:
+            loss = (
+                loss
+                + torch.abs(triangles.get_sigma).mean()
+                + 1 / (torch.abs(triangles.get_opacity).mean() * 0.05)
+            )
 
         loss.backward()
         iter_end.record()
@@ -376,22 +425,14 @@ def training(
                     triangles.enforce_max_primitives(max_primitives)
 
             if iteration > opt.densify_until_iter and iteration % opt.densification_interval == 0:
-                if number_of_views < 250 or not new_round:
-                    dead_mask = torch.logical_or(
-                        (triangles.importance_score < opt.importance_threshold).squeeze(),
-                        (triangles.get_opacity <= opt.opacity_dead).squeeze(),
-                    )
-                else:
-                    dead_mask = (triangles.get_opacity <= opt.opacity_dead).squeeze()
-
-                if not new_round:
-                    dead_mask = torch.logical_or(dead_mask, (triangles.triangle_area < 2).squeeze())
-                if dead_mask.all():
-                    dead_mask = (triangles.get_opacity <= opt.opacity_dead).squeeze()
-                    if dead_mask.all():
-                        keep_count = max(1, int(0.1 * triangles._opacity.shape[0]))
-                        keep_idx = torch.topk(triangles.get_opacity.squeeze(), k=keep_count, largest=True).indices
-                        dead_mask[keep_idx] = False
+                dead_mask = final_dead_mask(
+                    triangles,
+                    opt,
+                    iteration=iteration,
+                    number_of_views=number_of_views,
+                    new_round=new_round,
+                    game_engine=game_engine,
+                )
                 triangles.remove_final_points(dead_mask)
                 if max_primitives is not None:
                     triangles.enforce_max_primitives(max_primitives)
@@ -433,6 +474,7 @@ def run_training(argv: Sequence[str] | None = None):
         pipe_params.extract(args),
         no_dome=args.no_dome,
         outdoor=args.outdoor,
+        game_engine=args.game_engine,
         testing_iterations=args.test_iterations,
         save_iterations=args.save_iterations,
         checkpoint=args.start_checkpoint,
