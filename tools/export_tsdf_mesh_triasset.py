@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Export a colored TSDF mesh as a Unity general-purpose TriAsset."""
+"""Export a colored TSDF mesh as a standard engine deployment TriAsset."""
 
 from __future__ import annotations
 
@@ -72,7 +72,7 @@ def export(mesh_path: Path, output: Path, method: str, background: str, force: b
     vertices = np.asarray(vertices, dtype=np.float32)
     triangles = np.asarray(triangles, dtype=np.int32)
     colors = np.clip(np.asarray(colors, dtype=np.float32), 0.0, 1.0)
-    # Unity's general-purpose renderer evaluates color = 0.28209479 * dc + 0.5.
+    # Standard engine deployment evaluates color = 0.28209479 * dc + 0.5.
     sh_dc = ((colors - 0.5) / SH_C0).astype(np.float32)
 
     buffers = {
@@ -83,7 +83,7 @@ def export(mesh_path: Path, output: Path, method: str, background: str, force: b
     buffer_list = [{"name": name, **spec} for name, spec in buffers.items()]
     manifest = {
         "schema_version": "1.0",
-        "export_contract_revision": 2,
+        "export_contract_revision": 3,
         "asset_kind": "msbench-unity-native",
         "method": method,
         "source": {
@@ -103,10 +103,10 @@ def export(mesh_path: Path, output: Path, method: str, background: str, force: b
             "unity_profile_name": "method-aware",
             "cuda_equivalent": False,
             "background_color": background,
-            "renderer": "general-purpose-mesh",
+            "renderer": "standard-engine-mesh",
             "primitive_topology": "indexed-triangles",
             "primitive_count": int(len(triangles)),
-            "general_purpose": {
+            "standard_engine": {
                 "supported": True,
                 "appearance": "vertex_color",
                 "view_dependent_appearance": False,

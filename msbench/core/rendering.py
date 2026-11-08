@@ -125,6 +125,15 @@ def _metric_rgb_for_sample(
     metadata = sample.metadata or getattr(sample.camera, "metadata", None) or {}
     bg_color = metadata.get("eval_background_color")
     pred = _composite_output_rgb(output, bg_color)
+    metrics_mode = str(metadata.get("dtu_eval_mode", "")).lower()
+    if metrics_mode in ("foreground", "fg", "masked") and sample.mask is not None:
+        mask = sample.mask.to(pred.device, dtype=pred.dtype)
+        if mask.dim() == 2:
+            mask = mask.unsqueeze(-1)
+        bg = torch.tensor(bg_color or [0.0, 0.0, 0.0], dtype=pred.dtype, device=pred.device).view(1, 1, 3)
+        pred = (pred * mask + bg * (1.0 - mask)).clamp(0, 1)
+        if target is not None:
+            target = (target * mask + bg * (1.0 - mask)).clamp(0, 1)
     return pred, target
 
 
@@ -529,7 +538,8 @@ def _transform_poses_pca(
     t_mean = t.mean(axis=0)
     t = t - t_mean
 
-    eigval, eigvec = np.linalg.eig(t.T @ t)
+    # The covariance matrix is symmetric; eigh keeps degenerate paths real.
+    eigval, eigvec = np.linalg.eigh(t.T @ t)
     inds = np.argsort(eigval)[::-1]
     eigvec = eigvec[:, inds]
     rot = eigvec.T
@@ -732,6 +742,13 @@ def render_video(
             arr = tensor_to_uint8(
                 _composite_output_rgb(output, metadata.get("eval_background_color"))
             )
+            # Preserve a nonempty frame when an axis has only one pixel.
+            if arr.shape[0] == 1 or arr.shape[1] == 1:
+                arr = np.pad(
+                    arr,
+                    ((0, int(arr.shape[0] == 1)), (0, int(arr.shape[1] == 1)), (0, 0)),
+                    mode="edge",
+                )
             # Crop trailing odd pixel for H.264 compatibility (libx264 yuv420p requires even dimensions)
             # A one-pixel dimension cannot be cropped; pad it before making
             # the normal crop, so small previews never become empty images.

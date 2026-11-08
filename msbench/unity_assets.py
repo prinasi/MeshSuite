@@ -3,7 +3,7 @@
 ``.triasset`` is deliberately a directory instead of a generic mesh format.
 It keeps the renderer inputs that are not representable by OFF/COFF or GLB
 (SH coefficients, opacity, splat widths, neural features, and MLP weights).
-The package is consumed by the Unity MeshSplatBench package; standard CG previews
+The package is consumed by the Unity MeshSuite package; standard CG previews
 remain a separate, explicitly lossy export path.
 """
 
@@ -20,12 +20,17 @@ from pathlib import Path
 from typing import Any
 
 import torch
-from msbench.methods import canonical_method_name
 
 
 SCHEMA_VERSION = "1.0"
-EXPORT_CONTRACT_REVISION = 2
+EXPORT_CONTRACT_REVISION = 3
 PACKAGE_SUFFIX = ".triasset"
+
+# The opaque strategy anneals gamma to 50; well below that the 2DTS window is
+# too soft to deploy as a solid triangle.
+D2TS_TERMINAL_SOLID_MIN_GAMMA = 10.0
+# Logit stored for surviving triangles, as upstream's toRawTriangle does.
+D2TS_SOLID_OPACITY_LOGIT = 10.0
 
 
 @dataclass
@@ -60,10 +65,23 @@ class TriAssetPackage:
 def canonical_method(method: str) -> str:
     """Normalize public method aliases without importing CUDA-backed adapters."""
 
+    value = method.strip().lower().replace("_", "-")
+    aliases = {
+        "2dts": "2dts",
+        "d2ts": "2dts",
+        "triangle-splatting": "triangle-splatting",
+        "trianglesplatting": "triangle-splatting",
+        "mesh-splatting": "mesh-splatting",
+        "meshsplatting": "mesh-splatting",
+        "t2splat": "t2splat",
+        "t2-splat": "t2splat",
+        "diffsoup": "diffsoup",
+    }
     try:
-        return canonical_method_name(method)
+        return aliases[value]
     except KeyError as exc:
-        raise ValueError(f"Unsupported Unity export method {method!r}: {exc}") from exc
+        names = ", ".join(sorted(set(aliases.values())))
+        raise ValueError(f"Unsupported Unity export method {method!r}; expected one of: {names}") from exc
 
 
 def resolve_checkpoint(method: str, checkpoint: str | Path) -> Path:
@@ -75,7 +93,7 @@ def resolve_checkpoint(method: str, checkpoint: str | Path) -> Path:
     if not path.is_dir():
         raise FileNotFoundError(f"Checkpoint does not exist: {path}")
 
-    if method in {"triangle-splatting", "mesh-splatting"}:
+    if method in {"triangle-splatting", "mesh-splatting", "t2splat"}:
         direct = [
             path / "point_cloud_state_dict.pt",
             path / "ckpt" / "point_cloud_state_dict.pt",
@@ -111,8 +129,8 @@ def export_triasset(
     *,
     overwrite: bool = False,
     mesh_opacity_floor: float | None = None,
-    export_topology: str = "indexed",
     d2ts_gamma_rescale: bool | None = None,
+    d2ts_ste_threshold: float | None = None,
     background_color: str | None = None,
 ) -> TriAssetPackage:
     """Export the complete renderer state required for a Unity-native port.
@@ -123,9 +141,6 @@ def export_triasset(
     """
 
     method = canonical_method(method)
-    export_topology = _canonical_export_topology(export_topology)
-    if export_topology != "indexed" and method != "mesh-splatting":
-        raise ValueError("--export-topology is only supported for mesh-splatting")
     background_color = _deployment_background_color(method, background_color)
     checkpoint_path = resolve_checkpoint(method, checkpoint)
     final_output_path = _package_path(output)
@@ -154,10 +169,16 @@ def export_triasset(
                 payload,
                 checkpoint_path,
                 opacity_floor_override=mesh_opacity_floor,
-                export_topology=export_topology,
             )
+        elif method == "t2splat":
+            renderer = _export_t2splat(writer, payload)
         elif method == "2dts":
-            renderer = _export_d2ts(writer, payload, gamma_rescale_override=d2ts_gamma_rescale)
+            renderer = _export_d2ts(
+                writer,
+                payload,
+                gamma_rescale_override=d2ts_gamma_rescale,
+                ste_threshold=d2ts_ste_threshold,
+            )
         else:
             renderer = _export_diffsoup(writer, payload)
 
@@ -187,7 +208,7 @@ def export_triasset(
                 "unity_profile_name": "method-aware",
                 "cuda_equivalent": False,
                 "background_color": background_color,
-                "general_purpose": _general_purpose_contract(method),
+                "standard_engine": _standard_engine_contract(method),
                 **renderer,
             },
             "buffers": {name: spec.to_dict() for name, spec in writer.buffers.items()},
@@ -279,7 +300,6 @@ def _export_mesh_splatting(
     checkpoint_path: Path,
     *,
     opacity_floor_override: float | None = None,
-    export_topology: str = "indexed",
 ) -> dict[str, Any]:
     state = _expect_dict(state, "mesh-splatting")
     vertices = _required_tensor(state, "triangles_points", "mesh-splatting")
@@ -295,39 +315,11 @@ def _export_mesh_splatting(
     opacity_floor, source = _mesh_splatting_opacity_floor(
         state, checkpoint_path, override=opacity_floor_override
     )
-    export_topology = _canonical_export_topology(export_topology)
-    materialized_soup = export_topology == "soup"
-    if materialized_soup:
-        corner_vertices = _mesh_corner_vertex_indices(faces, vertices.shape[0])
-        corner_count = int(corner_vertices.numel())
-        writer.tensor("positions", vertices[corner_vertices], "materialized triangle-soup positions")
-        writer.tensor(
-            "indices",
-            torch.arange(corner_count, dtype=torch.int32).reshape(-1, 3),
-            "materialized triangle-soup sequential indices",
-            dtype=torch.int32,
-        )
-        writer.tensor(
-            "vertex_weight_logits",
-            vertex_weight_logits[corner_vertices],
-            "materialized per-corner opacity weight logits",
-        )
-        writer.tensor("sh_dc", sh_dc[corner_vertices], "materialized per-corner SH DC")
-        writer.tensor("sh_rest", sh_rest[corner_vertices], "materialized per-corner SH residual")
-        export_topology_label = "materialized-soup"
-        primitive_topology = "triangle-soup"
-        vertex_count = corner_count
-        topology_expansion = float(corner_count) / float(vertices.shape[0]) if int(vertices.shape[0]) > 0 else 0.0
-    else:
-        writer.tensor("positions", vertices, "indexed-mesh positions")
-        writer.tensor("indices", faces, "triangle indices", dtype=torch.int32)
-        writer.tensor("vertex_weight_logits", vertex_weight_logits, "per-vertex opacity weight logits")
-        writer.tensor("sh_dc", sh_dc, "per-vertex SH DC")
-        writer.tensor("sh_rest", sh_rest, "per-vertex SH residual")
-        export_topology_label = "indexed"
-        primitive_topology = "indexed-triangles"
-        vertex_count = int(vertices.shape[0])
-        topology_expansion = 1.0
+    writer.tensor("positions", vertices, "indexed-mesh positions")
+    writer.tensor("indices", faces, "triangle indices", dtype=torch.int32)
+    writer.tensor("vertex_weight_logits", vertex_weight_logits, "per-vertex opacity weight logits")
+    writer.tensor("sh_dc", sh_dc, "per-vertex SH DC")
+    writer.tensor("sh_rest", sh_rest, "per-vertex SH residual")
     triangle_opacity = mesh_splatting_triangle_opacity(
         vertex_weight_logits, faces, opacity_floor=opacity_floor
     )
@@ -340,11 +332,8 @@ def _export_mesh_splatting(
     terminal_solid_eligible = opacity_floor >= 0.999 and sigma <= 1e-3
     return {
         "renderer": "mesh-splatting",
-        "primitive_topology": primitive_topology,
-        "export_topology": export_topology_label,
+        "primitive_topology": "indexed-triangles",
         "source_vertex_count": int(vertices.shape[0]),
-        "exported_vertex_count": vertex_count,
-        "topology_vertex_expansion": topology_expansion,
         "primitive_count": int(faces.shape[0]),
         "opacity_activation": "opacity_floor+(1-opacity_floor)*sigmoid",
         "opacity_floor": opacity_floor,
@@ -366,22 +355,119 @@ def _export_mesh_splatting(
     }
 
 
-def _canonical_export_topology(value: str | None) -> str:
-    normalized = (value or "indexed").strip().lower().replace("_", "-")
-    if normalized in {"indexed", "mesh", "indexed-mesh"}:
-        return "indexed"
-    if normalized in {"soup", "materialized-soup", "triangle-soup", "deindexed", "deindexed-soup"}:
-        return "soup"
-    raise ValueError("--export-topology must be indexed/mesh or soup/materialized-soup")
+# T²-Splat evaluates checkpoints through TriangleModel.load_parameters, which
+# fixes the opacity floor (upstream render.py and Stage II both use it).
+T2SPLAT_OPACITY_FLOOR = 0.999
+# Upstream render.py and Stage II render at 4x supersampling; the per-triangle
+# Mip LOD is computed at that resolution.
+T2SPLAT_NATIVE_RENDER_SCALING = 4
 
 
-def _mesh_corner_vertex_indices(faces: torch.Tensor, vertex_count: int) -> torch.Tensor:
-    indices = faces.detach().cpu().long()
-    if indices.ndim != 2 or indices.shape[1] != 3:
-        raise ValueError(f"mesh-splatting faces must be [F,3], got {tuple(indices.shape)}")
-    if indices.numel() and (int(indices.min()) < 0 or int(indices.max()) >= int(vertex_count)):
-        raise ValueError("mesh-splatting faces reference an invalid vertex")
-    return indices.reshape(-1)
+def t2splat_mip_pyramid(face_textures: torch.Tensor) -> tuple[torch.Tensor, list[int], list[int]]:
+    """Packed residual Mip pyramid, as ``TriangleModel.build_mip_pyramid`` builds it.
+
+    Returns ``(packed [F, texels_per_face, 3], level_resolutions, level_offsets)``,
+    where offsets count texels from the start of each face's block and every
+    level is stored row-major (row = barycentric ``wC``, column = ``wB``).
+    """
+    if face_textures.ndim != 4 or face_textures.shape[1] != face_textures.shape[2] or face_textures.shape[3] != 3:
+        raise ValueError(f"T²-Splat face_textures must be [F,R,R,3], got {tuple(face_textures.shape)}")
+    levels = [face_textures.float()]
+    while levels[-1].shape[1] > 1:
+        down = torch.nn.functional.avg_pool2d(levels[-1].permute(0, 3, 1, 2), 2)
+        levels.append(down.permute(0, 2, 3, 1).contiguous())
+    resolutions = [int(level.shape[1]) for level in levels]
+    offsets = [0]
+    for res in resolutions[:-1]:
+        offsets.append(offsets[-1] + res * res)
+    faces = face_textures.shape[0]
+    packed = torch.cat([level.reshape(faces, -1, 3) for level in levels], dim=1)
+    return packed, resolutions, offsets
+
+
+def _pack_half_pairs(values: torch.Tensor) -> torch.Tensor:
+    """IEEE half floats packed little-endian as uint32 words (Unity f16tof32)."""
+    flat = values.detach().cpu().reshape(-1).to(torch.float16)
+    if flat.numel() % 2:
+        flat = torch.cat([flat, flat.new_zeros(1)])
+    halves = flat.view(torch.int16).to(torch.int32) & 0xFFFF
+    words = halves[0::2] | (halves[1::2] << 16)
+    return words.to(torch.int32)
+
+
+def _export_t2splat(writer: _PackageWriter, state: Any) -> dict[str, Any]:
+    """MeshSplatting's indexed-mesh buffers plus T²-Splat's residual Mip-textures."""
+    state = _expect_dict(state, "t2splat")
+    vertices = _required_tensor(state, "triangles_points", "t2splat")
+    faces = _required_tensor(state, "_triangle_indices", "t2splat")
+    vertex_weight_logits = _required_tensor(state, "vertex_weight", "t2splat")
+    sigma_logits = _required_value(state, "sigma", "t2splat")
+    writer.tensor("positions", vertices, "indexed-mesh positions")
+    writer.tensor("indices", faces, "triangle indices", dtype=torch.int32)
+    writer.tensor("vertex_weight_logits", vertex_weight_logits, "per-vertex opacity weight logits")
+    writer.tensor("sigma_logits", sigma_logits, "mesh splat sigma logits")
+    writer.tensor("sh_dc", _required_tensor(state, "features_dc", "t2splat"), "per-vertex SH DC")
+    writer.tensor("sh_rest", _required_tensor(state, "features_rest", "t2splat"), "per-vertex SH residual")
+    writer.tensor(
+        "triangle_opacity",
+        mesh_splatting_triangle_opacity(vertex_weight_logits, faces, opacity_floor=T2SPLAT_OPACITY_FLOOR),
+        "per-triangle activated opacity: minimum of the three activated vertex weights",
+    )
+    sigma = math.exp(_scalar_float(sigma_logits, "t2splat sigma"))
+    texture: dict[str, Any] = {"face_texture": "none"}
+    face_textures = state.get("face_textures")
+    if face_textures is not None:
+        face_textures = torch.as_tensor(face_textures).detach().float()
+        if face_textures.shape[0] != faces.shape[0]:
+            raise ValueError("t2splat face_textures must have one texture per face")
+        use_mip = bool(state.get("use_mip_texture", True))
+        if use_mip:
+            packed, resolutions, offsets = t2splat_mip_pyramid(face_textures)
+        else:
+            packed = face_textures.reshape(face_textures.shape[0], -1, 3)
+            resolutions, offsets = [int(face_textures.shape[1])], [0]
+        writer.tensor(
+            "face_mip_textures",
+            _pack_half_pairs(packed),
+            "per-face residual RGB Mip pyramid, IEEE half pairs packed in uint32 words",
+        )
+        texture = {
+            "face_texture": "residual_rgb_mip" if use_mip else "residual_rgb",
+            "face_tex_res": int(face_textures.shape[1]),
+            "face_mip_levels": len(resolutions),
+            "face_mip_resolutions": resolutions,
+            "face_mip_offsets": offsets,
+            "face_mip_texels_per_face": int(packed.shape[1]),
+            "face_mip_encoding": "float16_pairs_in_uint32",
+            "face_texture_sampling": "bilinear(wB*(R-1), wC*(R-1)); trilinear across levels",
+            "face_mip_lod": "per-triangle log2(max screen-space texel footprint) at native render scaling",
+            "native_render_scaling": T2SPLAT_NATIVE_RENDER_SCALING,
+        }
+    terminal_solid_eligible = T2SPLAT_OPACITY_FLOOR >= 0.999 and sigma <= 1e-3
+    return {
+        "renderer": "t2splat",
+        "primitive_topology": "indexed-triangles",
+        "source_vertex_count": int(vertices.shape[0]),
+        "primitive_count": int(faces.shape[0]),
+        "opacity_activation": "opacity_floor+(1-opacity_floor)*sigmoid",
+        "opacity_floor": T2SPLAT_OPACITY_FLOOR,
+        "opacity_floor_source": "t2splat_load_parameters",
+        "triangle_opacity_reduction": "min_after_activation",
+        "triangle_opacity_buffer": "triangle_opacity",
+        "sigma_activation": "exp",
+        "sigma": sigma,
+        "terminal_solid_eligible": terminal_solid_eligible,
+        "terminal_solid_condition": "opacity_floor>=0.999 and exp(sigma_logits)<=0.001",
+        "native_coverage_space": "screen_space_projected_incenter",
+        "native_compositing": "tile_depth_sorted_front_to_back",
+        "requires_per_camera_depth_sort": True,
+        "unity_method_aware_requires_per_camera_depth_sort": not terminal_solid_eligible,
+        "unity_method_aware_status": (
+            "opaque-terminal-solid" if terminal_solid_eligible else "portability-baseline"
+        ),
+        "active_sh_degree": int(state.get("active_sh_degree", 0)),
+        **texture,
+    }
 
 
 def mesh_splatting_triangle_opacity(
@@ -475,6 +561,7 @@ def _export_d2ts(
     payload: Any,
     *,
     gamma_rescale_override: bool | None = None,
+    ste_threshold: float | None = None,
 ) -> dict[str, Any]:
     if isinstance(payload, tuple):
         state = _expect_dict(payload[0], "2dts")
@@ -490,17 +577,23 @@ def _export_d2ts(
         gamma_rescale = bool(checkpoint_gamma_rescale)
         gamma_rescale_source = "checkpoint"
     else:
-        # Native MeshSplatBench 2DTS configs enable gamma_rescale when gamma is
-        # annealed.  Old tuple checkpoints did not serialize the flag.
-        gamma_rescale = gamma > 1.0
-        gamma_rescale_source = "legacy_inferred_from_gamma"
+        # Tuple checkpoints do not serialize the flag; every native 2DTS config
+        # enables it, at any gamma (msbench.core.config).
+        gamma_rescale = True
+        gamma_rescale_source = "native_default"
     gamma_vertex_rescale = _d2ts_gamma_vertex_rescale(gamma) if gamma_rescale else 1.0
     triangles = _required_tensor(state, "_vertex", "2dts")
     if triangles.ndim != 3 or triangles.shape[1:] != (3, 3):
         raise ValueError(f"2dts _vertex must be [N,3,3], got {tuple(triangles.shape)}")
-    count = int(triangles.shape[0])
     f_dc = _required_tensor(state, "_f_dc", "2dts")
     f_rest = _required_tensor(state, "_f_rest", "2dts")
+    opacity = _required_tensor(state, "_opacity", "2dts")
+    source_count = int(triangles.shape[0])
+    if ste_threshold is not None:
+        keep = _d2ts_surviving_triangles(opacity, gamma=gamma, ste_threshold=ste_threshold)
+        triangles, f_dc, f_rest = triangles[keep], f_dc[keep], f_rest[keep]
+        opacity = torch.full_like(opacity[keep], D2TS_SOLID_OPACITY_LOGIT)
+    count = int(triangles.shape[0])
     # Legacy 2DTS checkpoints never serialise active_sh_degree (the trainer
     # only records it in its logs).  Derive the full degree from the stored
     # coefficient count, mirroring D2TSAdapter.load_checkpoint so Unity
@@ -509,10 +602,10 @@ def _export_d2ts(
     max_sh_degree = int(math.sqrt(coeff_dim) - 1)
     writer.tensor("positions", triangles.reshape(-1, 3), "triangle-soup positions")
     writer.tensor("indices", torch.arange(count * 3, dtype=torch.int32).reshape(count, 3), "triangle indices")
-    writer.tensor("opacity_logits", _required_tensor(state, "_opacity", "2dts"), "per-triangle opacity logits")
+    writer.tensor("opacity_logits", opacity, "per-triangle opacity logits")
     writer.tensor("sh_dc", f_dc, "per-triangle or per-vertex SH DC")
     writer.tensor("sh_rest", f_rest, "per-triangle or per-vertex SH residual")
-    return {
+    renderer = {
         "renderer": "2dts",
         "primitive_topology": "triangle-soup",
         "primitive_count": count,
@@ -523,12 +616,46 @@ def _export_d2ts(
         "gamma_rescale_source": gamma_rescale_source,
         "gamma_vertex_rescale": gamma_vertex_rescale,
         "vertex_color": bool(f_dc.ndim == 4),
-        "native_coverage_space": "screen_space_barycentric",
+        "native_coverage_space": "perspective_correct_barycentric",
         "native_compositing": "depth_sorted_front_to_back",
         "requires_per_camera_depth_sort": True,
         "unity_method_aware_requires_per_camera_depth_sort": True,
         "unity_method_aware_status": "portability-baseline",
     }
+    if ste_threshold is not None:
+        renderer.update(
+            {
+                "ste_threshold": float(ste_threshold),
+                "source_primitive_count": source_count,
+                "terminal_solid_eligible": True,
+                "terminal_solid_condition": f"gamma>={D2TS_TERMINAL_SOLID_MIN_GAMMA:g} and sigmoid(opacity)>=ste_threshold",
+                "native_compositing": "pixel_depth_sorted_front_to_back",
+                "unity_method_aware_requires_per_camera_depth_sort": False,
+                "unity_method_aware_status": "opaque-terminal-solid",
+            }
+        )
+    return renderer
+
+
+def _d2ts_surviving_triangles(opacity: torch.Tensor, *, gamma: float, ste_threshold: float) -> torch.Tensor:
+    """Select the triangles an opaque-strategy 2DTS checkpoint actually renders.
+
+    The opaque strategy renders ``sigmoid(logit) >= threshold`` as opacity 1 and
+    everything else as opacity 0. The threshold is config state that checkpoints
+    do not serialise, and without it a deployment would draw the rejected
+    triangles as well.
+    """
+    if not 0.0 < ste_threshold < 1.0:
+        raise ValueError(f"2dts ste_threshold must be in (0, 1), got {ste_threshold}")
+    if gamma < D2TS_TERMINAL_SOLID_MIN_GAMMA:
+        raise ValueError(
+            f"2dts checkpoint has gamma={gamma:g}, below the terminal solid regime "
+            f"(>={D2TS_TERMINAL_SOLID_MIN_GAMMA:g}); it has not finished solidifying"
+        )
+    keep = torch.sigmoid(opacity.reshape(-1)) >= ste_threshold
+    if not keep.any():
+        raise ValueError(f"no 2dts triangle reaches ste_threshold={ste_threshold}")
+    return keep
 
 
 def _d2ts_gamma_vertex_rescale(gamma: float) -> float:
@@ -581,18 +708,20 @@ def _deployment_background_color(method: str, value: str | None) -> str:
     return normalized
 
 
-def _general_purpose_contract(method: str) -> dict[str, Any]:
-    """Describe whether a fair ordinary Unity Mesh condition can be constructed.
+def _standard_engine_contract(method: str) -> dict[str, Any]:
+    """Describe whether a fair standard engine deployment can be constructed.
 
+    Standard engine deployment renders an opaque vertex-coloured Unity Mesh.
     DiffSoup has no SH-DC/vertex-colour field. Rendering it as a white mesh is an
-    import diagnostic, not a comparable general-purpose appearance condition.
+    import diagnostic, not a comparable standard engine deployment appearance;
+    its standard mesh is the separate package written by ``msbench.unity_bake``.
     """
 
     if method == "diffsoup":
         return {
             "supported": False,
             "appearance": "none",
-            "reason": "requires a fixed-budget texture or vertex-colour bake",
+            "reason": "raw neural features; bake a texture with tools/bake_diffsoup_standard_asset.py",
         }
     return {
         "supported": True,

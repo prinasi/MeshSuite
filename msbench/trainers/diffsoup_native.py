@@ -1,7 +1,7 @@
-"""Native DiffSoup training integration for MeshSplatBench.
+"""Native DiffSoup training integration for MeshSuite.
 
 The implementation delegates the optimisation loop to DiffSoup example
-scripts vendored inside MeshSplatBench, so training does not require a separate
+scripts vendored inside MeshSuite, so training does not require a separate
 DiffSoup checkout.
 """
 
@@ -35,7 +35,7 @@ def run_diffsoup_native_config(
     max_steps: int,
     quiet: bool = False,
 ) -> dict[str, Any]:
-    """Run DiffSoup's original training script for one MeshSplatBench config."""
+    """Run DiffSoup's original training script for one MeshSuite config."""
     output_dir = output_dir.expanduser()
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -125,6 +125,7 @@ def _run_mip360_script(
         white_background = False
     dtu_eval_mode = str(dataset_cfg.get("dtu_eval_mode", trainer_cfg.get("dtu_eval_mode", "full"))).lower()
     foreground_training = bool(trainer_cfg.get("foreground_training", False))
+    eval_split = bool(trainer_cfg.get("eval_split", dataset_cfg.get("eval_split", True)))
     target_prims = _primitive_target(trainer_cfg, "n_points", "target_prims")
     with _reference_import_context(examples_dir):
         module.main(
@@ -139,6 +140,7 @@ def _run_mip360_script(
             white_background=None if white_background is None else bool(white_background),
             foreground_training=foreground_training,
             dtu_eval_mode=dtu_eval_mode,
+            dtu_holdout=int(dataset_cfg.get("eval_every", 8)) if eval_split else 0,
         )
 
 
@@ -213,7 +215,7 @@ def _resolve_examples_dir(trainer_cfg: dict[str, Any]) -> Path:
     if not resolved.is_dir():
         raise FileNotFoundError(
             f"Vendored DiffSoup examples directory not found: {resolved}. "
-            "Reinstall MeshSplatBench or pass trainer.examples_dir for an explicit override."
+            "Reinstall MeshSuite or pass trainer.examples_dir for an explicit override."
         )
     return resolved
 

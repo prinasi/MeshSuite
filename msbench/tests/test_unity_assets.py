@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 import json
-import subprocess
-import sys
 from pathlib import Path
 
-import pytest
 import torch
 from typer.testing import CliRunner
 
@@ -86,13 +83,13 @@ def test_triangle_splatting_export_keeps_renderer_inputs(tmp_path: Path):
     manifest = json.loads(package.manifest_path.read_text())
 
     assert package.path.name == "scene.triasset"
-    assert manifest["export_contract_revision"] == 2
+    assert manifest["export_contract_revision"] == 3
     assert manifest["rendering"]["renderer"] == "triangle-splatting"
     assert manifest["rendering"]["generic_mesh_equivalent"] is False
     assert manifest["rendering"]["background_color"] == "black"
     assert manifest["rendering"]["unity_profile_name"] == "method-aware"
     assert manifest["rendering"]["cuda_equivalent"] is False
-    assert manifest["rendering"]["general_purpose"]["supported"] is True
+    assert manifest["rendering"]["standard_engine"]["supported"] is True
     assert manifest["buffers"]["positions"]["shape"] == [6, 3]
     assert manifest["buffers"]["opacity_logits"]["semantic"] == "per-triangle opacity logits"
     assert manifest["buffers"]["sigma_logits"]["shape"] == [2, 1]
@@ -128,37 +125,6 @@ def test_mesh_splatting_export_keeps_indexed_topology(tmp_path: Path):
     assert torch.all(triangle_opacity < 1.0)
 
 
-def test_mesh_splatting_export_can_materialize_triangle_soup(tmp_path: Path):
-    checkpoint = tmp_path / "point_cloud_state_dict.pt"
-    _save_mesh_splatting_checkpoint(checkpoint)
-
-    package = export_triasset(
-        "mesh_splatting",
-        checkpoint,
-        tmp_path / "mesh_soup.triasset",
-        export_topology="soup",
-    )
-    manifest = json.loads(package.manifest_path.read_text())
-
-    assert manifest["rendering"]["primitive_topology"] == "triangle-soup"
-    assert manifest["rendering"]["export_topology"] == "materialized-soup"
-    assert manifest["rendering"]["source_vertex_count"] == 4
-    assert manifest["rendering"]["exported_vertex_count"] == 6
-    assert manifest["rendering"]["topology_vertex_expansion"] == 1.5
-    assert manifest["buffers"]["positions"]["shape"] == [6, 3]
-    assert manifest["buffers"]["indices"]["shape"] == [2, 3]
-    assert manifest["buffers"]["vertex_weight_logits"]["shape"] == [6, 1]
-    assert manifest["buffers"]["sh_dc"]["shape"] == [6, 1, 3]
-    assert manifest["buffers"]["sh_rest"]["shape"] == [6, 3, 3]
-
-    indices = torch.from_file(
-        str(package.path / manifest["buffers"]["indices"]["file"]),
-        dtype=torch.int32,
-        size=6,
-    ).reshape(2, 3)
-    torch.testing.assert_close(indices, torch.tensor([[0, 1, 2], [3, 4, 5]], dtype=torch.int32))
-
-
 def test_d2ts_export_keeps_vertex_sh_and_gamma(tmp_path: Path):
     checkpoint = tmp_path / "model.ckpt"
     _save_d2ts_checkpoint(checkpoint)
@@ -170,7 +136,7 @@ def test_d2ts_export_keeps_vertex_sh_and_gamma(tmp_path: Path):
     assert manifest["rendering"]["vertex_color"] is True
     assert manifest["rendering"]["gamma"] == 1.7
     assert manifest["rendering"]["gamma_rescale"] is True
-    assert manifest["rendering"]["gamma_rescale_source"] == "legacy_inferred_from_gamma"
+    assert manifest["rendering"]["gamma_rescale_source"] == "native_default"
     assert 0.0 < manifest["rendering"]["gamma_vertex_rescale"] < 1.0
     assert manifest["rendering"]["background_color"] == "white"
     assert manifest["buffers"]["sh_dc"]["shape"] == [1, 3, 1, 3]
@@ -189,8 +155,8 @@ def test_diffsoup_export_keeps_neural_features_and_mlp(tmp_path: Path):
     assert set(manifest["rendering"]["color_mlp_buffers"]) == {
         "mlp.0.weight", "mlp.0.bias", "mlp.4.weight", "mlp.4.bias"
     }
-    assert manifest["rendering"]["general_purpose"]["supported"] is False
-    assert "texture" in manifest["rendering"]["general_purpose"]["reason"]
+    assert manifest["rendering"]["standard_engine"]["supported"] is False
+    assert "texture" in manifest["rendering"]["standard_engine"]["reason"]
 
 
 def test_export_unity_cli_writes_feature_preserving_package(tmp_path: Path):
@@ -211,40 +177,3 @@ def test_export_unity_cli_writes_feature_preserving_package(tmp_path: Path):
     assert result.exit_code == 0, result.output
     assert (tmp_path / "cli_asset.triasset" / "manifest.json").is_file()
     assert "buffers: 6" in result.output
-
-
-def test_unity_bootstrap_installs_compute_and_method_renderers(tmp_path: Path):
-    root = Path(__file__).resolve().parents[2]
-    script = root / "tools" / "create_unity_triasset_package.py"
-    if not script.is_file():
-        pytest.skip("tools/create_unity_triasset_package.py was removed")
-    project = tmp_path / "UnityProject"
-    (project / "Assets").mkdir(parents=True)
-    result = subprocess.run(
-        [
-            sys.executable,
-            str(script),
-            "--unity-project",
-            str(project),
-        ],
-        check=True,
-        text=True,
-        capture_output=True,
-    )
-    assert "Metal procedural renderer" in result.stdout
-
-    assert (project / "Assets" / "MeshSplatBench" / "Scripts" / "TriAssetSplatRenderer.cs").is_file()
-    assert (project / "Assets" / "MeshSplatBench" / "Scripts" / "GeneralPurposeMeshTriAssetRenderer.cs").is_file()
-    assert (project / "Assets" / "MeshSplatBench" / "Shaders" / "TriAssetSplat.shader").is_file()
-    assert (project / "Assets" / "MeshSplatBench" / "Shaders" / "MeshSplatTerminalSolid.shader").is_file()
-    assert (project / "Assets" / "MeshSplatBench" / "Shaders" / "GeneralPurposeVertexColor.shader").is_file()
-    assert (project / "Assets" / "Resources" / "MeshSplatBench" / "TriAssetCull.compute").is_file()
-    shader = (project / "Assets" / "MeshSplatBench" / "Shaders" / "TriAssetSplat.shader").read_text()
-    renderer = (project / "Assets" / "MeshSplatBench" / "Scripts" / "TriAssetSplatRenderer.cs").read_text()
-    assert "nointerpolation float flatAlpha" in shader
-    assert "_Opacity[face]" in shader
-    assert "_ScreenParams.xy" in shader
-    assert 'OpacityBuffer { get { return "triangle_opacity"; } }' in renderer
-    general = (project / "Assets" / "MeshSplatBench" / "Scripts" / "GeneralPurposeMeshTriAssetRenderer.cs").read_text()
-    assert "Per-face colour cannot be stored on shared vertices" in general
-    assert "fixed-budget appearance bake is required" in general

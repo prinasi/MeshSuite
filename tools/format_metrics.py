@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Format MeshSplatBench metrics.json files as a console table or CSV."""
+"""Format MeshSuite metrics.json files as a console table or CSV."""
 
 from __future__ import annotations
 
@@ -71,6 +71,8 @@ class MetricsTarget:
     scene: str
     metrics_file: Path
     mesh_metrics_file: Path | None = None
+    train_stats_file: Path | None = None
+    init_mesh_metrics_file: Path | None = None
 
 
 @dataclass
@@ -85,10 +87,11 @@ class MetricsRow:
     training_memory_mib: float | None = None
     training_time_s: float | None = None
     cd: float | None = None
+    init_cd: float | None = None
     metrics_file: str = ""
 
-    def as_cells(self) -> list[str]:
-        return [
+    def as_cells(self, init_cd: bool = False) -> list[str]:
+        cells = [
             self.dataset,
             self.scene,
             _fmt_float(self.psnr, 4),
@@ -101,6 +104,9 @@ class MetricsRow:
             _fmt_float(self.cd, 4),
             self.metrics_file,
         ]
+        if init_cd:
+            cells.insert(-1, _fmt_float(self.init_cd, 4))
+        return cells
 
 
 def canonical_method(name: str) -> str:
@@ -183,6 +189,8 @@ def target_from_layout(method: str, dataset: str, scene: str, outputs_root: Path
         scene=scene,
         metrics_file=run_dir / "metrics.json",
         mesh_metrics_file=run_dir / "mesh_metrics.json" if dataset == "dtu" else None,
+        train_stats_file=run_dir / "train_stats.json",
+        init_mesh_metrics_file=run_dir / "init_mesh_metrics.json",
     )
 
 
@@ -195,17 +203,24 @@ def target_from_config(path: Path) -> MetricsTarget:
     eval_cfg = cfg.get("eval", {}) or {}
 
     method = canonical_method(
-        str(adapter_cfg.get("type") or trainer_cfg.get("type") or trainer_cfg.get("name") or path.parent.name)
+        str(
+            output_cfg.get("method")
+            or adapter_cfg.get("type")
+            or trainer_cfg.get("type")
+            or trainer_cfg.get("name")
+            or path.parent.name
+        )
     )
     dataset = canonical_dataset(
         str(dataset_cfg.get("name") or _infer_dataset_from_root(dataset_cfg.get("root")) or "unknown")
     )
     scene = str(dataset_cfg.get("scene") or Path(str(dataset_cfg.get("root", path.stem))).name)
 
+    out_dir = output_cfg.get("dir")
+    run_dir = Path(out_dir) if out_dir else Path("outputs") / method / dataset / scene
     metrics_value = eval_cfg.get("output") or eval_cfg.get("metrics_file") or output_cfg.get("metrics_file")
     if metrics_value is None:
-        out_dir = output_cfg.get("dir")
-        metrics_file = Path(out_dir) / "metrics.json" if out_dir else Path("outputs") / method / dataset / scene / "metrics.json"
+        metrics_file = run_dir / "metrics.json"
     else:
         metrics_file = Path(str(metrics_value))
 
@@ -217,6 +232,8 @@ def target_from_config(path: Path) -> MetricsTarget:
         scene=scene,
         metrics_file=metrics_file,
         mesh_metrics_file=mesh_metrics_file if dataset == "dtu" else None,
+        train_stats_file=run_dir / "train_stats.json",
+        init_mesh_metrics_file=run_dir / "init_mesh_metrics.json",
     )
 
 
@@ -236,6 +253,8 @@ def _infer_dataset_from_root(root: Any) -> str | None:
 
 
 def read_row(target: MetricsTarget) -> MetricsRow:
+    if target.dataset == "dtu":
+        return _read_dtu_row(target)
     metrics_path = _resolve_path(target.metrics_file)
     row = MetricsRow(
         dataset=target.dataset,
@@ -262,12 +281,29 @@ def read_row(target: MetricsTarget) -> MetricsRow:
         row.training_time_s = _number(data.get("training_time_s")) or _number(training.get("total_time_s"))
     else:
         row.metrics_file = f"{metrics_path} (missing)"
+    return row
 
-    if target.mesh_metrics_file is not None:
-        mesh_path = _resolve_path(target.mesh_metrics_file)
-        if mesh_path.exists():
-            mesh = _read_json(mesh_path)
-            row.cd = _first_number(mesh, ["overall", "chamfer_distance", "chamfer", "cd", "mean"])
+
+def _read_dtu_row(target: MetricsTarget) -> MetricsRow:
+    """DTU trains on every view, so only mesh metrics and training stats are reported."""
+    mesh_path = _resolve_path(target.mesh_metrics_file)
+    row = MetricsRow(dataset=target.dataset, scene=target.scene, metrics_file=str(mesh_path))
+    if mesh_path.exists():
+        mesh = _read_json(mesh_path)
+        row.cd = _first_number(mesh, ["overall", "chamfer_distance", "chamfer", "cd", "mean"])
+    else:
+        row.metrics_file = f"{mesh_path} (missing)"
+    # Methods refining a coarse initial mesh (ExMesh) also report its CD.
+    if target.init_mesh_metrics_file is not None:
+        init_path = _resolve_path(target.init_mesh_metrics_file)
+        if init_path.exists():
+            row.init_cd = _first_number(_read_json(init_path), ["overall", "chamfer_distance", "chamfer", "cd", "mean"])
+    if target.train_stats_file is not None:
+        stats_path = _resolve_path(target.train_stats_file)
+        if stats_path.exists():
+            stats = _read_json(stats_path)
+            row.training_memory_mib = _number(stats.get("peak_gpu_memory_mib"))
+            row.training_time_s = _number(stats.get("total_time_s"))
     return row
 
 
@@ -343,6 +379,7 @@ def mean_row(rows: list[MetricsRow]) -> MetricsRow:
         training_memory_mib=_mean(row.training_memory_mib for row in rows),
         training_time_s=_mean(row.training_time_s for row in rows),
         cd=_mean(row.cd for row in rows),
+        init_cd=_mean(row.init_cd for row in rows),
         metrics_file="",
     )
 
@@ -361,31 +398,35 @@ def _mean_int(values: Iterable[int | None]) -> int | None:
     return int(round(sum(valid) / len(valid)))
 
 
+def table_records(rows: list[MetricsRow]) -> list[list[str]]:
+    """Header plus row cells; the Init CD column appears only when some row has one."""
+    init_cd = any(row.init_cd is not None for row in rows)
+    headers = HEADERS[:-1] + ["Init CD", HEADERS[-1]] if init_cd else list(HEADERS)
+    return [headers] + [row.as_cells(init_cd=init_cd) for row in rows]
+
+
 def print_table(rows: list[MetricsRow]) -> None:
-    cells = [HEADERS] + [row.as_cells() for row in rows]
-    widths = [max(len(record[i]) for record in cells) for i in range(len(HEADERS))]
+    records = table_records(rows)
+    widths = [max(len(record[i]) for record in records) for i in range(len(records[0]))]
     fmt = "  ".join(f"{{:<{width}}}" for width in widths)
-    print(fmt.format(*HEADERS))
+    print(fmt.format(*records[0]))
     print(fmt.format(*["-" * width for width in widths]))
-    for row in rows:
-        print(fmt.format(*row.as_cells()))
+    for record in records[1:]:
+        print(fmt.format(*record))
 
 
 def write_csv(rows: list[MetricsRow], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        writer.writerow(HEADERS)
-        for row in rows:
-            writer.writerow(row.as_cells())
+        csv.writer(f).writerows(table_records(rows))
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Format MeshSplatBench metrics.json files from configs or output layout."
+        description="Format MeshSuite metrics.json files from configs or output layout."
     )
     source = parser.add_mutually_exclusive_group(required=True)
-    source.add_argument("--config", "-c", nargs="+", type=Path, help="One or more MeshSplatBench config YAML files.")
+    source.add_argument("--config", "-c", nargs="+", type=Path, help="One or more MeshSuite config YAML files.")
     source.add_argument("--dataset", "-d", help="Dataset target, e.g. dtu, dtu/scan24, mipnerf360/all.")
     parser.add_argument("--method", "-m", help="Method name when using --dataset, e.g. triangle-splatting.")
     parser.add_argument("--scenes", nargs="+", help="Scene list for partial datasets; comma-separated is accepted.")

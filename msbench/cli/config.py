@@ -9,7 +9,7 @@ from msbench.core.config import Config, merge_dicts, resolve_dataset_config
 
 
 def load_cli_config(path: str | Path | None) -> Config | None:
-    """Load a MeshSplatBench CLI config when one was provided."""
+    """Load a MeshSuite CLI config when one was provided."""
     if path is None:
         return None
     return Config.fromfile(path)

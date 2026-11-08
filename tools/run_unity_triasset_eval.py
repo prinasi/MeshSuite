@@ -3,7 +3,7 @@
 
 Each Unity process loads one asset, which avoids retaining multiple 0.5--1.2
 GiB triassets in unified memory.  PNGs and the no-I/O FPS CSV are written under
-the corresponding MeshSplatBench output directory.
+the corresponding MeshSuite output directory.
 """
 from __future__ import annotations
 
@@ -16,6 +16,14 @@ import time
 from pathlib import Path
 
 from PIL import Image
+
+# Import this checkout's msbench, even when the environment installed
+# (e.g. in editable mode) a different checkout.
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if sys.path[:1] != [str(REPO_ROOT)]:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from msbench.unity_video import DEPLOYMENT_MSAA_SAMPLES, unity_namespace
 
 
 SCENES = ("bicycle", "bonsai", "counter", "flowers", "garden", "kitchen", "room", "stump", "treehill")
@@ -63,12 +71,26 @@ def validate_captured_images(output: Path, *, newer_than: float | None = None) -
         )
 
 
+def validate_capture_msaa(output: Path) -> None:
+    """Reject captures that Unity did not render with the protocol's MSAA."""
+    settings_path = output / "capture_settings.json"
+    if not settings_path.is_file():
+        raise RuntimeError(f"Unity capture did not record its render settings: {settings_path}")
+    settings = json.loads(settings_path.read_text())
+    for key in ("msaa_samples", "timing_msaa_samples"):
+        if settings.get(key) != DEPLOYMENT_MSAA_SAMPLES:
+            raise RuntimeError(
+                f"Unity capture used {key}={settings.get(key)}; the deployment protocol requires "
+                f"{DEPLOYMENT_MSAA_SAMPLES}x MSAA ({settings_path})"
+            )
+
+
 def unity_failure_summary(log_path: Path, *, max_lines: int = 12) -> str:
     """Return the useful tail of a Unity failure without dumping its crash trace."""
     if not log_path.is_file():
         return f"Unity log was not created: {log_path}"
     needles = (
-        "[msbench]", "[meshsplatbench]", "error", "exception", "fatal", "crash", "sigsegv",
+        "[msbench]", "[meshsuite]", "[meshsplatbench]", "error", "exception", "fatal", "crash", "sigsegv",
         "missing vulkan framebuffer", "shader error", "compilation failed",
     )
 
@@ -93,6 +115,11 @@ def validate_runtime_profile(path: Path, *, expected_views: int, newer_than: flo
         )
     if not all(view.get("cpu_frame_samples_ms") for view in views):
         raise RuntimeError(f"Unity runtime profile has incomplete CPU timing samples: {path}")
+    if payload.get("msaa_samples") != DEPLOYMENT_MSAA_SAMPLES:
+        raise RuntimeError(
+            f"Unity runtime profile used {payload.get('msaa_samples')}x MSAA; the deployment protocol "
+            f"requires {DEPLOYMENT_MSAA_SAMPLES}x: {path}"
+        )
 
 
 def main() -> int:
@@ -106,21 +133,11 @@ def main() -> int:
     parser.add_argument("--method", default="triangle-splatting", help="Triasset method name and Unity batch renderer selector.")
     parser.add_argument("--asset-subdir", default="unity_native")
     parser.add_argument(
-        "--topology",
-        choices=("indexed", "mesh", "soup"),
-        default="indexed",
-        help="Unity mesh layout intervention. 'mesh' is an alias for indexed; 'soup' de-indexes shared vertices at load time.",
-    )
-    parser.add_argument(
-        "--indexed-mesh-method-aware",
-        action="store_true",
-        help="For mesh-splatting + --general-purpose, use a true Unity indexed MeshRenderer with method-aware SH appearance.",
-    )
-    parser.add_argument(
         "--reference-image-dir",
         help="Dataset image directory used for capture resolution and ground truth. Defaults to MipNeRF360 convention.",
     )
     parser.add_argument("--scenes", nargs="*", default=SCENES)
+    parser.add_argument("--holdout", type=int, default=8, help="Every Nth sorted view is a test view; 1 keeps them all.")
     parser.add_argument("--fps-warmup", type=int, default=3)
     parser.add_argument("--fps-frames", type=int, default=12)
     parser.add_argument("--test-only", action="store_true", help="Capture only LLFF held-out views.")
@@ -131,21 +148,19 @@ def main() -> int:
     parser.add_argument("--profile-frames", type=int, default=180)
     condition = parser.add_mutually_exclusive_group(required=True)
     condition.add_argument(
-        "--general-purpose", "--standard-mesh", dest="general_purpose", action="store_true",
-        help="Use the ordinary opaque Unity Mesh baseline. The legacy --standard-mesh spelling is accepted.",
+        "--standard-engine", dest="standard_engine", action="store_true",
+        help="Standard engine deployment: opaque vertex-colored Unity Mesh.",
     )
     condition.add_argument(
-        "--method-aware", "--method-specific", dest="method_aware", action="store_true",
-        help="Use the Unity method-aware renderer. The legacy --method-specific spelling is accepted.",
+        "--custom-engine", dest="custom_engine", action="store_true",
+        help="Custom engine deployment: method-aware Unity renderer.",
     )
     args = parser.parse_args()
     args.unity = args.unity.resolve()
     args.unity_project = args.unity_project.resolve()
     args.outputs_root = args.outputs_root.resolve()
     args.datasets_root = args.datasets_root.resolve()
-    if args.topology == "mesh":
-        args.topology = "indexed"
-    for name in ("fps_warmup", "fps_frames", "profile_run", "profile_views", "profile_warmup", "profile_frames"):
+    for name in ("holdout", "fps_warmup", "fps_frames", "profile_run", "profile_views", "profile_warmup", "profile_frames"):
         if getattr(args, name) <= 0:
             parser.error(f"--{name.replace('_', '-')} must be positive")
     try:
@@ -169,12 +184,11 @@ def main() -> int:
         manifest_path = triasset / "manifest.json"
         manifest = json.loads(manifest_path.read_text())
         rendering = manifest["rendering"]
-        topology_label = str(rendering.get("export_topology") or args.topology)
-        general = rendering.get("general_purpose", {})
-        if args.general_purpose and not general.get("supported", False):
+        standard = rendering.get("standard_engine", {})
+        if args.standard_engine and not standard.get("supported", False):
             raise RuntimeError(
-                f"{args.method}/{scene} cannot enter the general-purpose benchmark: "
-                f"{general.get('reason', 'manifest does not declare a comparable appearance field')}"
+                f"{args.method}/{scene} cannot enter standard engine deployment: "
+                f"{standard.get('reason', 'manifest does not declare a comparable appearance field')}"
             )
         if not (dataset / "sparse/0/cameras.bin").is_file() or not image_dir.is_dir():
             raise FileNotFoundError(f"missing COLMAP/{image_dir.name} dataset: {dataset}")
@@ -192,10 +206,7 @@ def main() -> int:
             "schema_version": manifest.get("schema_version"),
             "export_contract_revision": manifest.get("export_contract_revision"),
             "method": args.method,
-            "renderer_condition": "general-purpose" if args.general_purpose else "method-aware",
-            "indexed_mesh_method_aware": args.indexed_mesh_method_aware,
-            "mesh_topology_layout": topology_label,
-            "runtime_topology_layout": args.topology,
+            "renderer_condition": "standard-engine" if args.standard_engine else "custom-engine",
             "method_aware_status": rendering.get("unity_method_aware_status"),
             "cuda_equivalent": False,
             "requires_per_camera_depth_sort": rendering.get("unity_method_aware_requires_per_camera_depth_sort", False),
@@ -203,6 +214,7 @@ def main() -> int:
             "dataset": str(dataset),
             "resolution": [width, height],
             "execution_mode": "profile" if args.profile_only else "capture",
+            "msaa_samples": DEPLOYMENT_MSAA_SAMPLES,
             "profile": {
                 "run": args.profile_run,
                 "views": args.profile_views,
@@ -223,11 +235,11 @@ def main() -> int:
             profile_path.unlink(missing_ok=True)
         command = [
             str(args.unity), "-batchmode", *unity_graphics_arguments(), "-projectPath", str(args.unity_project),
-            "-executeMethod", "MeshSplatBench.UnityNative.Editor.TriAssetBatchRunner.Run",
+            "-executeMethod", f"{unity_namespace(args.unity_project)}.UnityNative.Editor.TriAssetBatchRunner.Run",
             "-method", args.method, "-triasset", str(triasset), "-dataset", str(dataset), "-output", str(output),
             "-triasset-width", str(width), "-triasset-height", str(height),
+            "-holdout", str(args.holdout),
             "-fps-warmup", str(args.fps_warmup), "-fps-frames", str(args.fps_frames),
-            "-topology", args.topology,
             "-logFile", str(log_path),
         ]
         if args.test_only:
@@ -241,13 +253,11 @@ def main() -> int:
                 "-profile-frames", str(args.profile_frames),
             ))
         command.extend(("-background-color", str(rendering.get("background_color", "black"))))
-        if args.general_purpose:
+        if args.standard_engine:
             command.extend(("-standard-mesh", "1"))
-        if args.indexed_mesh_method_aware:
-            command.extend(("-indexed-mesh-method-aware", "1"))
-        if args.method_aware:
+        if args.custom_engine:
             command.extend(("-method-specific", "1"))
-        print(f"[MeshSplatBench] Unity scene={scene}, reference={image_dir.name}, resolution={width}x{height}", flush=True)
+        print(f"[MeshSuite] Unity scene={scene}, reference={image_dir.name}, resolution={width}x{height}", flush=True)
         capture_started = time.time()
         process = subprocess.Popen(command)
         while process.poll() is None and not marker.is_file():
@@ -273,6 +283,7 @@ def main() -> int:
             )
         else:
             validate_captured_images(output, newer_than=capture_started)
+            validate_capture_msaa(output)
     return 0
 
 

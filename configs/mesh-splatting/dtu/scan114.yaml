@@ -2,6 +2,7 @@
 
 _base_:
   - ../../base/dtu.yaml
+  - ../../base/splatting-dtu.yaml
   - ../../base/mesh-splatting.yaml
 
 experiment:

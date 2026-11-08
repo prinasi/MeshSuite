@@ -69,7 +69,7 @@ def render_images(
     method: Optional[str] = typer.Option(None, "--method", "-m", help="Method name"),
     checkpoint: Optional[str] = typer.Option(None, "--checkpoint", "-c", help="Path to model checkpoint"),
     dataset: Optional[str] = typer.Option(None, "--dataset", "-d", help="Path to dataset directory"),
-    config: Optional[Path] = typer.Option(None, "--config", help="MeshSplatBench render config YAML"),
+    config: Optional[Path] = typer.Option(None, "--config", help="MeshSuite render config YAML"),
     split: str = typer.Option("test", "--split", "-s", help="Dataset split: train/test/all"),
     output_dir: str = typer.Option("renders/", "--output-dir", "-o", help="Output directory"),
     dataset_type: str = typer.Option("auto", "--dataset-type", help="auto/colmap/mipnerf360/tanks/dtu/blender"),
@@ -136,7 +136,7 @@ def render_split(
     method: Optional[str] = typer.Option(None, "--method", "-m"),
     checkpoint: Optional[str] = typer.Option(None, "--checkpoint", "-c"),
     dataset: Optional[str] = typer.Option(None, "--dataset", "-d"),
-    config: Optional[Path] = typer.Option(None, "--config", help="MeshSplatBench render config YAML"),
+    config: Optional[Path] = typer.Option(None, "--config", help="MeshSuite render config YAML"),
     split: str = typer.Option("test", "--split", "-s"),
     output_dir: str = typer.Option("renders/", "--output-dir", "-o"),
     dataset_type: str = typer.Option("auto", "--dataset-type"),
@@ -204,7 +204,7 @@ def render_video_cmd(
     method: Optional[str] = typer.Option(None, "--method", "-m"),
     checkpoint: Optional[str] = typer.Option(None, "--checkpoint", "-c"),
     dataset: Optional[str] = typer.Option(None, "--dataset", "-d"),
-    config: Optional[Path] = typer.Option(None, "--config", help="MeshSplatBench render config YAML"),
+    config: Optional[Path] = typer.Option(None, "--config", help="MeshSuite render config YAML"),
     split: str = typer.Option("train", "--split", "-s"),
     output_dir: str = typer.Option("video/", "--output-dir", "-o"),
     dataset_type: str = typer.Option("auto", "--dataset-type"),
@@ -226,27 +226,15 @@ def render_video_cmd(
         "--unity",
         help="Render video using Unity native renderer instead of adapter.",
     ),
-    general_purpose: bool = typer.Option(
+    standard_engine: bool = typer.Option(
         False,
-        "--general-purpose",
-        "--standard-mesh",
-        help="With --unity, use standard Unity Mesh baseline.",
+        "--standard-engine",
+        help="With --unity, standard engine deployment: opaque vertex-colored Unity Mesh.",
     ),
-    method_aware: bool = typer.Option(
+    custom_engine: bool = typer.Option(
         True,
-        "--method-aware",
-        "--method-specific",
-        help="With --unity, use method-aware Unity renderer (default).",
-    ),
-    topology: str = typer.Option(
-        "indexed",
-        "--topology",
-        help="With --unity, mesh topology: indexed or soup.",
-    ),
-    indexed_mesh_method_aware: bool = typer.Option(
-        False,
-        "--indexed-mesh-method-aware",
-        help="With --unity and general-purpose, use indexed MeshRenderer with method-aware appearance.",
+        "--custom-engine",
+        help="With --unity, custom engine deployment: method-aware Unity renderer (default).",
     ),
     unity_bin: Optional[Path] = typer.Option(None, "--unity-bin", help="Path to Unity binary."),
     unity_project: Optional[Path] = typer.Option(None, "--unity-project", help="Path to Unity project root."),
@@ -264,10 +252,8 @@ def render_video_cmd(
             checkpoint=checkpoint,
             dataset=dataset,
             output_dir=output_dir if output_dir != "video/" else None,
-            general_purpose=general_purpose,
-            method_aware=method_aware,
-            topology=topology,
-            indexed_mesh_method_aware=indexed_mesh_method_aware,
+            standard_engine=standard_engine,
+            custom_engine=custom_engine,
             frames=frames,
             fps=fps,
             zoom=zoom,
@@ -350,33 +336,21 @@ def render_video_cmd(
 
 @render_app.command("unity-video")
 def render_unity_video_cmd(
-    config: Optional[Path] = typer.Option(None, "--config", help="MeshSplatBench render config YAML"),
+    config: Optional[Path] = typer.Option(None, "--config", help="MeshSuite render config YAML"),
     method: Optional[str] = typer.Option(None, "--method", "-m", help="Method name"),
     checkpoint: Optional[str] = typer.Option(None, "--checkpoint", "-c", help="Path to checkpoint"),
     triasset: Optional[Path] = typer.Option(None, "--triasset", help="Path to .triasset directory"),
     dataset: Optional[str] = typer.Option(None, "--dataset", "-d", help="Path to dataset directory"),
     output_dir: Optional[str] = typer.Option(None, "--output-dir", "-o", help="Output directory for video"),
-    general_purpose: bool = typer.Option(
+    standard_engine: bool = typer.Option(
         False,
-        "--general-purpose",
-        "--standard-mesh",
-        help="Use standard Unity Mesh baseline.",
+        "--standard-engine",
+        help="Standard engine deployment: opaque vertex-colored Unity Mesh.",
     ),
-    method_aware: bool = typer.Option(
+    custom_engine: bool = typer.Option(
         True,
-        "--method-aware",
-        "--method-specific",
-        help="Use method-aware Unity renderer (default).",
-    ),
-    topology: str = typer.Option(
-        "indexed",
-        "--topology",
-        help="Mesh topology: indexed or soup.",
-    ),
-    indexed_mesh_method_aware: bool = typer.Option(
-        False,
-        "--indexed-mesh-method-aware",
-        help="With general-purpose, use indexed MeshRenderer with method-aware appearance.",
+        "--custom-engine",
+        help="Custom engine deployment: method-aware Unity renderer (default).",
     ),
     trajectory: Optional[Path] = typer.Option(None, "--trajectory", "-t", help="Existing trajectory JSON file"),
     frames: int = typer.Option(240, "--frames", help="Number of frames in ellipse trajectory"),
@@ -398,14 +372,14 @@ def render_unity_video_cmd(
         help="Terminate any conflicting Unity processes holding the project lock before launching.",
     ),
 ):
-    """Render a trajectory video using Unity (method-aware or general-purpose condition)."""
+    """Render a trajectory video using Unity (custom or standard engine deployment)."""
     from msbench.unity_video import (
         find_unity_executable,
         find_unity_project,
         run_unity_video_for_scene,
     )
 
-    condition = "general-purpose" if general_purpose else "method-aware"
+    condition = "standard-engine" if standard_engine else "custom-engine"
 
     unity_bin = unity or find_unity_executable()
     if unity_bin is None or not Path(unity_bin).is_file():
@@ -437,7 +411,7 @@ def render_unity_video_cmd(
             dataset_path = dataset_path / dataset_cfg["scene"]
 
         run_dir = config_output_dir(cfg)
-        cond_folder = "unity_method_aware" if condition == "method-aware" else "unity_general_purpose"
+        cond_folder = "unity_custom_engine" if condition == "custom-engine" else "unity_standard_engine"
         default_out = Path(run_dir) / cond_folder / "video" if run_dir else Path(f"video_{cond_folder}")
         target_output_dir = Path(output_dir or default_out)
 
@@ -457,8 +431,6 @@ def render_unity_video_cmd(
             dataset_path=dataset_path,
             output_dir=target_output_dir,
             condition=condition,
-            topology="indexed" if topology == "mesh" else topology,
-            indexed_mesh_method_aware=indexed_mesh_method_aware,
             trajectory_path=trajectory,
             dataset_type=str(dataset_cfg.get("type", "auto")),
             image_dir=str(dataset_cfg.get("image_dir", image_dir)),
@@ -481,7 +453,7 @@ def render_unity_video_cmd(
 
     target_triasset = triasset or Path(f"outputs/{method}/unity_native/{method}.triasset")
     target_dataset = Path(dataset) if dataset else None
-    cond_folder = "unity_method_aware" if condition == "method-aware" else "unity_general_purpose"
+    cond_folder = "unity_custom_engine" if condition == "custom-engine" else "unity_standard_engine"
     target_output_dir = Path(output_dir or f"outputs/{method}/{cond_folder}/video")
 
     video_path = run_unity_video_for_scene(
@@ -492,8 +464,6 @@ def render_unity_video_cmd(
         dataset_path=target_dataset,
         output_dir=target_output_dir,
         condition=condition,
-        topology="indexed" if topology == "mesh" else topology,
-        indexed_mesh_method_aware=indexed_mesh_method_aware,
         trajectory_path=trajectory,
         dataset_type=dataset_type,
         image_dir=image_dir,
@@ -516,7 +486,7 @@ def viewer(
     method: Optional[str] = typer.Option(None, "--method", "-m"),
     checkpoint: Optional[str] = typer.Option(None, "--checkpoint", "-c"),
     dataset: Optional[str] = typer.Option(None, "--dataset", "-d"),
-    config: Optional[Path] = typer.Option(None, "--config", help="MeshSplatBench viewer config YAML"),
+    config: Optional[Path] = typer.Option(None, "--config", help="MeshSuite viewer config YAML"),
     split: str = typer.Option("test", "--split", "-s"),
     dataset_type: str = typer.Option("auto", "--dataset-type"),
     image_dir: str = typer.Option("images", "--image-dir"),
@@ -721,7 +691,7 @@ def _try_load_adapter(method: str, checkpoint: str):
 def mesh(
     method: Optional[str] = typer.Option(None, "--method", "-m"),
     checkpoint: Optional[str] = typer.Option(None, "--checkpoint", "-c"),
-    config: Optional[Path] = typer.Option(None, "--config", help="MeshSplatBench render config YAML"),
+    config: Optional[Path] = typer.Option(None, "--config", help="MeshSuite render config YAML"),
     output: str = typer.Option("mesh.ply", "--output", "-o"),
 ):
     """Export the adapter primitive as a PLY mesh/triangle soup."""
@@ -760,7 +730,7 @@ def mesh(
 def viewer_path(
     method: Optional[str] = typer.Option(None, "--method", "-m"),
     checkpoint: Optional[str] = typer.Option(None, "--checkpoint", "-c"),
-    config: Optional[Path] = typer.Option(None, "--config", help="MeshSplatBench render config YAML"),
+    config: Optional[Path] = typer.Option(None, "--config", help="MeshSuite render config YAML"),
     trajectory: Path = typer.Option(..., "--trajectory", "-t", help="Path to nerfbaselines-v1 trajectory JSON."),
     output_dir: str = typer.Option("trajectory_render/", "--output-dir", "-o"),
     output_types: str = typer.Option("color", "--output-types", help="Comma-separated: color,depth,alpha,normal"),
@@ -831,7 +801,7 @@ def _mesh_export_kwargs(cfg, mesh_cfg: dict, method: str | None = None) -> dict:
         "dataset_path": str(dataset_path),
         "split": str(dataset_cfg.get("split", mesh_cfg.get("split", "train"))),
         "image_dir": str(dataset_cfg.get("image_dir", "images")),
-        "resolution": int(dataset_cfg.get("resolution", 1)),
+        "resolution": dataset_cfg.get("resolution", 1),
         "eval_every": int(dataset_cfg.get("eval_every", 8)),
         "voxel_size": float(mesh_cfg.get("voxel_size", 0.004)),
         "sdf_trunc": float(mesh_cfg.get("sdf_trunc", 0.016)),
@@ -842,4 +812,7 @@ def _mesh_export_kwargs(cfg, mesh_cfg: dict, method: str | None = None) -> dict:
     if str(method or "").replace("_", "-") == "mesh-splatting":
         kwargs["eval_split"] = bool(mesh_cfg.get("eval_split", False))
         kwargs["render_scaling"] = int(mesh_cfg.get("render_scaling", 1))
+    if str(method or "").replace("_", "-") == "t2splat":
+        kwargs["clean"] = bool(mesh_cfg.get("clean", False))
+        kwargs["min_faces_ratio"] = float(mesh_cfg.get("min_faces_ratio", 0.01))
     return kwargs

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Calculate local connectivity metrics for MeshSplatting meshes.
 
-The default input is a MeshSplatBench MeshSplatting config.  The script resolves the
+The default input is a MeshSuite MeshSplatting config.  The script resolves the
 configured checkpoint, reads the indexed mesh stored in
 ``point_cloud_state_dict.pt`` (``triangles_points`` + ``_triangle_indices``),
 and reports topology metrics that are less easily hidden by global averages.
@@ -58,6 +58,11 @@ def _latest(paths: Iterable[Path]) -> Path | None:
     return sorted(candidates, key=_numeric_suffix_key)[-1]
 
 
+# Methods whose point_cloud_state_dict.pt stores an indexed mesh
+# (``triangles_points`` + ``_triangle_indices``).
+_INDEXED_MESH_CHECKPOINT_METHODS = ("mesh-splatting", "t2splat")
+
+
 def _canonical_method(name: str) -> str:
     from msbench.renderers.backends import canonical_backend_name
 
@@ -70,7 +75,7 @@ def _resolve_checkpoint_path(method: str, checkpoint: str | Path) -> Path:
     if base.is_file():
         return base
 
-    if method == "mesh-splatting":
+    if method in _INDEXED_MESH_CHECKPOINT_METHODS:
         direct = [
             base / "point_cloud_state_dict.pt",
             base / "ckpt" / "point_cloud_state_dict.pt",
@@ -182,7 +187,8 @@ def _connected_components(
     if num_faces == 0:
         return 0, np.zeros((0,), dtype=np.int64), np.zeros((0,), dtype=np.int64)
 
-    face_ids = np.repeat(np.arange(num_faces, dtype=np.int64), 3)
+    # _unique_edges stacks all AB edges, then BC, then CA (not face by face).
+    face_ids = np.tile(np.arange(num_faces, dtype=np.int64), 3)
     order = np.argsort(edge_inverse, kind="mergesort")
     sorted_edge_ids = edge_inverse[order]
     sorted_face_ids = face_ids[order]
@@ -580,10 +586,10 @@ def _resolve_from_config(
         if method is None or checkpoint_value is None:
             raise ValueError("Could not resolve MeshSplatting checkpoint from config.")
         method = _canonical_method(str(method))
-        if method != "mesh-splatting":
+        if method not in _INDEXED_MESH_CHECKPOINT_METHODS:
             raise ValueError(
                 "Checkpoint connectivity loading is currently implemented for "
-                f"mesh-splatting, got {method!r}."
+                f"{', '.join(_INDEXED_MESH_CHECKPOINT_METHODS)}, got {method!r}."
             )
         resolved_checkpoint = _resolve_checkpoint_path(method, checkpoint_value)
         mesh = load_mesh_splatting_checkpoint(resolved_checkpoint)
@@ -631,7 +637,7 @@ def main() -> None:
             "metrics for a MeshSplatting triangular mesh."
         )
     )
-    parser.add_argument("--config", "-c", type=str, help="MeshSplatBench MeshSplatting config YAML.")
+    parser.add_argument("--config", "-c", type=str, help="MeshSuite MeshSplatting config YAML.")
     parser.add_argument(
         "--checkpoint",
         type=str,

@@ -1,16 +1,16 @@
 [build-system]
-requires = ["setuptools>=68.0", "wheel"]
+requires = ["setuptools>=68.0", "wheel", "torch>=2.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "msbench"
 version = "0.1.0"
-description = "A benchmark for triangle-based neural rendering with isolated method runtimes"
+description = "A Python-first developer toolkit for triangle-splatting-style radiance field research"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [
-    {name = "MeshSplatBench Contributors"},
+    {name = "MeshSuite Contributors"},
 ]
 keywords = ["3D reconstruction", "triangle splatting", "radiance fields", "benchmarking"]
 classifiers = [
@@ -23,13 +23,8 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
-    "pyyaml",
-]
-
-[project.optional-dependencies]
-runtime = [
     "torch>=2.0",
-    "numpy",
+    "numpy<2",
     "Pillow",
     "imageio[ffmpeg]",
     "opencv-python",
@@ -39,17 +34,27 @@ runtime = [
     "lpips",
     "plyfile",
     "typer>=0.9",
+    "pyyaml",
     "rich",
     "tabulate",
-    "tqdm",
+    "tensorboard",
+    "torchmetrics",
+    "shapely",
 ]
 
-method-2dts = ["matplotlib", "shapely", "torchmetrics", "tensorboard"]
-method-triangle-splatting = ["open3d", "matplotlib", "mediapy", "tensorboard"]
-method-mesh-splatting = ["torchvision", "open3d", "matplotlib", "mediapy", "tensorboard"]
-method-diffsoup = ["torchvision", "open3d", "scikit-image"]
-geometry = ["open3d", "scikit-learn"]
-
+[project.optional-dependencies]
+exmesh = [
+    "open3d==0.19.0",
+    "xatlas==0.0.11",
+    "nvdiffrast @ git+https://github.com/NVlabs/nvdiffrast.git@253ac4fcea7de5f396371124af597e6cc957bfae",
+]
+# T²-Splat's restricted Delaunay (effrdel: pip install --no-build-isolation
+# ./submodules/effrdel) and its runtime-compiled Safe RDT selector.
+t2splat = [
+    "gstaichi==4.6.0",
+    "libigl==2.6.3",
+    "pybind11>=2.12",
+]
 dev = [
     "pytest>=7.0",
     "pytest-cov",
@@ -62,18 +67,19 @@ cuda = [
 ]
 
 [project.scripts]
-msbench = "msbench.cli.main:main"
-msbench-run = "msbench.cli.run:main"
+msbench = "msbench.cli.main:app"
 
 [project.entry-points."msbench.adapters"]
+exmesh = "msbench.renderers.exmesh_adapter"
 d2ts = "msbench.renderers.d2ts_adapter"
 triangle_splatting = "msbench.renderers.triangle_splatting_adapter"
 mesh_splatting = "msbench.renderers.mesh_splatting_adapter"
+t2splat = "msbench.renderers.t2splat_adapter"
 diffsoup = "msbench.renderers.diffsoup_adapter"
 
 [project.entry-points."msbench.training_methods"]
+exmesh = "msbench.trainers.exmesh_method"
 triangle_splatting = "msbench.trainers.triangle_splatting_method"
-mesh_splatting = "msbench.trainers.mesh_splatting_method"
 diffsoup = "msbench.trainers.diffsoup_native"
 
 [tool.setuptools.packages.find]
@@ -84,10 +90,12 @@ exclude = [
 ]
 
 [tool.setuptools.exclude-package-data]
-"*" = ["__pycache__/*", "*.py[cod]", "*.so", "*.dylib"]
+"*" = ["__pycache__/*", "*.py[cod]"]
 
 [tool.setuptools.package-data]
-"msbench.core" = ["palettes.json", "viewer_static/**/*", "viewer_static/*"]
+"msbench.vendor.exmesh" = ["LICENSE.md", "UPSTREAM.md"]
+"msbench.vendor.t2splat" = ["LICENSE.md", "LICENSE_GS.md", "UPSTREAM.md"]
+"msbench.vendor.t2splat.utils" = ["rdt_surface_selector.cpp"]
 
 [tool.pytest.ini_options]
 testpaths = ["msbench/tests"]
@@ -97,3 +105,4 @@ pythonpath = ["."]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+

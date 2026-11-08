@@ -31,7 +31,7 @@ def inspect(
         "-c",
         help="Path to model checkpoint",
     ),
-    config: Optional[Path] = typer.Option(None, "--config", help="MeshSplatBench config YAML"),
+    config: Optional[Path] = typer.Option(None, "--config", help="MeshSuite config YAML"),
     output: str = typer.Option("stats.json", "--output", "-o", help="Output JSON file path"),
 ):
     """Inspect a dataset scene or trained model checkpoint.

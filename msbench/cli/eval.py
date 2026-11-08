@@ -30,7 +30,7 @@ def evaluate_images(
     method: Optional[str] = typer.Option(None, "--method", "-m", help="Method name"),
     checkpoint: Optional[str] = typer.Option(None, "--checkpoint", "-c", help="Path to model checkpoint"),
     dataset: Optional[str] = typer.Option(None, "--dataset", "-d", help="Path to dataset directory"),
-    config: Optional[Path] = typer.Option(None, "--config", help="MeshSplatBench evaluation config YAML"),
+    config: Optional[Path] = typer.Option(None, "--config", help="MeshSuite evaluation config YAML"),
     split: str = typer.Option("test", "--split", "-s", help="Dataset split"),
     output: str = typer.Option("metrics.json", "--output", "-o", help="Output JSON file path"),
     save_renders: bool = typer.Option(False, "--save-renders", help="Save rendered images"),
@@ -99,7 +99,9 @@ def evaluate_images(
         )
         split = str(dataset_cfg.get("split", split))
         dataset_kind = str(dataset_cfg.get("type", dataset_cfg.get("dataset_type", ""))).lower()
-        metrics_mode = str(dataset_cfg.get("dtu_eval_mode", "full")) if dataset_kind == "dtu" else None
+        dataset_name = str(dataset_cfg.get("name", "")).lower()
+        is_dtu = dataset_kind == "dtu" or dataset_name == "dtu" or "dtu" in str(dataset_cfg.get("root", "")).lower()
+        metrics_mode = str(dataset_cfg.get("dtu_eval_mode", "full")) if is_dtu else None
         method_label = adapter_cfg.get("type")
         checkpoint_label = adapter_cfg.get("checkpoint")
         dataset_label = dataset_cfg.get("root", dataset_cfg.get("dataset_path"))
@@ -214,7 +216,7 @@ def evaluate_images(
 def _primitive_count_from_checkpoint(checkpoint, method=None) -> int | None:
     """Count model primitives from a checkpoint without importing the renderer.
 
-    Works for the common MeshSplatBench checkpoints (a ``.pt`` state dict or a ``.ply``
+    Works for the common MeshSuite checkpoints (a ``.pt`` state dict or a ``.ply``
     mesh) using only a CPU torch load, so it does not require the bundled CUDA
     extensions to be importable.
     """
@@ -267,11 +269,13 @@ def _primitive_count_from_checkpoint(checkpoint, method=None) -> int | None:
             sd = torch.load(cand, map_location="cpu", weights_only=True)
         except Exception:
             try:
-                sd = torch.load(cand, map_location="cpu")
+                sd = torch.load(cand, map_location="cpu", weights_only=False)
             except Exception:
                 continue
         if isinstance(sd, dict) and isinstance(sd.get("state_dict"), dict):
             sd = sd["state_dict"]
+        if isinstance(sd, dict) and sd.get("method") == "exmesh" and isinstance(sd.get("model"), dict):
+            sd = sd["model"]
         if not isinstance(sd, dict):
             continue
         for key in count_keys:
@@ -409,7 +413,7 @@ def evaluate_mesh(
     pred: Optional[str] = typer.Option(None, "--pred", help="Predicted mesh/point cloud"),
     dtu_root: Optional[str] = typer.Option(None, "--dtu-root", help="Official DTU dataset root"),
     scan_id: Optional[str] = typer.Option(None, "--scan-id", help="DTU scan id, e.g. 24 or scan24"),
-    config: Optional[Path] = typer.Option(None, "--config", help="MeshSplatBench evaluation config YAML"),
+    config: Optional[Path] = typer.Option(None, "--config", help="MeshSuite evaluation config YAML"),
     output: str = typer.Option("mesh_metrics.json", "--output", "-o"),
     samples: Optional[int] = typer.Option(None, "--samples"),
     downsample_density: Optional[float] = typer.Option(None, "--downsample-density"),
@@ -516,6 +520,13 @@ def _ensure_pred_mesh_exists(
         and not _has_current_mesh_splatting_export_metadata(pred_path)
     ):
         should_export = True
+    if (
+        pred_path.exists()
+        and force_export is None
+        and method == "t2splat"
+        and not _has_current_t2splat_export_metadata(pred_path, mesh_cfg or section(cfg, "mesh"))
+    ):
+        should_export = True
     if pred_path.exists() and not should_export:
         return str(pred_path)
 
@@ -553,6 +564,21 @@ def _has_current_mesh_splatting_export_metadata(pred_path: Path) -> bool:
         export.get("method") == "mesh-splatting"
         and export.get("pipeline") == "native_tsdf"
         and int(export.get("version", 0)) >= 1
+    )
+
+
+def _has_current_t2splat_export_metadata(pred_path: Path, mesh_cfg: Mapping) -> bool:
+    from msbench.renderers.t2splat_adapter import MESH_EXPORT_VERSION
+
+    metadata_path = pred_path.with_suffix(pred_path.suffix + ".msbench.json")
+    try:
+        export = json.loads(metadata_path.read_text(encoding="utf-8"))["msbench_mesh_export"]
+    except (OSError, KeyError, TypeError, json.JSONDecodeError):
+        return False
+    return (
+        export.get("method") == "t2splat"
+        and int(export.get("version", 0)) >= MESH_EXPORT_VERSION
+        and bool(export.get("clean")) == bool(mesh_cfg.get("clean", False))
     )
 
 

@@ -4,7 +4,7 @@ Connects to the bundled triangle-splatting CUDA renderer
 (diff-triangle-rasterization) for benchmarking and evaluation.
 
 Requires:
-    - MeshSplatBench installed with its bundled CUDA extensions built.
+    - MeshSuite installed with its bundled CUDA extensions built.
 """
 
 from __future__ import annotations
@@ -50,7 +50,7 @@ class TriangleSplattingAdapter(RendererAdapter):
 
         Args:
             repo_root: Optional compatibility override for status reporting.
-                       Runtime imports use the bundled MeshSplatBench package.
+                       Runtime imports use the bundled MeshSuite package.
         """
         self._backend = get_backend("triangle-splatting")
         self.repo_root = self._backend.repo_root(repo_root)
@@ -82,7 +82,7 @@ class TriangleSplattingAdapter(RendererAdapter):
         return self._backend.status(self.repo_root)
 
     def configure(self, **kwargs: Any) -> None:
-        """Set render-time options used by MeshSplatBench evaluation."""
+        """Set render-time options used by MeshSuite evaluation."""
         for key, value in kwargs.items():
             if key == "bg_color":
                 color_name = str(value).lower()
@@ -126,7 +126,7 @@ class TriangleSplattingAdapter(RendererAdapter):
                 )
         except ImportError as exc:
             raise ImportError(
-                "Cannot import bundled triangle-splatting renderer. Rebuild MeshSplatBench's bundled "
+                "Cannot import bundled triangle-splatting renderer. Rebuild MeshSuite's bundled "
                 f"CUDA extensions for the active PyTorch environment. Details: {exc}"
             ) from exc
 
@@ -139,7 +139,7 @@ class TriangleSplattingAdapter(RendererAdapter):
     # ---- Checkpoint loading ----
 
     def _load_background_color(self, checkpoint_path: Path) -> list[float]:
-        """Infer eval background from MeshSplatBench metadata or native cfg_args."""
+        """Infer eval background from MeshSuite metadata or native cfg_args."""
         search_dirs = [
             checkpoint_path if checkpoint_path.is_dir() else checkpoint_path.parent
         ]
@@ -267,7 +267,7 @@ class TriangleSplattingAdapter(RendererAdapter):
         ], lr=0.0, eps=1e-15)
 
         self._model = model
-        print(f"[MeshSplatBench] Loaded {N} triangles from {state_path}")
+        print(f"[MeshSuite] Loaded {N} triangles from {state_path}")
 
     # ---- Scene loading ----
 
@@ -394,7 +394,7 @@ class TriangleSplattingAdapter(RendererAdapter):
                 f"Expected cameras.npz (DTU), sparse/ (COLMAP), or transforms_test.json (Blender)."
             )
 
-        print(f"[MeshSplatBench] Loaded {len(self._cameras)} cameras for split '{split}'")
+        print(f"[MeshSuite] Loaded {len(self._cameras)} cameras for split '{split}'")
 
     def export_mesh(
         self,
@@ -546,7 +546,7 @@ class TriangleSplattingAdapter(RendererAdapter):
         to ensure exact matrix convention compatibility.
 
         Args:
-            cameras: CameraBatch from MeshSplatBench.
+            cameras: CameraBatch from MeshSuite.
             idx: Camera index in the batch.
 
         Returns:

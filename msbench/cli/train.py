@@ -1,4 +1,4 @@
-"""Generic train command for MeshSplatBench.
+"""Generic train command for MeshSuite.
 
 Dispatches to method-specific ``TrainingMethod`` implementations via the
 training-method registry.  Every registered method is driven by the same
@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Optional
 
@@ -60,6 +61,16 @@ def _coerce_value(value: str) -> object:
         return float(value)
     except ValueError:
         return value
+
+
+def inherit_dataset_defaults(trainer_cfg: dict, dataset_cfg: Mapping) -> dict:
+    """Fill dataset-protocol trainer options (split, resolution, ...) not set by the method."""
+    if "image_dir" in dataset_cfg and "images" not in trainer_cfg:
+        trainer_cfg["images"] = dataset_cfg["image_dir"]
+    for key in ("resolution", "eval_split", "llffhold", "dtu_eval_mode"):
+        if key in dataset_cfg and key not in trainer_cfg:
+            trainer_cfg[key] = dataset_cfg[key]
+    return trainer_cfg
 
 
 def _preserve_dtu_background_defaults(dataset_root: str | Path, trainer_cfg: dict) -> None:
@@ -185,7 +196,7 @@ def train(
 
     if method is None or dataset is None:
         raise typer.BadParameter(
-            "Use --config with a structured MeshSplatBench config, or provide both "
+            "Use --config with a structured MeshSuite config, or provide both "
             "--method and --dataset."
         )
 
@@ -302,7 +313,7 @@ def _train_from_structured_config(
     quiet: bool,
     max_steps_override: int | None = None,
 ) -> dict:
-    """Run training from a MeshSplatBench structured config."""
+    """Run training from a MeshSuite structured config."""
     if "trainer" not in cfg:
         raise typer.BadParameter("Structured training config must include 'trainer'.")
     if "dataset" not in cfg:
@@ -318,6 +329,11 @@ def _train_from_structured_config(
     if dataset_root is None:
         raise typer.BadParameter("dataset.root is required for training configs.")
 
+    if cfg.get("preprocess"):
+        from msbench.trainers.exmesh_preprocess import prepare_exmesh_initializer
+
+        prepare_exmesh_initializer(cfg, dataset_root=dataset_root)
+
     trainer_cfg = Config(cfg.trainer).to_dict()
     loop_cfg = Config(cfg.get("loop", {})).to_dict()
     configured_max_steps = int(
@@ -326,11 +342,7 @@ def _train_from_structured_config(
     max_steps = int(max_steps_override) if max_steps_override is not None else configured_max_steps
     loop_cfg["max_steps"] = max_steps
 
-    if "image_dir" in dataset_cfg and "images" not in trainer_cfg:
-        trainer_cfg["images"] = dataset_cfg["image_dir"]
-    for key in ("resolution", "eval_split", "llffhold", "dtu_eval_mode"):
-        if key in dataset_cfg and key not in trainer_cfg:
-            trainer_cfg[key] = dataset_cfg[key]
+    inherit_dataset_defaults(trainer_cfg, dataset_cfg)
 
     (run_output_dir / "dataset_source.json").write_text(
         json.dumps({"schema_version": 1, "dataset": {"root": str(dataset_root), **dataset_cfg},
@@ -368,6 +380,24 @@ def _train_from_structured_config(
     if method_name == "mesh-splatting" and native_loop:
         summary = run_with_training_stats(
             lambda: _run_mesh_splatting_native_config(
+                trainer_cfg=trainer_cfg,
+                dataset_root=str(dataset_root),
+                output_dir=run_output_dir,
+                max_steps=max_steps,
+                quiet=quiet,
+            ),
+            run_output_dir,
+        )
+        if not quiet:
+            typer.echo(f"Config snapshot saved to {run_output_dir / 'config.yaml'}")
+        return summary
+
+    if method_name == "t2splat":
+        from msbench.trainers.t2splat_native import run_t2splat_native_config
+
+        # Upstream two-stage pipeline; checkpoints go to ckpt/point_cloud/iteration_N.
+        summary = run_with_training_stats(
+            lambda: run_t2splat_native_config(
                 trainer_cfg=trainer_cfg,
                 dataset_root=str(dataset_root),
                 output_dir=run_output_dir,

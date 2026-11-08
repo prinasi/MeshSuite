@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-source "$(dirname "${BASH_SOURCE[0]}")/tools/pipeline_common.sh"
-
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${REPO_ROOT}"
 
@@ -11,13 +9,13 @@ cd "${REPO_ROOT}"
 
 CONFIG_ROOT="configs"
 ASSET_SUBDIR="unity_native"
-EXPORT_TOPOLOGY="indexed"
+ASSET_SUBDIR_EXPLICIT=0
 METHOD=""
 GPU_ID=""
 UNITY_BIN="${UNITY:-}"
 UNITY_PROJECT_DIR="${PROJECT:-${UNITY_PROJECT:-}}"
 UNITY_PLAYER_BIN="${UNITY_PLAYER:-}"
-UNITY_PLAYER_OUTPUT="${UNITY_PLAYER_OUTPUT:-outputs/unity_player/linux/MeshSplatBenchProfilePlayer.x86_64}"
+UNITY_PLAYER_OUTPUT="${UNITY_PLAYER_OUTPUT:-outputs/unity_player/linux/MeshSuiteProfilePlayer.x86_64}"
 UNITY_PLAYER_TARGET="${UNITY_PLAYER_TARGET:-linux64}"
 UNITY_DISPLAY="${UNITY_DISPLAY:-}"
 PROFILE_RUNTIME="${UNITY_PROFILE_RUNTIME:-player}"
@@ -27,15 +25,14 @@ SHOW_PLAYER_OUTPUT=0
 FORCE_PLAYER_BUILD=0
 SKIP_PLAYER_BUILD=0
 DATASETS_ROOT_OVERRIDE="${DATASETS:-}"
-OUTPUT_NAME="unity_method_aware"
+UNITY_REPLAY_ROOT="${UNITY_REPLAY_ROOT:-outputs/unity_replay}"
+OUTPUT_NAME="unity_custom_engine"
 OUTPUT_NAME_EXPLICIT=0
-CONDITION="method-aware"
-TOPOLOGY="indexed"
-INDEXED_MESH_METHOD_AWARE=0
+CONDITION="custom-engine"
 REPORT_DIR=""
 REPORT_DIR_EXPLICIT=0
-NATIVE_RENDER_SUBDIR="renders/test/renders"
-NATIVE_SHAPE_POLICY="crop"
+DE_FACTO_RENDER_SUBDIR="renders/test/renders"
+DE_FACTO_SHAPE_POLICY="crop"
 REFERENCE_IMAGE_DIR_OVERRIDE=""
 PROFILE_RUNS=3
 PROFILE_VIEWS=3
@@ -56,6 +53,7 @@ FORCE_EXPORT=0
 FORCE_CAPTURE=0
 FORCE_PROFILE=0
 FORCE_METRICS=0
+FORCE_VIDEO=0
 CONTINUE_ON_ERROR=0
 DRY_RUN=0
 REPORT_NAME="unity_metrics_report"
@@ -90,7 +88,7 @@ Usage:
 
 Examples:
   bash $0 2dts mipnerf360/bicycle 0 --unity "\$UNITY" --unity-project "\$PROJECT"
-  bash $0 triangle-splatting mipnerf360/all 0 --output-name unity_method_aware_vulkan
+  bash $0 triangle-splatting mipnerf360/all 0 --output-name unity_custom_engine_vulkan
   bash $0 mipnerf360/garden 0 --method mesh-splatting --report-only
 
 Options:
@@ -98,16 +96,14 @@ Options:
   --unity-project PATH     Unity project root (default: \$PROJECT or \$UNITY_PROJECT)
   --datasets-root PATH     Override all dataset roots with PATH/<scene>
   --config-root PATH       Config root (default: ${CONFIG_ROOT})
-  --asset-subdir NAME      Per-run asset directory (default: ${ASSET_SUBDIR})
-  --export-topology T      MeshSplatting export layout: indexed/mesh or soup/materialized-soup (default: ${EXPORT_TOPOLOGY})
+  --asset-subdir NAME      Per-run asset directory (default: ${ASSET_SUBDIR}; DiffSoup's
+                           baked standard engine package defaults to unity_baked)
   --output-name NAME       Unity output folder under each scene output.dir
-                           (default: unity_method_aware or unity_general_purpose by condition)
-  --method-aware           Use method-aware Unity renderer (default)
-  --general-purpose        Use ordinary Unity Mesh baseline
+                           (default: unity_custom_engine or unity_standard_engine by setting)
+  --custom-engine          Custom engine deployment: method-aware Unity renderer (default)
+  --standard-engine        Standard engine deployment: conventional Unity Mesh, opaque
+                           vertex-colored (DiffSoup: baked textures with alpha cutout)
                            (automatically switches output/report naming unless overridden)
-  --topology T             Mesh layout for Unity renderer: indexed/mesh or soup (default: ${TOPOLOGY})
-  --indexed-mesh-method-aware
-                           With --general-purpose mesh-splatting, use Unity indexed MeshRenderer plus method-aware SH shader
   --profile-runs N         Independent profile runs per scene (default: ${PROFILE_RUNS})
   --profile-views N        Views per profile run (default: ${PROFILE_VIEWS})
   --profile-warmup N       Warmup frames per profiled view (default: ${PROFILE_WARMUP})
@@ -128,8 +124,10 @@ Options:
   --lpips-device DEVICE    LPIPS device (default: cuda:0 for numeric GPU, cpu for cpu)
   --lpips-tile N           Non-canonical tiled LPIPS size; 0 means full frame
   --no-lpips               Score PSNR/SSIM only
-  --native-render-subdir P Native render directory under output.dir
-  --native-shape-policy P  Native fidelity shape policy: crop, strict, or skip (default: ${NATIVE_SHAPE_POLICY})
+  --de-facto-render-subdir P
+                           de facto renderer output directory under output.dir
+  --de-facto-shape-policy P
+                           de facto fidelity shape policy: crop, strict, or skip (default: ${DE_FACTO_SHAPE_POLICY})
   --reference-image-dir P  Reference image dir inside each dataset root
   --report-dir PATH        Report output directory
   --report-name NAME       Report file prefix (default: ${REPORT_NAME})
@@ -137,22 +135,25 @@ Options:
   --skip-capture           Do not capture Unity PNGs/FPS CSV
   --skip-profile           Do not run Unity no-I/O profiles
   --skip-metrics           Do not compute PSNR/SSIM/LPIPS
-  --video                  Render trajectory video matching msbench render video
+  --video                  Render <output-name>/video/render_traj.mp4 along the same
+                           trajectory as msbench render video (<output.dir>/video)
   --report-only            Only format already completed scene outputs
   --force                  Rebuild export/capture/profile/metrics stages
   --force-export           Re-export TriAssets
   --force-capture          Re-capture Unity images
   --force-profile          Re-run Unity profiles
   --force-metrics          Recompute image metrics
+  --force-video            Re-render the --video trajectory video
   --skip-unity-patch       Do not patch legacy Unity project for Linux/Vulkan
   --continue-on-error      Continue with later scenes after a failure
   --dry-run                Print resolved commands without running them
   --python PATH            Python executable
   -h, --help               Show this help
 
-This wrapper currently requires COLMAP sparse binaries for Unity camera replay.
-It will skip/fail early on DTU or synthetic layouts that do not provide
-sparse/0/cameras.bin and sparse/0/images.bin.
+Unity camera replay reads COLMAP sparse binaries. NeRF-Synthetic scenes get a derived
+replay scene under UNITY_REPLAY_ROOT (default: outputs/unity_replay) holding the official
+test views and ground truth composited on the configured background. Other layouts
+without sparse/0/cameras.bin and sparse/0/images.bin, such as DTU, fail early.
 EOF
 }
 
@@ -162,6 +163,29 @@ require_value() {
 
 lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
 
+canonical_method() {
+    local name
+    name="$(lower "$1")"
+    name="${name//_/-}"
+    case "${name}" in
+        trianglesplatting) echo "triangle-splatting" ;;
+        meshsplatting) echo "mesh-splatting" ;;
+        t2-splat|t2splat) echo "t2splat" ;;
+        2dts|d2ts) echo "2dts" ;;
+        2dts-opaque|d2ts-opaque) echo "2dts-opaque" ;;
+        diffsoup) echo "diffsoup" ;;
+        *) echo "${name}" ;;
+    esac
+}
+
+# 2dts-opaque is 2DTS trained under the opaque strategy: it has its own configs,
+# outputs and reports, but runs on the 2dts package format and Unity renderers.
+engine_method() {
+    case "$1" in
+        2dts-opaque) echo "2dts" ;;
+        *) echo "$1" ;;
+    esac
+}
 
 dataset_label() {
     local name
@@ -307,6 +331,14 @@ if protocol_path.is_file():
     protocol = json.loads(protocol_path.read_text())
     if protocol.get("resolution") != [expected[0], expected[1]]:
         raise SystemExit(1)
+# Captures made before the explicit 2x MSAA protocol record no render settings.
+from msbench.unity_video import DEPLOYMENT_MSAA_SAMPLES
+settings_path = result / "capture_settings.json"
+if not settings_path.is_file():
+    raise SystemExit(1)
+settings = json.loads(settings_path.read_text())
+if settings.get("msaa_samples") != DEPLOYMENT_MSAA_SAMPLES or settings.get("timing_msaa_samples") != DEPLOYMENT_MSAA_SAMPLES:
+    raise SystemExit(1)
 raise SystemExit(0)
 PY
 }
@@ -317,6 +349,8 @@ metrics_complete() {
 import json
 import sys
 from pathlib import Path
+
+from tools.evaluate_deployment_images import EVALUATOR_REVISION
 
 path = Path(sys.argv[1])
 with_lpips = sys.argv[2] == "1"
@@ -331,8 +365,18 @@ except Exception:
 required = {"psnr", "ssim"}
 if with_lpips:
     required.add("lpips_vgg")
-ground_truth = report.get("protocol", {}).get("ground_truth")
+protocol = report.get("protocol", {})
+if protocol.get("evaluator_revision") != EVALUATOR_REVISION:
+    raise SystemExit(1)
+ground_truth = protocol.get("ground_truth")
 if not ground_truth or Path(ground_truth).resolve() != reference:
+    raise SystemExit(1)
+# Scores of an earlier capture are stale once the frames are re-captured.
+frames = [
+    item for item in (path.parent / "test").glob("*")
+    if item.suffix.lower() in {".png", ".jpg", ".jpeg"}
+]
+if frames and path.stat().st_mtime < max(item.stat().st_mtime for item in frames):
     raise SystemExit(1)
 raise SystemExit(0 if required.issubset(test) else 1)
 PY
@@ -356,8 +400,12 @@ reference = Path(sys.argv[6])
 if not path.is_file():
     raise SystemExit(1)
 try:
-    views = json.loads(path.read_text()).get("views", [])
+    payload = json.loads(path.read_text())
+    views = payload.get("views", [])
 except Exception:
+    raise SystemExit(1)
+from msbench.unity_video import DEPLOYMENT_MSAA_SAMPLES
+if payload.get("msaa_samples") != DEPLOYMENT_MSAA_SAMPLES:
     raise SystemExit(1)
 if len(views) != expected_views:
     raise SystemExit(1)
@@ -394,21 +442,6 @@ resolve_reference_image_dir() {
     local SEEN_CANDIDATES=()
     if [[ -n "${override}" ]]; then
         printf '%s\n' "${override}"
-        return 0
-    fi
-    if [[ "${image_dir}" == /* ]]; then
-        printf '%s\n' "${image_dir}"
-        return 0
-    fi
-    if [[ "${METHOD_ID}" == "2dts" && "${dataset}" == "mipnerf360" && "${IMAGE_PREPROCESSING:-stored}" == "legacy_bilinear_floor" ]]; then
-        "${PYTHON_BIN}" - "${dataset_path}" "${image_dir}" "${resolution}" <<'PY'
-import sys
-from msbench.core.image_sources import LEGACY_PREPROCESSING, resolve_colmap_image_source
-directory, _ = resolve_colmap_image_source(
-    sys.argv[2], int(sys.argv[3]), root=sys.argv[1], image_preprocessing=LEGACY_PREPROCESSING,
-)
-print(directory)
-PY
         return 0
     fi
     if [[ "${resolution}" =~ ^[2-9][0-9]*$ && -n "${image_dir}" ]]; then
@@ -475,14 +508,11 @@ while [[ "$#" -gt 0 ]]; do
         --unity-project|--unity_project|--project) require_value "$@"; UNITY_PROJECT_DIR="$2"; shift 2 ;;
         --datasets-root|--datasets_root) require_value "$@"; DATASETS_ROOT_OVERRIDE="$2"; shift 2 ;;
         --config-root|--config_root) require_value "$@"; CONFIG_ROOT="$2"; shift 2 ;;
-        --asset-subdir|--asset_subdir|--output-subdir|--output_subdir) require_value "$@"; ASSET_SUBDIR="$2"; shift 2 ;;
-        --export-topology|--export_topology) require_value "$@"; EXPORT_TOPOLOGY="$2"; shift 2 ;;
+        --asset-subdir|--asset_subdir|--output-subdir|--output_subdir) require_value "$@"; ASSET_SUBDIR="$2"; ASSET_SUBDIR_EXPLICIT=1; shift 2 ;;
         --output-name|--output_name) require_value "$@"; OUTPUT_NAME="$2"; OUTPUT_NAME_EXPLICIT=1; shift 2 ;;
         --method) require_value "$@"; METHOD="$2"; shift 2 ;;
-        --method-aware|--method_aware|--method-specific|--method_specific) CONDITION="method-aware"; shift ;;
-        --general-purpose|--general_purpose|--standard-mesh|--standard_mesh) CONDITION="general-purpose"; shift ;;
-        --topology|--mesh-topology|--mesh_topology) require_value "$@"; TOPOLOGY="$2"; shift 2 ;;
-        --indexed-mesh-method-aware|--indexed_mesh_method_aware) INDEXED_MESH_METHOD_AWARE=1; shift ;;
+        --custom-engine|--custom_engine) CONDITION="custom-engine"; shift ;;
+        --standard-engine|--standard_engine) CONDITION="standard-engine"; shift ;;
         --profile-runs|--profile_runs) require_value "$@"; PROFILE_RUNS="$2"; shift 2 ;;
         --profile-views|--profile_views) require_value "$@"; PROFILE_VIEWS="$2"; shift 2 ;;
         --profile-warmup|--profile_warmup) require_value "$@"; PROFILE_WARMUP="$2"; shift 2 ;;
@@ -502,8 +532,8 @@ while [[ "$#" -gt 0 ]]; do
         --lpips-device|--lpips_device) require_value "$@"; LPIPS_DEVICE="$2"; shift 2 ;;
         --lpips-tile|--lpips_tile) require_value "$@"; LPIPS_TILE="$2"; shift 2 ;;
         --no-lpips|--skip-lpips) WITH_LPIPS=0; shift ;;
-        --native-render-subdir|--native_render_subdir) require_value "$@"; NATIVE_RENDER_SUBDIR="$2"; shift 2 ;;
-        --native-shape-policy|--native_shape_policy) require_value "$@"; NATIVE_SHAPE_POLICY="$2"; shift 2 ;;
+        --de-facto-render-subdir|--de_facto_render_subdir) require_value "$@"; DE_FACTO_RENDER_SUBDIR="$2"; shift 2 ;;
+        --de-facto-shape-policy|--de_facto_shape_policy) require_value "$@"; DE_FACTO_SHAPE_POLICY="$2"; shift 2 ;;
         --reference-image-dir|--reference_image_dir) require_value "$@"; REFERENCE_IMAGE_DIR_OVERRIDE="$2"; shift 2 ;;
         --report-dir|--report_dir) require_value "$@"; REPORT_DIR="$2"; REPORT_DIR_EXPLICIT=1; shift 2 ;;
         --report-name|--report_name) require_value "$@"; REPORT_NAME="$2"; shift 2 ;;
@@ -513,9 +543,10 @@ while [[ "$#" -gt 0 ]]; do
         --skip-metrics|--skip_metrics) SKIP_METRICS=1; shift ;;
         --video) RENDER_VIDEO=1; shift ;;
         --report-only|--report_only) SKIP_EXPORT=1; SKIP_CAPTURE=1; SKIP_PROFILE=1; SKIP_METRICS=1; shift ;;
-        --force) FORCE_EXPORT=1; FORCE_CAPTURE=1; FORCE_PROFILE=1; FORCE_METRICS=1; shift ;;
+        --force) FORCE_EXPORT=1; FORCE_CAPTURE=1; FORCE_PROFILE=1; FORCE_METRICS=1; FORCE_VIDEO=1; shift ;;
         --force-export|--force_export) FORCE_EXPORT=1; shift ;;
         --force-capture|--force_capture) FORCE_CAPTURE=1; shift ;;
+        --force-video|--force_video) FORCE_VIDEO=1; shift ;;
         --force-profile|--force_profile) FORCE_PROFILE=1; shift ;;
         --force-metrics|--force_metrics) FORCE_METRICS=1; shift ;;
         --skip-unity-patch|--skip_unity_patch) SKIP_UNITY_PATCH=1; shift ;;
@@ -540,26 +571,9 @@ else
 fi
 
 METHOD_ID="$(canonical_method "${METHOD}")"
+ENGINE_METHOD_ID="$(engine_method "${METHOD_ID}")"
 GPU_ID="$(lower "${GPU_ID}")"
 PROFILE_RUNTIME="$(lower "${PROFILE_RUNTIME}")"
-EXPORT_TOPOLOGY="$(lower "${EXPORT_TOPOLOGY}")"
-EXPORT_TOPOLOGY="${EXPORT_TOPOLOGY//_/-}"
-case "${EXPORT_TOPOLOGY}" in
-    indexed|mesh|indexed-mesh) EXPORT_TOPOLOGY="indexed" ;;
-    soup|materialized-soup|triangle-soup|deindexed|deindexed-soup) EXPORT_TOPOLOGY="soup" ;;
-    *) echo "--export-topology must be indexed/mesh or soup/materialized-soup: ${EXPORT_TOPOLOGY}" >&2; exit 1 ;;
-esac
-if [[ "${EXPORT_TOPOLOGY}" != "indexed" && "${METHOD_ID}" != "mesh-splatting" ]]; then
-    echo "--export-topology ${EXPORT_TOPOLOGY} is only supported for mesh-splatting" >&2
-    exit 1
-fi
-TOPOLOGY="$(lower "${TOPOLOGY}")"
-TOPOLOGY="${TOPOLOGY//_/-}"
-case "${TOPOLOGY}" in
-    indexed|mesh) TOPOLOGY="indexed" ;;
-    soup|deindexed|deindexed-soup|triangle-soup) TOPOLOGY="soup" ;;
-    *) echo "--topology must be indexed/mesh or soup: ${TOPOLOGY}" >&2; exit 1 ;;
-esac
 if [[ "${GPU_ID}" != "cpu" && ! "${GPU_ID}" =~ ^[0-9]+$ ]]; then
     echo "Invalid gpu_id: ${GPU_ID}. Expected a non-negative integer or 'cpu'." >&2
     exit 1
@@ -579,9 +593,9 @@ if [[ ! "${LPIPS_TILE}" =~ ^[0-9]+$ ]]; then
     echo "--lpips-tile must be a non-negative integer: ${LPIPS_TILE}" >&2
     exit 1
 fi
-case "${NATIVE_SHAPE_POLICY}" in
+case "${DE_FACTO_SHAPE_POLICY}" in
     strict|crop|skip) ;;
-    *) echo "--native-shape-policy must be strict, crop, or skip: ${NATIVE_SHAPE_POLICY}" >&2; exit 1 ;;
+    *) echo "--de-facto-shape-policy must be strict, crop, or skip: ${DE_FACTO_SHAPE_POLICY}" >&2; exit 1 ;;
 esac
 
 resolve_python_bin
@@ -597,8 +611,16 @@ then
 fi
 expand_targets "${TARGETS[@]}"
 
-if [[ "${CONDITION}" == "general-purpose" && "${OUTPUT_NAME_EXPLICIT}" -eq 0 ]]; then
-    OUTPUT_NAME="unity_general_purpose"
+if [[ "${CONDITION}" == "standard-engine" && "${OUTPUT_NAME_EXPLICIT}" -eq 0 ]]; then
+    OUTPUT_NAME="unity_standard_engine"
+fi
+
+# DiffSoup has no standard appearance until its neural textures are baked, and the
+# baked mesh is a package of its own instead of an export of the raw tensors.
+BAKE_DIFFSOUP=0
+if [[ "${CONDITION}" == "standard-engine" && "${METHOD_ID}" == "diffsoup" ]]; then
+    BAKE_DIFFSOUP=1
+    [[ "${ASSET_SUBDIR_EXPLICIT}" -eq 1 ]] || ASSET_SUBDIR="unity_baked"
 fi
 
 if [[ "${GPU_ID}" == "cpu" ]]; then
@@ -611,7 +633,7 @@ fi
 
 if [[ -z "${REPORT_DIR}" ]]; then
     REPORT_DIR="outputs/unity_reports/${METHOD_ID}/${OUTPUT_NAME}"
-elif [[ "${CONDITION}" == "general-purpose" && "${REPORT_DIR_EXPLICIT}" -eq 0 && "${REPORT_DIR}" == "outputs/unity_reports/${METHOD_ID}/unity_method_aware" ]]; then
+elif [[ "${CONDITION}" == "standard-engine" && "${REPORT_DIR_EXPLICIT}" -eq 0 && "${REPORT_DIR}" == "outputs/unity_reports/${METHOD_ID}/unity_custom_engine" ]]; then
     REPORT_DIR="outputs/unity_reports/${METHOD_ID}/${OUTPUT_NAME}"
 fi
 
@@ -624,11 +646,10 @@ if [[ "${NEEDS_UNITY}" -eq 1 ]]; then
     UNITY_PROJECT_DIR="$(abs_path "${UNITY_PROJECT_DIR}")"
 fi
 
-if [[ "${SKIP_EXPORT}" -eq 0 ]]; then
+if [[ "${SKIP_EXPORT}" -eq 0 && "${BAKE_DIFFSOUP}" -eq 0 ]]; then
     EXPORT_CMD=("bash" "${REPO_ROOT}/single_export_unity.sh" "${METHOD_ID}")
     EXPORT_CMD+=("${EXPANDED_TARGETS[@]}" "${GPU_ID}")
     EXPORT_CMD+=(--config-root "${CONFIG_ROOT}" --output-subdir "${ASSET_SUBDIR}" --python "${PYTHON_BIN}")
-    EXPORT_CMD+=(--export-topology "${EXPORT_TOPOLOGY}")
     [[ "${FORCE_EXPORT}" -eq 1 ]] && EXPORT_CMD+=(--force)
     [[ "${CONTINUE_ON_ERROR}" -eq 1 ]] && EXPORT_CMD+=(--continue-on-error)
     [[ "${DRY_RUN}" -eq 1 ]] && EXPORT_CMD+=(--dry-run)
@@ -653,42 +674,10 @@ if [[ "${PROFILE_RUNTIME}" == "player" ]]; then
 fi
 if [[ "${SKIP_PROFILE}" -eq 0 && "${PROFILE_RUNTIME}" == "player" ]]; then
     REQUIRE_GPU_TIMING=1
-    REQUIRES_CURRENT_PLAYER_BUILD=0
-    PLAYER_REBUILD_REASON=""
-    PLAYER_REBUILD_SOURCES=()
-    if [[ "${METHOD_ID}" == "mesh-splatting" && "${TOPOLOGY}" == "soup" && "${SKIP_PLAYER_BUILD}" -eq 0 ]]; then
-        REQUIRES_CURRENT_PLAYER_BUILD=1
-        PLAYER_REBUILD_REASON="MeshSplatting shader-level soup topology"
-        PLAYER_REBUILD_SOURCES+=("${UNITY_PROJECT_DIR}/Assets/MeshSplatBench/Scripts/MethodSpecificSplatRenderer.cs")
-    fi
-    if [[ "${METHOD_ID}" == "mesh-splatting" && "${INDEXED_MESH_METHOD_AWARE}" -eq 1 && "${SKIP_PLAYER_BUILD}" -eq 0 ]]; then
-        REQUIRES_CURRENT_PLAYER_BUILD=1
-        PLAYER_REBUILD_REASON="MeshSplatting indexed MeshRenderer path"
-        PLAYER_REBUILD_SOURCES+=(
-            "${UNITY_PROJECT_DIR}/Assets/MeshSplatBench/Scripts/StandardMeshTriAssetRenderer.cs"
-            "${UNITY_PROJECT_DIR}/Assets/MeshSplatBench/Shaders/MeshSplatIndexedMesh.shader"
-            "${UNITY_PROJECT_DIR}/Assets/MeshSplatBench/Resources/MeshSplatIndexedMesh.shader"
-        )
-    fi
     if [[ -n "${UNITY_PLAYER_BIN}" ]]; then
         UNITY_PLAYER_BIN="$(abs_path "${UNITY_PLAYER_BIN}")"
     else
         UNITY_PLAYER_BIN="$(abs_path "${UNITY_PLAYER_OUTPUT}")"
-    fi
-    if [[ "${SKIP_PLAYER_BUILD}" -eq 0 && "${REQUIRES_CURRENT_PLAYER_BUILD}" -eq 1 && "${FORCE_PLAYER_BUILD}" -eq 0 && -x "${UNITY_PLAYER_BIN}" ]]; then
-        PLAYER_BUILD_STALE=0
-        for source_path in "${PLAYER_REBUILD_SOURCES[@]}"; do
-            if [[ -e "${source_path}" && "${source_path}" -nt "${UNITY_PLAYER_BIN}" ]]; then
-                PLAYER_BUILD_STALE=1
-                break
-            fi
-        done
-        if [[ "${PLAYER_BUILD_STALE}" -eq 1 ]]; then
-            echo "[unity-player-build] ${PLAYER_REBUILD_REASON} source is newer than the Player; forcing rebuild."
-            FORCE_PLAYER_BUILD=1
-        else
-            echo "[unity-player-build] Existing standalone Player is current for ${PLAYER_REBUILD_REASON}; rebuild not forced."
-        fi
     fi
     if [[ "${SKIP_PLAYER_BUILD}" -eq 0 ]]; then
         if [[ "${FORCE_PLAYER_BUILD}" -eq 1 || ! -x "${UNITY_PLAYER_BIN}" ]]; then
@@ -726,7 +715,6 @@ for target in "${EXPANDED_TARGETS[@]}"; do
     MODEL_PATH="$(config_value "${CONFIG_FILE}" "output.dir")"
     DATASET_PATH="$(config_value "${CONFIG_FILE}" "dataset.root")"
     IMAGE_DIR="$(config_value "${CONFIG_FILE}" "dataset.image_dir")"
-    IMAGE_PREPROCESSING="$(config_value "${CONFIG_FILE}" "dataset.image_preprocessing")"
     RESOLUTION="$(config_value "${CONFIG_FILE}" "dataset.resolution")"
     TRAINER_DOWNSCALE="$(config_value "${CONFIG_FILE}" "trainer.downscale")"
     if [[ -z "${MODEL_PATH}" ]]; then
@@ -758,35 +746,71 @@ for target in "${EXPANDED_TARGETS[@]}"; do
         DATASET_PATH="$(abs_path "${DATASET_PATH}")"
     fi
     RESULT_DIR="${MODEL_PATH}/${OUTPUT_NAME}"
-    TRI_ASSET="${MODEL_PATH}/${ASSET_SUBDIR}/${METHOD_ID}.triasset"
+    TRI_ASSET="${MODEL_PATH}/${ASSET_SUBDIR}/${ENGINE_METHOD_ID}.triasset"
     REF_IMAGE_DIR="$(resolve_reference_image_dir "${DATASET}" "${SCENE}" "${DATASET_PATH}" "${IMAGE_DIR}" "${RESOLUTION}" "${REFERENCE_IMAGE_DIR_OVERRIDE}")"
-    if [[ "${REF_IMAGE_DIR}" == /* ]]; then
-        REF_PATH="${REF_IMAGE_DIR}"
-    else
-        REF_PATH="${DATASET_PATH}/${REF_IMAGE_DIR}"
-    fi
+    REF_PATH="${DATASET_PATH}/${REF_IMAGE_DIR}"
     if [[ "${REF_IMAGE_DIR}" != "${REFERENCE_IMAGE_DIR_OVERRIDE:-${IMAGE_DIR}}" ]]; then
         echo "[${LABEL}] Reference image dir resolved to ${REF_IMAGE_DIR} (config requested ${IMAGE_DIR})"
+    fi
+
+    if [[ "${BAKE_DIFFSOUP}" -eq 1 && "${SKIP_EXPORT}" -eq 0 ]]; then
+        if [[ "${FORCE_EXPORT}" -eq 1 || ! -f "${TRI_ASSET}/manifest.json" ]]; then
+            BAKE_CMD=(env "CUDA_VISIBLE_DEVICES=${CUDA_DEVICE_VALUE}" "${PYTHON_BIN}" "tools/bake_diffsoup_standard_asset.py"
+                --checkpoint "${MODEL_PATH}"
+                --dataset "${DATASET_PATH}"
+                --downscale "${TRAINER_DOWNSCALE:-4}"
+                --output "${TRI_ASSET}")
+            BAKE_BACKGROUND="$(config_value "${CONFIG_FILE}" "adapter.render_params.bg_color")"
+            [[ -n "${BAKE_BACKGROUND}" ]] && BAKE_CMD+=(--background-color "${BAKE_BACKGROUND}")
+            [[ "${FORCE_EXPORT}" -eq 1 ]] && BAKE_CMD+=(--force)
+            if ! run_command "${LABEL}:bake" "${BAKE_CMD[@]}"; then
+                if handle_failure "${LABEL}" "DiffSoup texture bake failed"; then continue; fi
+                break
+            fi
+        else
+            echo "[${LABEL}] Baked asset exists; skipping: ${TRI_ASSET}"
+        fi
     fi
 
     if [[ "${DRY_RUN}" -eq 0 && ! -f "${TRI_ASSET}/manifest.json" ]]; then
         if handle_failure "${LABEL}" "Unity asset missing after export stage: ${TRI_ASSET}"; then continue; fi
         break
     fi
-    if [[ ! -f "${DATASET_PATH}/sparse/0/cameras.bin" || ! -f "${DATASET_PATH}/sparse/0/images.bin" ]]; then
-        if handle_failure "${LABEL}" "Unity camera replay requires COLMAP sparse/0/cameras.bin and images.bin: ${DATASET_PATH}"; then continue; fi
+    UNITY_SCENE_NAME="$(basename "${MODEL_PATH}")"
+    UNITY_DATASET_PATH="${DATASET_PATH}"
+    UNITY_HOLDOUT=8
+    if [[ "${DATASET}" == "nerf_synthetic" ]]; then
+        UNITY_DATASET_PATH="$(abs_path "${UNITY_REPLAY_ROOT}")/${DATASET}/${UNITY_SCENE_NAME}"
+        UNITY_HOLDOUT=1
+        REF_IMAGE_DIR="images"
+        REF_PATH="${UNITY_DATASET_PATH}/${REF_IMAGE_DIR}"
+        REPLAY_BACKGROUND="$(config_value "${CONFIG_FILE}" "dataset.background")"
+        REPLAY_CMD=("${PYTHON_BIN}" "tools/prepare_unity_replay.py"
+            --dataset "${DATASET_PATH}"
+            --output "${UNITY_DATASET_PATH}"
+            --background "${REPLAY_BACKGROUND:-white}")
+        if ! run_command "${LABEL}:replay" "${REPLAY_CMD[@]}"; then
+            if handle_failure "${LABEL}" "Unity replay scene could not be prepared: ${UNITY_DATASET_PATH}"; then continue; fi
+            break
+        fi
+    fi
+    if [[ "${DRY_RUN}" -eq 1 && "${UNITY_DATASET_PATH}" != "${DATASET_PATH}" ]]; then
+        : # The replay scene is only written by a real run.
+    elif [[ ! -f "${UNITY_DATASET_PATH}/sparse/0/cameras.bin" || ! -f "${UNITY_DATASET_PATH}/sparse/0/images.bin" ]]; then
+        if handle_failure "${LABEL}" "Unity camera replay requires COLMAP sparse/0/cameras.bin and images.bin: ${UNITY_DATASET_PATH}"; then continue; fi
         break
     fi
-    if ! has_images "${REF_PATH}"; then
+    if [[ "${DRY_RUN}" -eq 1 && "${UNITY_DATASET_PATH}" != "${DATASET_PATH}" ]]; then
+        : # The replay scene's images are only written by a real run.
+    elif ! has_images "${REF_PATH}"; then
         if handle_failure "${LABEL}" "Reference images missing: ${REF_PATH}"; then continue; fi
         break
     fi
 
     UNITY_OUTPUTS_ROOT="$(dirname "${MODEL_PATH}")"
-    UNITY_DATASETS_ROOT="$(dirname "${DATASET_PATH}")"
-    UNITY_SCENE_NAME="$(basename "${MODEL_PATH}")"
-    CONDITION_ARG="--method-aware"
-    [[ "${CONDITION}" == "general-purpose" ]] && CONDITION_ARG="--general-purpose"
+    UNITY_DATASETS_ROOT="$(dirname "${UNITY_DATASET_PATH}")"
+    CONDITION_ARG="--custom-engine"
+    [[ "${CONDITION}" == "standard-engine" ]] && CONDITION_ARG="--standard-engine"
 
     if [[ "${SKIP_CAPTURE}" -eq 0 ]]; then
         if [[ "${FORCE_CAPTURE}" -eq 1 ]] || ! capture_complete "${RESULT_DIR}" "${REF_PATH}"; then
@@ -795,18 +819,17 @@ for target in "${EXPANDED_TARGETS[@]}"; do
                 --unity-project "${UNITY_PROJECT_DIR}"
                 --datasets-root "${UNITY_DATASETS_ROOT}"
                 --outputs-root "${UNITY_OUTPUTS_ROOT}"
-                --method "${METHOD_ID}"
+                --method "${ENGINE_METHOD_ID}"
                 --asset-subdir "${ASSET_SUBDIR}"
                 --output-name "${OUTPUT_NAME}"
                 --scenes "${UNITY_SCENE_NAME}"
                 --reference-image-dir "${REF_IMAGE_DIR}"
+                --holdout "${UNITY_HOLDOUT}"
                 --test-only
                 --fps-warmup "${FPS_WARMUP}"
                 --fps-frames "${FPS_FRAMES}"
-                --topology "${TOPOLOGY}"
                 --log-name "unity_editor.log"
                 "${CONDITION_ARG}")
-            [[ "${INDEXED_MESH_METHOD_AWARE}" -eq 1 ]] && CAPTURE_CMD+=(--indexed-mesh-method-aware)
             if ! run_command "${LABEL}:capture" "${CAPTURE_CMD[@]}"; then
                 if handle_failure "${LABEL}" "Unity capture failed"; then continue; fi
                 break
@@ -825,21 +848,20 @@ for target in "${EXPANDED_TARGETS[@]}"; do
                         --player "${UNITY_PLAYER_BIN}"
                         --datasets-root "${UNITY_DATASETS_ROOT}"
                         --outputs-root "${UNITY_OUTPUTS_ROOT}"
-                        --method "${METHOD_ID}"
+                        --method "${ENGINE_METHOD_ID}"
                         --asset-subdir "${ASSET_SUBDIR}"
                         --output-name "${OUTPUT_NAME}"
                         --scenes "${UNITY_SCENE_NAME}"
                         --reference-image-dir "${REF_IMAGE_DIR}"
+                        --holdout "${UNITY_HOLDOUT}"
                         --profile-run "${run}"
                         --profile-views "${PROFILE_VIEWS}"
                         --profile-warmup "${PROFILE_WARMUP}"
                         --profile-frames "${PROFILE_FRAMES}"
-                        --topology "${TOPOLOGY}"
                         --log-name "unity_player_profile_run_$(printf '%02d' "${run}").log"
                         --require-gpu-timing
                         --gpu-timing-min-fraction "${GPU_TIMING_MIN_FRACTION}"
                         "${CONDITION_ARG}")
-                    [[ "${INDEXED_MESH_METHOD_AWARE}" -eq 1 ]] && PROFILE_CMD+=(--indexed-mesh-method-aware)
                     [[ -n "${UNITY_DISPLAY}" ]] && PROFILE_CMD+=(--display "${UNITY_DISPLAY}")
                     [[ "${PLAYER_BATCHMODE}" -eq 1 ]] && PROFILE_CMD+=(--batchmode)
                     [[ "${SHOW_PLAYER_OUTPUT}" -eq 1 ]] && PROFILE_CMD+=(--show-console-output)
@@ -849,20 +871,19 @@ for target in "${EXPANDED_TARGETS[@]}"; do
                         --unity-project "${UNITY_PROJECT_DIR}"
                         --datasets-root "${UNITY_DATASETS_ROOT}"
                         --outputs-root "${UNITY_OUTPUTS_ROOT}"
-                        --method "${METHOD_ID}"
+                        --method "${ENGINE_METHOD_ID}"
                         --asset-subdir "${ASSET_SUBDIR}"
                         --output-name "${OUTPUT_NAME}"
                         --scenes "${UNITY_SCENE_NAME}"
                         --reference-image-dir "${REF_IMAGE_DIR}"
+                        --holdout "${UNITY_HOLDOUT}"
                         --profile-only
                         --profile-run "${run}"
                         --profile-views "${PROFILE_VIEWS}"
                         --profile-warmup "${PROFILE_WARMUP}"
                         --profile-frames "${PROFILE_FRAMES}"
-                        --topology "${TOPOLOGY}"
                         --log-name "unity_profile_run_$(printf '%02d' "${run}").log"
                         "${CONDITION_ARG}")
-                    [[ "${INDEXED_MESH_METHOD_AWARE}" -eq 1 ]] && PROFILE_CMD+=(--indexed-mesh-method-aware)
                 fi
                 if ! run_command "${LABEL}:profile-${run}" "${PROFILE_CMD[@]}"; then
                     if handle_failure "${LABEL}" "Unity profile run ${run} failed"; then continue 2; fi
@@ -885,11 +906,11 @@ for target in "${EXPANDED_TARGETS[@]}"; do
                 --prediction "${RESULT_DIR}"
                 --ground-truth "${REF_PATH}"
                 --output "${METRICS_JSON}")
-            NATIVE_DIR="${MODEL_PATH}/${NATIVE_RENDER_SUBDIR}"
-            if has_images "${NATIVE_DIR}"; then
-                METRICS_CMD+=(--native "${NATIVE_DIR}" --native-shape-policy "${NATIVE_SHAPE_POLICY}")
+            DE_FACTO_DIR="${MODEL_PATH}/${DE_FACTO_RENDER_SUBDIR}"
+            if has_images "${DE_FACTO_DIR}"; then
+                METRICS_CMD+=(--de-facto "${DE_FACTO_DIR}" --de-facto-shape-policy "${DE_FACTO_SHAPE_POLICY}")
             else
-                echo "[${LABEL}] Native fidelity unavailable; no images under ${NATIVE_DIR}"
+                echo "[${LABEL}] de facto fidelity unavailable; no images under ${DE_FACTO_DIR}"
             fi
             if [[ "${WITH_LPIPS}" -eq 1 ]]; then
                 METRICS_CMD+=(--with-lpips --lpips-net vgg --lpips-device "${LPIPS_DEVICE}" --lpips-tile "${LPIPS_TILE}")
@@ -908,19 +929,26 @@ for target in "${EXPANDED_TARGETS[@]}"; do
     fi
 
     if [[ "${RENDER_VIDEO}" -eq 1 ]]; then
-        VIDEO_CMD=("${PYTHON_BIN}" "tools/run_unity_triasset_video.py"
-            --unity "${UNITY_BIN}"
-            --unity-project "${UNITY_PROJECT_DIR}"
-            --datasets-root "${UNITY_DATASETS_ROOT}"
-            --outputs-root "${UNITY_OUTPUTS_ROOT}"
-            --method "${METHOD_ID}"
-            --scenes "${UNITY_SCENE_NAME}"
-            --topology "${TOPOLOGY}"
-            "${CONDITION_ARG}")
-        [[ "${INDEXED_MESH_METHOD_AWARE}" -eq 1 ]] && VIDEO_CMD+=(--indexed-mesh-method-aware)
-        if ! run_command "${LABEL}:video" "${VIDEO_CMD[@]}"; then
-            if handle_failure "${LABEL}" "Unity video rendering failed"; then continue; fi
-            break
+        # The scene config supplies render.video (frames, fps, zoom, split) and
+        # the dataset protocol, so the trajectory is the one `msbench render
+        # video` renders natively into <output.dir>/video/render_traj.mp4.
+        VIDEO_PATH="${RESULT_DIR}/video/render_traj.mp4"
+        if [[ "${FORCE_VIDEO}" -eq 1 || ! -s "${VIDEO_PATH}" ]]; then
+            VIDEO_CMD=("${PYTHON_BIN}" "tools/run_unity_triasset_video.py"
+                --unity "${UNITY_BIN}"
+                --unity-project "${UNITY_PROJECT_DIR}"
+                --config "${CONFIG_FILE}"
+                --method "${ENGINE_METHOD_ID}"
+                --dataset "${DATASET_PATH}"
+                --triasset "${TRI_ASSET}"
+                --output-dir "${RESULT_DIR}/video"
+                "${CONDITION_ARG}")
+            if ! run_command "${LABEL}:video" "${VIDEO_CMD[@]}"; then
+                if handle_failure "${LABEL}" "Unity video rendering failed"; then continue; fi
+                break
+            fi
+        else
+            echo "[${LABEL}] Video complete; skipping: ${VIDEO_PATH}"
         fi
     fi
 

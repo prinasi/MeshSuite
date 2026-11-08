@@ -49,8 +49,8 @@ def validate_triasset(
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if manifest.get("schema_version") != "1.0":
         raise ValueError(f"unsupported schema_version {manifest.get('schema_version')!r}")
-    if int(manifest.get("export_contract_revision", 0)) < 2:
-        raise ValueError("stale export contract revision; re-export with the current MeshSplatBench exporter")
+    if int(manifest.get("export_contract_revision", 0)) < 3:
+        raise ValueError("stale export contract revision; re-export with the current MeshSuite exporter")
 
     buffers = _buffers(manifest)
     buffer_list = manifest.get("buffer_list")
@@ -84,18 +84,25 @@ def validate_triasset(
         raise ValueError("manifest must declare the Unity method-aware per-camera sorting requirement")
     if not isinstance(rendering.get("unity_method_aware_status"), str):
         raise ValueError("manifest must declare unity_method_aware_status")
-    general = rendering.get("general_purpose")
-    if not isinstance(general, dict) or not isinstance(general.get("supported"), bool):
-        raise ValueError("manifest must declare general_purpose.supported")
-    if general["supported"] and "sh_dc" not in buffers:
-        raise ValueError("general-purpose SH-DC condition requires the sh_dc buffer")
-    if manifest.get("method") == "diffsoup" and general["supported"]:
-        raise ValueError("DiffSoup general-purpose rendering requires an explicit appearance bake")
-    if manifest.get("method") == "mesh-splatting":
+    standard = rendering.get("standard_engine")
+    if not isinstance(standard, dict) or not isinstance(standard.get("supported"), bool):
+        raise ValueError("manifest must declare standard_engine.supported")
+    baked_texture = standard.get("appearance") == "baked_texture_cutout"
+    if standard["supported"] and baked_texture:
+        if "uvs" not in buffers:
+            raise ValueError("baked texture appearance requires the uvs buffer")
+        atlas = (standard.get("atlas") or {}).get("file")
+        if not atlas or not (root / atlas).is_file():
+            raise ValueError(f"baked texture appearance is missing its atlas: {atlas!r}")
+    elif standard["supported"] and "sh_dc" not in buffers:
+        raise ValueError("standard engine deployment SH-DC appearance requires the sh_dc buffer")
+    if manifest.get("method") == "diffsoup" and standard["supported"] and not baked_texture:
+        raise ValueError("DiffSoup standard engine deployment requires an explicit appearance bake")
+    if manifest.get("method") in {"mesh-splatting", "t2splat"}:
         for required in ("indices", "vertex_weight_logits", "triangle_opacity"):
             if required not in buffers:
                 raise ValueError(
-                    f"mesh-splatting package is stale or incomplete: missing {required!r}; re-export it"
+                    f"{manifest.get('method')} package is stale or incomplete: missing {required!r}; re-export it"
                 )
         faces = _memmap(root, buffers["indices"])
         logits = _memmap(root, buffers["vertex_weight_logits"]).reshape(-1)
@@ -118,6 +125,8 @@ def validate_triasset(
             "reduction": rendering.get("triangle_opacity_reduction"),
         }
 
+    if manifest.get("method") == "2dts" and rendering.get("gamma_rescale_source") == "legacy_inferred_from_gamma":
+        raise ValueError("2dts gamma_rescale was inferred from gamma; re-export with the current MeshSuite exporter")
     if manifest.get("method") == "2dts" and rendering.get("gamma_rescale"):
         gamma = float(rendering["gamma"])
         beta = 1.0 / gamma
@@ -126,6 +135,14 @@ def validate_triasset(
         if not math.isclose(actual, expected, rel_tol=1e-7, abs_tol=1e-9):
             raise ValueError(f"gamma_vertex_rescale is {actual}, expected {expected}")
         result["d2ts_gamma_rescale"] = actual
+
+    if manifest.get("method") == "2dts" and rendering.get("terminal_solid_eligible"):
+        threshold = rendering.get("ste_threshold")
+        if not isinstance(threshold, float) or not 0.0 < threshold < 1.0:
+            raise ValueError(f"terminal-solid 2dts package has invalid ste_threshold {threshold!r}")
+        if rendering["unity_method_aware_requires_per_camera_depth_sort"]:
+            raise ValueError("terminal-solid 2dts package must not request a per-camera depth sort")
+        result["d2ts_ste_threshold"] = threshold
 
     if verify_checkpoint_hash:
         source = manifest.get("source") or {}

@@ -1,4 +1,4 @@
-"""Tests for MeshSplatBench config-driven construction."""
+"""Tests for MeshSuite config-driven construction."""
 
 from __future__ import annotations
 
@@ -133,6 +133,30 @@ def test_dtu_foreground_defaults_enable_diff_soup_foreground_loss(tmp_path: Path
     assert cfg["trainer"]["foreground_training"] is True
     assert cfg["trainer"]["white_background"] is True
     assert cfg["adapter"]["render_params"]["bg_color"] == "white"
+
+
+def test_dtu_foreground_respects_explicit_dataset_background(tmp_path: Path):
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        "dataset:\n"
+        "  name: dtu\n"
+        "  type: dtu\n"
+        "  root: data/dtu\n"
+        "  scene: scan24\n"
+        "  dtu_eval_mode: foreground\n"
+        "  background: black\n"
+        "trainer:\n"
+        "  type: exmesh\n"
+        "  white_background: false\n"
+        "adapter:\n"
+        "  type: exmesh\n"
+    )
+
+    cfg = load_config(config)
+
+    assert cfg["dataset"]["dtu_eval_mode"] == "foreground"
+    assert cfg["trainer"]["white_background"] is False
+    assert cfg["adapter"]["render_params"]["bg_color"] == "black"
 
 
 def test_dtu_config_templates_default_to_full(tmp_path: Path):
@@ -276,6 +300,21 @@ def test_diffsoup_config_resolves_final_params_checkpoint():
     assert cfg["adapter"]["checkpoint"] == "outputs/diffsoup/mipnerf360/room/ckpt/final_params.pt"
 
 
+def test_2dts_mipnerf360_configs_align_with_triangle_splatting():
+    indoor_scenes = ("bonsai", "counter", "kitchen", "room")
+    outdoor_scenes = ("bicycle", "flowers", "garden", "stump", "treehill")
+
+    for scene in indoor_scenes:
+        cfg = load_config(Path(f"configs/2dts/mipnerf360/{scene}.yaml"))
+        assert cfg["dataset"]["image_dir"] == "images_2"
+        assert cfg["dataset"]["resolution"] == 1
+
+    for scene in outdoor_scenes:
+        cfg = load_config(Path(f"configs/2dts/mipnerf360/{scene}.yaml"))
+        assert cfg["dataset"]["image_dir"] == "images_4"
+        assert cfg["dataset"]["resolution"] == 1
+
+
 
 def test_scene_triangle_caps_support_scan_pattern(tmp_path: Path):
     base = tmp_path / "caps.yaml"
@@ -317,32 +356,6 @@ def test_triangle_splatting_scene_configs_apply_full_eval_caps():
     for scene_path, cap in expected.items():
         cfg = load_config(config_dir / f"{scene_path}.yaml")
         assert cfg["trainer"]["max_shapes"] == cap
-
-
-
-
-def test_2dts_mipnerf360_opaque_experiment_configs_resolve_to_isolated_outputs():
-    config_dir = Path(__file__).resolve().parents[2] / "configs" / "opaque_2dts_mipnerf360" / "2dts" / "mipnerf360"
-    scene_configs = sorted(config_dir.glob("*.yaml"))
-
-    assert len(scene_configs) == 9
-
-    for path in scene_configs:
-        cfg = Config.fromfile(path)
-        assert cfg.output.dir.startswith("outputs/opaque_2dts_mipnerf360/2dts/mipnerf360/")
-        assert cfg.adapter.checkpoint.startswith("outputs/opaque_2dts_mipnerf360/2dts/mipnerf360/")
-        assert cfg.output.metrics_file.startswith(f"{cfg.output.dir}/")
-        assert cfg.output.stats_file.startswith(f"{cfg.output.dir}/")
-        assert cfg.render.video.output_dir.startswith(f"{cfg.output.dir}/")
-        assert cfg.profile.output.startswith(f"{cfg.output.dir}/")
-        assert cfg.inspect.output.startswith(f"{cfg.output.dir}/")
-        assert cfg.d2ts.native_config == "configs/opaque_2dts_mipnerf360/2dts/native/mipnerf360.yaml"
-        assert cfg.adapter.render_params.ste_threshold == 0.3
-        assert cfg.adapter.render_params.sort_level == 2
-        assert cfg.dataset.scene == path.stem
-
-
-
 
 
 def test_build_from_cfg_with_params():
@@ -445,3 +458,80 @@ def test_max_primitives_retargets_output_paths_to_abl():
     data_2dts["trainer"]["max_primitives"] = 8000
     cfg_2dts_abl = Config(finalize_config(data_2dts))
     assert cfg_2dts_abl.output.dir == "outputs/abl/2dts-8000/mipnerf360/garden"
+
+
+# DiffSoup's official Mip-NeRF 360 setup reads images_4 on indoor scenes (GPU memory).
+_DATASET_PROTOCOL_EXCEPTIONS = {
+    ("diffsoup", "mipnerf360", scene, "image_dir")
+    for scene in ("bonsai", "counter", "kitchen", "room")
+}
+
+
+def test_output_method_names_a_variant_output_tree(tmp_path: Path):
+    config = tmp_path / "variant.yaml"
+    config.write_text(
+        "adapter:\n  type: 2dts\n"
+        "trainer:\n  type: 2dts\n"
+        "dataset:\n  name: tandt\n  scene: truck\n"
+        "output:\n  method: 2dts-variant\n  dir: outputs/{method}/{dataset}/{scene}\n"
+    )
+    assert load_config(config)["output"]["dir"] == "outputs/2dts-variant/tandt/truck"
+
+    capped = tmp_path / "capped.yaml"
+    capped.write_text(f"_base_: {config}\ntrainer:\n  max_primitives: 8000\n")
+    assert load_config(capped)["output"]["dir"] == "outputs/abl/2dts-variant-8000/tandt/truck"
+
+
+def test_all_methods_share_scene_dataset_protocol():
+    from collections import defaultdict
+
+    repo = Path(__file__).resolve().parents[2]
+    fields = ("name", "type", "root", "image_dir", "resolution", "eval_split", "eval_every",
+              "dtu_eval_mode", "background")
+    by_scene = defaultdict(dict)
+    for path in sorted((repo / "configs").glob("*/*/*.yaml")):
+        method, dataset = path.parts[-3], path.parts[-2]
+        if method == "base" or dataset == "native":
+            continue
+        cfg = load_config(path)
+        by_scene[(dataset, path.stem)][method] = {k: cfg["dataset"].get(k) for k in fields}
+
+    mismatches = []
+    for (dataset, scene), methods in by_scene.items():
+        for field in fields:
+            values = {
+                m: v[field]
+                for m, v in methods.items()
+                if (m, dataset, scene, field) not in _DATASET_PROTOCOL_EXCEPTIONS
+            }
+            if len({repr(v) for v in values.values()}) > 1:
+                mismatches.append((dataset, scene, field, values))
+    assert len(by_scene) >= 34
+    assert not mismatches
+
+
+def test_dtu_trains_every_method_on_all_views():
+    """DTU is a mesh benchmark: no method holds out views for training or meshing."""
+    import yaml
+
+    from msbench.cli.train import inherit_dataset_defaults
+
+    repo = Path(__file__).resolve().parents[2]
+    methods = set()
+    for path in sorted((repo / "configs").glob("*/dtu/*.yaml")):
+        method = path.parts[-3]
+        if method == "base":
+            continue
+        cfg = load_config(path)
+        trainer = inherit_dataset_defaults(dict(cfg["trainer"]), cfg["dataset"])
+        assert cfg["dataset"]["eval_split"] is False, path
+        assert trainer["eval_split"] is False, path
+        assert cfg["mesh"]["split"] == "all", path
+        if "preprocess" in cfg:
+            assert cfg["preprocess"].get("holdout", 0) == 0, path
+        native = cfg.get("d2ts", {}).get("native_config")
+        if native:
+            native_cfg = yaml.safe_load((repo / native).read_text())
+            assert native_cfg["dataset"]["hold_test_set"] is False, path
+        methods.add(method)
+    assert {"2dts", "diffsoup", "exmesh", "mesh-splatting", "t2splat", "triangle-splatting"} <= methods

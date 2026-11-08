@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-source "$(dirname "${BASH_SOURCE[0]}")/tools/pipeline_common.sh"
-
-# single_connectivity.sh - batch MeshSplatting connectivity evaluation.
+# single_connectivity.sh - batch MeshSplatting / ExMesh connectivity evaluation.
 #
 # Primary interface:
 #   bash single_connectivity.sh <method> <dataset/scene|dataset/all|all> [options]
@@ -51,6 +49,8 @@ Examples:
   bash $0 meshsplatting nerf_synthetic/all
   bash $0 mesh-splatting dtu/all --format markdown --summary_output connectivity_dtu.md
   bash $0 mesh-splatting all --format csv --summary_output connectivity_all.csv
+  bash $0 exmesh dtu/all --format latex
+  bash $0 t2splat mipnerf360/all
 
 Options:
   --config_root PATH       Config root                              (default: ${CONFIG_ROOT})
@@ -73,8 +73,8 @@ The summary reports:
   Non-Manifold Vertex Ratio, Largest Connected Component face/area ratios,
   and connected component count.
 
-Currently checkpoint-based connectivity evaluation is supported for
-MeshSplatting only.
+MeshSplatting is evaluated from its checkpoint; ExMesh from the exported
+mesh at the config's mesh.output (its trained geometry is that indexed mesh).
 EOF
 }
 
@@ -97,6 +97,16 @@ lower() {
     printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
 }
 
+canonical_method() {
+    local name
+    name="$(lower "$1")"
+    name="${name//_/-}"
+    case "${name}" in
+        meshsplatting) echo "mesh-splatting" ;;
+        t2-splat|t2splat) echo "t2splat" ;;
+        *) echo "${name}" ;;
+    esac
+}
 
 normalize_dataset() {
     local name
@@ -256,6 +266,9 @@ run_connectivity_scene() {
     fi
 
     local cmd=("${PYTHON_BIN}" "${CONNECTIVITY_SCRIPT}" --config "${config_file}" --output "${json_file}" --top-components "${TOP_COMPONENTS}")
+    if [[ "${METHOD_ID}" == "exmesh" ]]; then
+        cmd+=(--source mesh-file)
+    fi
     if [[ "${SKIP_VERTEX_CHECK}" -eq 1 ]]; then
         cmd+=(--skip-vertex-check)
     fi
@@ -492,8 +505,8 @@ fi
 
 METHOD_ID="$(canonical_method "$1")"
 shift
-if [[ "${METHOD_ID}" != "mesh-splatting" ]]; then
-    echo "Currently only MeshSplatting connectivity is supported, got: ${METHOD_ID}" >&2
+if [[ "${METHOD_ID}" != "mesh-splatting" && "${METHOD_ID}" != "t2splat" && "${METHOD_ID}" != "exmesh" ]]; then
+    echo "Currently only MeshSplatting, T²-Splat and ExMesh connectivity are supported, got: ${METHOD_ID}" >&2
     exit 1
 fi
 

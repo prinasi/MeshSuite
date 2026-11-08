@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Score Unity outputs with the same evaluator used for Native CUDA renders."""
+"""Score Unity outputs with the same evaluator used for de facto renderer outputs."""
 from __future__ import annotations
 
 import argparse
@@ -30,8 +30,8 @@ def main() -> int:
     parser.add_argument("--output-name", required=True)
     parser.add_argument("--method")
     parser.add_argument("--reference-image-dir")
-    parser.add_argument("--condition", choices=("method-aware", "general-purpose"), required=True)
-    parser.add_argument("--native-render-subdir", default="renders/test/renders")
+    parser.add_argument("--condition", choices=("custom-engine", "standard-engine"), required=True)
+    parser.add_argument("--de-facto-render-subdir", default="renders/test/renders")
     parser.add_argument("--lpips-device", default="cpu")
     parser.add_argument("--scenes", nargs="*", default=SCENES)
     args = parser.parse_args()
@@ -52,27 +52,22 @@ def main() -> int:
         validate_triasset(asset, max_faces=10000)
         import json
         manifest = json.loads((asset / "manifest.json").read_text())
-        general = manifest["rendering"].get("general_purpose", {})
-        if args.condition == "general-purpose" and not general.get("supported", False):
+        standard = manifest["rendering"].get("standard_engine", {})
+        if args.condition == "standard-engine" and not standard.get("supported", False):
             raise RuntimeError(
-                f"{method}/{scene} has no fair general-purpose appearance contract: "
-                f"{general.get('reason', 'unsupported')}"
+                f"{method}/{scene} has no fair standard engine deployment appearance contract: "
+                f"{standard.get('reason', 'unsupported')}"
             )
         image_dir = args.reference_image_dir or reference_image_directory(scene, method)
-        from msbench.core.image_sources import unity_reference_image_path
-
-        reference_path = unity_reference_image_path(
-            args.datasets_root.resolve() / scene, method if not args.reference_image_dir else "custom", image_dir,
-        )
         command = [
             str(args.python), str(args.evaluator),
             "--prediction", str(root),
-            "--ground-truth", str(reference_path),
-            "--native", str(scene_root / args.native_render_subdir),
+            "--ground-truth", str(args.datasets_root.resolve() / scene / image_dir),
+            "--de-facto", str(scene_root / args.de_facto_render_subdir),
             "--output", str(root / "metrics_summary.json"),
             "--with-lpips", "--lpips-net", "vgg", "--lpips-device", args.lpips_device,
         ]
-        print(f"[MeshSplatBench] metrics scene={scene}, reference={image_dir}", flush=True)
+        print(f"[MeshSuite] metrics scene={scene}, reference={image_dir}", flush=True)
         with (root / "metrics_vgg.log").open("w") as log:
             completed = subprocess.run(command, env=env, stdout=log, stderr=subprocess.STDOUT, check=False)
         if completed.returncode != 0:

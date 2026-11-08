@@ -374,7 +374,7 @@ class VanillaTSTrainer(BaseTrainer):
                 config.save_interval_iter > 0 and iteration % config.save_interval_iter == 0
             ):
                 timer.log("point cloud saving")
-                # MeshSplatBench: nest all checkpoints under ckpt/.
+                # MeshSuite: nest all checkpoints under ckpt/.
                 self.model.savePLY(f"{self.output_dir}/ckpt/point_cloud/{iteration}.ply")
 
             if (config.checkpoint_iterations is not None and iteration in config.checkpoint_iterations) or (
@@ -385,7 +385,7 @@ class VanillaTSTrainer(BaseTrainer):
 
             if config.save_mesh_iterations is not None and iteration in config.save_mesh_iterations:
                 timer.log("mesh saving")
-                # MeshSplatBench: glb checkpoint stays under ckpt/; exported mesh goes to mesh/.
+                # MeshSuite: glb checkpoint stays under ckpt/; exported mesh goes to mesh/.
                 self.model.saveGLB(f"{self.output_dir}/ckpt/glb/{iteration}.glb")
                 self.model.saveGLB(f"{self.output_dir}/mesh/{iteration}_mesh.ply")
 
@@ -394,7 +394,7 @@ class VanillaTSTrainer(BaseTrainer):
                 n_sample = config.pcd_n_sample
                 rescale_ratio = config.pcd_rescale_ratio if config.pcd_rescale_ratio is not None else 1.0
                 grid_size = config.pcd_grid_size
-                # MeshSplatBench: exported point cloud used for DTU metrics goes to mesh/.
+                # MeshSuite: exported point cloud used for DTU metrics goes to mesh/.
                 self._save_pcd(f"{self.output_dir}/mesh/{iteration}_pcd.ply", rescale_ratio, n_sample, grid_size)
 
 

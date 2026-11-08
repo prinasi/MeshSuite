@@ -1,4 +1,4 @@
-"""Loss functions for MeshSplatBench training."""
+"""Loss functions for MeshSuite training."""
 
 from __future__ import annotations
 

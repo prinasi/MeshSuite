@@ -1,6 +1,6 @@
-"""Configuration loading utilities for MeshSplatBench.
+"""Configuration loading utilities for MeshSuite.
 
-MeshSplatBench configs are plain YAML mappings with optional ``_base_`` inheritance.
+MeshSuite configs are plain YAML mappings with optional ``_base_`` inheritance.
 They are intentionally small compared with MMEngine/MMDetection configs, but
 keep the same useful shape: declare components in YAML and build them through
 registries.
@@ -270,10 +270,10 @@ def _apply_max_primitive_limit(config: dict[str, Any]) -> dict[str, Any]:
                 cap_value = config[key]
                 break
 
-    # 2. Fall back to generic max_primitives (mesh-splatting is excluded;
-    #    it uses only the native max_points vertex safeguard).
+    # 2. Fall back to generic max_primitives (mesh-splatting and T²-Splat are
+    #    excluded; they use only the native max_points vertex safeguard).
     if cap_value is None:
-        if method_type in {"mesh-splatting", "mesh_splatting"}:
+        if method_type in {"mesh-splatting", "mesh_splatting", "t2splat"}:
             return config
         cap_value = trainer.get("max_primitives", config.get("max_primitives"))
 
@@ -360,7 +360,11 @@ def _apply_dtu_defaults(config: dict[str, Any]) -> dict[str, Any]:
             "foreground_training",
             mode == "foreground" and method_type in foreground_loss_methods,
         )
-        if mode == "foreground":
+        # An explicit dataset background (e.g. ExMesh's official black DTU
+        # setup) wins; otherwise foreground evaluation trains on white.
+        if dataset.get("background") in {"white", "black"}:
+            trainer["white_background"] = dataset["background"] == "white"
+        elif mode == "foreground":
             trainer["white_background"] = True
         else:
             trainer.setdefault("white_background", False)
@@ -370,7 +374,14 @@ def _apply_dtu_defaults(config: dict[str, Any]) -> dict[str, Any]:
     if isinstance(adapter_cfg, Mapping):
         adapter = dict(adapter_cfg)
         render_params = dict(adapter.get("render_params", {}) or {})
-        render_params["bg_color"] = "white" if mode == "foreground" else "black"
+        # Full-image evaluation does not imply a black compositing background.
+        # Honour the explicit image/training background instead of overriding
+        # white-background checkpoints during rendering and image evaluation.
+        background = dataset.get("background")
+        if background not in {"white", "black"}:
+            train_white = isinstance(trainer_cfg, Mapping) and trainer_cfg.get("white_background", False)
+            background = "white" if mode == "foreground" or train_white else "black"
+        render_params["bg_color"] = background
         adapter["render_params"] = render_params
         config["adapter"] = adapter
     return config
@@ -472,14 +483,19 @@ def _format_context(config: Mapping[str, Any]) -> dict[str, Any]:
     if canonical_method == "d2ts":
         canonical_method = "2dts"
 
-    method_template_val = raw_method_str
+    # output.method names a variant of a method that needs its own output tree
+    # (e.g. 2dts-opaque) while keeping the adapter and trainer it runs on.
+    output_cfg = config.get("output", {})
+    output_method = output_cfg.get("method") if isinstance(output_cfg, Mapping) else None
+
+    method_template_val = str(output_method) if output_method else raw_method_str
     cap = trainer_cfg.get("max_primitives")
     if (
         cap is not None
         and int(cap) > 0
         and canonical_method in {"triangle-splatting", "2dts"}
     ):
-        method_template_val = f"abl/{canonical_method}-{int(cap)}"
+        method_template_val = f"abl/{output_method or canonical_method}-{int(cap)}"
 
     max_steps = trainer_cfg.get("max_steps", "")
 
@@ -580,7 +596,7 @@ def _safe_dump(data: Any) -> str:
 
 
 def _mini_yaml_load(text: str) -> dict[str, Any]:
-    """Parse the small YAML subset used by MeshSplatBench example configs."""
+    """Parse the small YAML subset used by MeshSuite example configs."""
     root: dict[str, Any] = {}
     stack: list[tuple[int, Any]] = [(-1, root)]
     pending: list[tuple[int, Any, str]] = []

@@ -21,7 +21,7 @@ from PIL import Image
 from msbench.unity_assets import (
     _d2ts_gamma_vertex_rescale,
     _deployment_background_color,
-    _general_purpose_contract,
+    _standard_engine_contract,
     _mesh_splatting_opacity_floor,
     export_triasset,
     mesh_splatting_triangle_opacity,
@@ -82,7 +82,7 @@ class MeshOpacityTests(unittest.TestCase):
 
             package = export_triasset("mesh-splatting", checkpoint, root / "scene")
             manifest = json.loads(package.manifest_path.read_text())
-            self.assertEqual(manifest["export_contract_revision"], 2)
+            self.assertEqual(manifest["export_contract_revision"], 3)
             spec = manifest["buffers"]["triangle_opacity"]
             values = torch.from_file(
                 str(package.path / spec["file"]), dtype=torch.float32, size=2
@@ -97,35 +97,6 @@ class MeshOpacityTests(unittest.TestCase):
             validation = validate_triasset(package.path, max_faces=1)
             self.assertEqual(validation["status"], "ok")
             self.assertEqual(validation["mesh_opacity"]["faces_checked"], 1)
-
-    def test_export_topology_soup_materializes_per_corner_buffers(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            checkpoint = root / "point_cloud_state_dict.pt"
-            state = {
-                "triangles_points": torch.arange(12, dtype=torch.float32).reshape(4, 3),
-                "_triangle_indices": torch.tensor([[0, 1, 2], [0, 2, 3]]),
-                "vertex_weight": torch.zeros(4, 1),
-                "opacity_floor": 0.0,
-                "sigma": -9.0,
-                "active_sh_degree": 0,
-                "features_dc": torch.zeros(4, 1, 3),
-                "features_rest": torch.zeros(4, 15, 3),
-            }
-            torch.save(state, checkpoint)
-
-            package = export_triasset(
-                "mesh-splatting", checkpoint, root / "scene", export_topology="soup"
-            )
-            manifest = json.loads(package.manifest_path.read_text())
-
-            self.assertEqual(manifest["rendering"]["primitive_topology"], "triangle-soup")
-            self.assertEqual(manifest["rendering"]["export_topology"], "materialized-soup")
-            self.assertEqual(manifest["rendering"]["source_vertex_count"], 4)
-            self.assertEqual(manifest["rendering"]["exported_vertex_count"], 6)
-            self.assertEqual(manifest["buffers"]["positions"]["shape"], [6, 3])
-            self.assertEqual(manifest["buffers"]["vertex_weight_logits"]["shape"], [6, 1])
-            self.assertEqual(manifest["buffers"]["sh_rest"]["shape"], [6, 15, 3])
 
     def test_generic_preview_uses_the_same_minimum_reduction(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -250,7 +221,7 @@ class DeploymentContractTests(unittest.TestCase):
             manifest = json.loads(
                 (work / "scene.triasset/manifest.json").read_text()
             )
-            self.assertEqual(manifest["export_contract_revision"], 2)
+            self.assertEqual(manifest["export_contract_revision"], 3)
 
     def test_background_defaults_and_override_are_deterministic(self) -> None:
         self.assertEqual(_deployment_background_color("2dts", None), "white")
@@ -259,89 +230,102 @@ class DeploymentContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             _deployment_background_color("2dts", "random")
 
-    def test_diffsoup_refuses_white_mesh_as_general_purpose_result(self) -> None:
-        contract = _general_purpose_contract("diffsoup")
+    def test_diffsoup_refuses_white_mesh_as_standard_engine_result(self) -> None:
+        contract = _standard_engine_contract("diffsoup")
         self.assertFalse(contract["supported"])
         self.assertIn("texture", contract["reason"])
-        self.assertTrue(_general_purpose_contract("mesh-splatting")["supported"])
+        self.assertTrue(_standard_engine_contract("mesh-splatting")["supported"])
 
 
-class UnityTemplateTests(unittest.TestCase):
-    def test_shader_contract_uses_flat_face_opacity_and_projected_incenter(self) -> None:
-        root = Path(__file__).resolve().parents[2]
-        shader = (root / "tools/unity_triasset_renderer/TriAssetSplat.shader").read_text()
-        renderer = (
-            root / "tools/unity_triasset_renderer/TriAssetSplatRenderer.cs"
-        ).read_text()
-
-        self.assertIn("nointerpolation float flatAlpha", shader)
-        self.assertIn("_Opacity[face]", shader)
-        self.assertNotIn("Sigmoid(_Opacity[entity])", shader)
-        self.assertIn("_ScreenParams.xy", shader)
-        self.assertIn('return "triangle_opacity"', renderer)
-        self.assertIn('"MeshSplatBench/MeshSplatTerminalSolid"', renderer)
-        self.assertIn("asset.Rendering.active_sh_degree", renderer)
-        self.assertIn("_ShRestCoefficients", renderer)
-        self.assertIn("e * _ShRestCoefficients * 3", shader)
-        self.assertNotIn("o.alpha=_RenderMode == 1 ? _OpacityFloor", shader)
-
-    def test_bootstrap_copies_the_versioned_templates_verbatim(self) -> None:
-        root = Path(__file__).resolve().parents[2]
-        script = root / "tools/create_unity_triasset_package.py"
-        if not script.is_file():
-            self.skipTest("tools/create_unity_triasset_package.py was removed")
-        with tempfile.TemporaryDirectory() as tmp:
-            project = Path(tmp)
-            (project / "Assets").mkdir()
-            subprocess.run(
-                [
-                    sys.executable,
-                    str(script),
-                    "--unity-project",
-                    str(project),
-                ],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-
-            installed = project / "Assets/MeshSplatBench"
-            loader = (installed / "Scripts/TriAssetLoader.cs").read_text()
-            self.assertIn("ApplyEvaluationBackground", loader)
-            self.assertIn("manifest.export_contract_revision < 2", loader)
-            self.assertEqual(
-                (installed / "Scripts/TriAssetSplatRenderer.cs").read_text(),
-                (root / "tools/unity_triasset_renderer/TriAssetSplatRenderer.cs").read_text(),
-            )
-            self.assertEqual(
-                (installed / "Shaders/TriAssetSplat.shader").read_text(),
-                (root / "tools/unity_triasset_renderer/TriAssetSplat.shader").read_text(),
-            )
-            self.assertEqual(
-                (installed / "Shaders/MeshSplatTerminalSolid.shader").read_text(),
-                (root / "tools/unity_triasset_renderer/MeshSplatTerminalSolid.shader").read_text(),
-            )
-            self.assertEqual(
-                (project / "Assets/Resources/MeshSplatBench/TriAssetCull.compute").read_text(),
-                (root / "tools/unity_triasset_renderer/TriAssetCull.compute").read_text(),
-            )
-            self.assertEqual(
-                (installed / "Scripts/GeneralPurposeMeshTriAssetRenderer.cs").read_text(),
-                (root / "tools/unity_triasset_renderer/GeneralPurposeMeshTriAssetRenderer.cs").read_text(),
-            )
-            self.assertEqual(
-                (installed / "Shaders/GeneralPurposeVertexColor.shader").read_text(),
-                (root / "tools/unity_triasset_renderer/GeneralPurposeVertexColor.shader").read_text(),
-            )
-            general_shader = (
-                installed / "Shaders/GeneralPurposeVertexColor.shader"
-            ).read_text()
-            self.assertNotIn("noperspective float4 color", general_shader)
-            general_renderer = (
-                installed / "Scripts/GeneralPurposeMeshTriAssetRenderer.cs"
-            ).read_text()
-            self.assertIn("mesh.colors = colors", general_renderer)
-            self.assertNotIn("mesh.colors32", general_renderer)
+def _write_legacy_capture_fixture(project: Path) -> tuple[Path, Path, Path, Path, Path]:
+    """Write an unpatched pre-rename (Assets/MeshSplatBench) capture project."""
+    scripts = project / "Assets/MeshSplatBench/Scripts"
+    shaders = project / "Assets/MeshSplatBench/Shaders"
+    scripts.mkdir(parents=True)
+    shaders.mkdir(parents=True)
+    shader = shaders / "MethodSpecificSplat.shader"
+    shader.write_text(
+        'Shader "MeshSplatBench/MethodSpecificSplat" { SubShader { Pass {\n'
+        "CGPROGRAM\n#pragma only_renderers metal\n#pragma vertex Vert\n"
+        "ByteAddressBuffer _Positions,_Indices,_Opacity,_Sigma,_ShDc,_ShRest;\n"
+        "struct V{float4 p:SV_POSITION;float3 b:TEXCOORD0;};\n"
+        "V Vert(uint id:SV_VertexID){V o;uint t=id/3,corner=id-t*3,ib=t*3;"
+        "uint vi=I(_Indices,ib+corner);uint e=_Mode==1?vi:t;return o;}\n"
+        "ENDCG\n} } }\n"
+    )
+    capture = scripts / "ColmapBatchCapture.cs"
+    capture.write_text(
+        "using System; using UnityEngine;\nnamespace T { class ColmapBatchCapture {\n"
+        "void F() { var readback = new Texture2D(1,1,TextureFormat.RGB24,false); "
+        "ApplyColmapPose(CaptureCamera, view, intr); CaptureCamera.Render(); "
+        "readback.Apply(false, false); }\n"
+        "Camera CaptureCamera;\n    }\n}\n"
+    )
+    renderer_base = scripts / "TriAssetRenderer.cs"
+    renderer_base.write_text(
+        "using UnityEngine;\nclass TriAssetRenderer\n{\n"
+        "        public virtual void SetOutputRawCodeValues(bool enabled) { }\n}\n"
+    )
+    renderer = scripts / "MethodSpecificSplatRenderer.cs"
+    renderer.write_text(
+        "using System.Collections;\nusing System.IO;\nusing UnityEngine;\nclass R : TriAssetRenderer\n{\n"
+        "        Camera TargetCamera;\n        Shader SplatShader;\n        ComputeBuffer positions, indices, opacity, sigma, dc, rest;\n        Material material;\n"
+        "        int primitiveCount, mode, activeShDegree, meshAblation;\n        float gamma = 1f, opacityFloor;\n        bool ready, rawCode, deindexedSoup;\n        string status = \"Waiting to load method-specific renderer\";\n"
+        "        IEnumerator Start()\n        {\n"
+        "            string method = \"mesh-splatting\";\n            string b = \"buffers\";\n"
+        "            int[] sourceIndices = ReadInt(Path.Combine(b, \"indices.bin\"));\n"
+        "            if (sourceIndices.Length != primitiveCount * 3) { Fail(\"indices.bin does not match primitive_count.\"); yield break; }\n"
+        "            if (deindexedSoup && mode == 1)\n            {\n"
+        "                Debug.Log(\"[MeshSplatBench] MeshSplatting shader-level soup topology: retaining indexed buffers; procedural corners fetch via _Indices.\");\n            }\n"
+        "            positions = Upload(ReadFloat(Path.Combine(b, \"positions.bin\")));\n"
+        "            indices = Upload(sourceIndices);\n"
+        "            opacity = Upload(ReadFloat(Path.Combine(b, mode == 1 ? \"vertex_weight_logits.bin\" : \"opacity_logits.bin\")));\n"
+        "            dc = Upload(ReadFloat(Path.Combine(b, \"sh_dc.bin\")));\n"
+        "            rest = Upload(ReadFloat(Path.Combine(b, \"sh_rest.bin\")));\n"
+        "            if (mode == 1) sigma = Upload(ReadFloat(Path.Combine(b, \"sigma_logits.bin\")));\n"
+        "            string ablation = \"full\";\n"
+        "            string shaderName = mode == 1 && ablation == \"full\"\n"
+        "                ? \"MeshSplatBench/MeshSplatTerminalSolid\"\n"
+        "                : mode == 1 && ablation == \"alpha-test-depth\"\n"
+        "                    ? \"MeshSplatBench/MeshSplatAlphaTestDepth\"\n"
+        "                    : mode == 1 && ablation == \"opaque-depth\"\n"
+        "                        ? \"MeshSplatBench/MeshSplatOpaqueDepth\"\n"
+        "                        : \"MeshSplatBench/MethodSpecificSplat\";\n"
+        "            SplatShader = SplatShader != null ? SplatShader : Shader.Find(shaderName);\n"
+        "            material = new Material(SplatShader) { hideFlags = HideFlags.HideAndDontSave };\n"
+        "            material.SetBuffer(\"_Positions\", positions); material.SetBuffer(\"_Indices\", indices);\n"
+        "            material.SetBuffer(\"_Opacity\", opacity); material.SetBuffer(\"_ShDc\", dc); material.SetBuffer(\"_ShRest\", rest);\n"
+        "            if (sigma != null) material.SetBuffer(\"_Sigma\", sigma);\n"
+        "            material.SetInt(\"_RawCode\", 1);\n"
+        "            ready = true; status = $\"Method-specific {method} renderer ready ({primitiveCount:N0} primitives; {(deindexedSoup ? \"shader-level triangle soup\" : \"indexed mesh\")})\";\n"
+        "            yield break;\n        }\n"
+        "        public override void PrepareCamera(Camera camera)\n        {\n"
+        "            if (camera == null || material == null) return;\n"
+        "            if (msBenchDrawCommands == null)\n            {\n"
+        "                TargetCamera = camera;\n"
+        "                if (!InstallMeshSplatBenchCameraDraw()) { enabled = false; return; }\n"
+        "            }\n"
+        "            material.SetVector(\"_CameraWorldPos\", camera.transform.position);\n"
+        "            material.SetInt(\"_RawCode\", rawCode ? 1 : 0);\n"
+        "            material.SetFloat(\"_OpacityFloor\", opacityFloor);\n"
+        "            if (mode == 1)\n            {\n"
+        "                material.SetInt(\"_MeshAblation\", meshAblation);\n"
+        "                material.SetInt(\"_UseSh\", (meshAblation == 1 || meshAblation == 4) ? 0 : 1);\n"
+        "            }\n        }\n"
+        "        void OnRenderObject()\n        {\n"
+        "            if (!ready || Camera.current != TargetCamera || material == null) return;\n"
+        "            if (!material.SetPass(0)) { Debug.LogError(\"[MeshSplatBench] Shader pass is unsupported on \" + SystemInfo.graphicsDeviceType + \": \" + material.shader.name); enabled = false; return; }\n"
+        "            Graphics.DrawProceduralNow(MeshTopology.Triangles, primitiveCount * 3, 1);\n        }\n"
+        "        public override void SetOutputRawCodeValues(bool enabled) { rawCode = enabled; }\n"
+        "        bool InstallMeshSplatBenchCameraDraw() { return true; }\n"
+        "        void RemoveMeshSplatBenchCameraDraw() {}\n"
+        "        static int[] ReadInt(string p) { return null; }\n"
+        "        static float[] ReadFloat(string p) { return null; }\n"
+        "        static ComputeBuffer Upload(System.Array values) { return null; }\n"
+        "        void Fail(string message) {}\n"
+        "        void OnDestroy() { RemoveMeshSplatBenchCameraDraw(); ready=false; positions?.Release(); indices?.Release(); opacity?.Release(); sigma?.Release(); dc?.Release(); rest?.Release(); if(material!=null) Destroy(material); }\n}\n"
+    )
+    return scripts, shader, capture, renderer_base, renderer
 
 
 class LegacyUnityVulkanPatchTests(unittest.TestCase):
@@ -352,12 +336,14 @@ class LegacyUnityVulkanPatchTests(unittest.TestCase):
         )
 
         method_path = Path(
-            "unity/Assets/MeshSplatBench/Scripts/MethodSpecificSplatRenderer.cs"
+            "unity/Assets/MeshSuite/Scripts/MethodSpecificSplatRenderer.cs"
         )
         triangle_path = Path(
-            "unity/Assets/MeshSplatBench/Scripts/TriangleSplattingTriAssetRenderer.cs"
+            "unity/Assets/MeshSuite/Scripts/TriangleSplattingTriAssetRenderer.cs"
         )
-        method_source = method_path.read_text()
+        # The patches match legacy names; patch_unity_project maps a MeshSuite project
+        # onto them the same way.
+        method_source = method_path.read_text().replace("MeshSuite", "MeshSplatBench")
         prepare_start = method_source.index("        public override void PrepareCamera")
         prepare_end = method_source.index("        void OnRenderObject")
         duplicate_prepare = method_source[prepare_start:prepare_end]
@@ -368,7 +354,9 @@ class LegacyUnityVulkanPatchTests(unittest.TestCase):
         )
 
         patched_method = _patch_method_specific_camera_state(method_source)
-        patched_triangle = _patch_triangle_splatting_camera_sort(triangle_path.read_text())
+        patched_triangle = _patch_triangle_splatting_camera_sort(
+            triangle_path.read_text().replace("MeshSuite", "MeshSplatBench")
+        )
 
         self.assertEqual(
             patched_method.count("public override void PrepareCamera(Camera camera)"),
@@ -385,92 +373,7 @@ class LegacyUnityVulkanPatchTests(unittest.TestCase):
     def test_patch_is_idempotent_and_fixes_premultiplied_capture(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
-            scripts = project / "Assets/MeshSplatBench/Scripts"
-            shaders = project / "Assets/MeshSplatBench/Shaders"
-            scripts.mkdir(parents=True)
-            shaders.mkdir(parents=True)
-            shader = shaders / "MethodSpecificSplat.shader"
-            shader.write_text(
-                'Shader "MeshSplatBench/MethodSpecificSplat" { SubShader { Pass {\n'
-                "CGPROGRAM\n#pragma only_renderers metal\n#pragma vertex Vert\n"
-                "ByteAddressBuffer _Positions,_Indices,_Opacity,_Sigma,_ShDc,_ShRest;\n"
-                "struct V{float4 p:SV_POSITION;float3 b:TEXCOORD0;};\n"
-                "V Vert(uint id:SV_VertexID){V o;uint t=id/3,corner=id-t*3,ib=t*3;"
-                "uint vi=I(_Indices,ib+corner);uint e=_Mode==1?vi:t;return o;}\n"
-                "ENDCG\n} } }\n"
-            )
-            capture = scripts / "ColmapBatchCapture.cs"
-            capture.write_text(
-                "using System; using UnityEngine;\nnamespace T { class ColmapBatchCapture {\n"
-                "void F() { var readback = new Texture2D(1,1,TextureFormat.RGB24,false); "
-                "ApplyColmapPose(CaptureCamera, view, intr); CaptureCamera.Render(); "
-                "readback.Apply(false, false); }\n"
-                "Camera CaptureCamera;\n    }\n}\n"
-            )
-            renderer_base = scripts / "TriAssetRenderer.cs"
-            renderer_base.write_text(
-                "using UnityEngine;\nclass TriAssetRenderer\n{\n"
-                "        public virtual void SetOutputRawCodeValues(bool enabled) { }\n}\n"
-            )
-            renderer = scripts / "MethodSpecificSplatRenderer.cs"
-            renderer.write_text(
-                "using System.Collections;\nusing System.IO;\nusing UnityEngine;\nclass R : TriAssetRenderer\n{\n"
-                "        Camera TargetCamera;\n        Shader SplatShader;\n        ComputeBuffer positions, indices, opacity, sigma, dc, rest;\n        Material material;\n"
-                "        int primitiveCount, mode, activeShDegree, meshAblation;\n        float gamma = 1f, opacityFloor;\n        bool ready, rawCode, deindexedSoup;\n        string status = \"Waiting to load method-specific renderer\";\n"
-                "        IEnumerator Start()\n        {\n"
-                "            string method = \"mesh-splatting\";\n            string b = \"buffers\";\n"
-                "            int[] sourceIndices = ReadInt(Path.Combine(b, \"indices.bin\"));\n"
-                "            if (sourceIndices.Length != primitiveCount * 3) { Fail(\"indices.bin does not match primitive_count.\"); yield break; }\n"
-                "            if (deindexedSoup && mode == 1)\n            {\n"
-                "                Debug.Log(\"[MeshSplatBench] MeshSplatting shader-level soup topology: retaining indexed buffers; procedural corners fetch via _Indices.\");\n            }\n"
-                "            positions = Upload(ReadFloat(Path.Combine(b, \"positions.bin\")));\n"
-                "            indices = Upload(sourceIndices);\n"
-                "            opacity = Upload(ReadFloat(Path.Combine(b, mode == 1 ? \"vertex_weight_logits.bin\" : \"opacity_logits.bin\")));\n"
-                "            dc = Upload(ReadFloat(Path.Combine(b, \"sh_dc.bin\")));\n"
-                "            rest = Upload(ReadFloat(Path.Combine(b, \"sh_rest.bin\")));\n"
-                "            if (mode == 1) sigma = Upload(ReadFloat(Path.Combine(b, \"sigma_logits.bin\")));\n"
-                "            string ablation = \"full\";\n"
-                "            string shaderName = mode == 1 && ablation == \"full\"\n"
-                "                ? \"MeshSplatBench/MeshSplatTerminalSolid\"\n"
-                "                : mode == 1 && ablation == \"alpha-test-depth\"\n"
-                "                    ? \"MeshSplatBench/MeshSplatAlphaTestDepth\"\n"
-                "                    : mode == 1 && ablation == \"opaque-depth\"\n"
-                "                        ? \"MeshSplatBench/MeshSplatOpaqueDepth\"\n"
-                "                        : \"MeshSplatBench/MethodSpecificSplat\";\n"
-                "            SplatShader = SplatShader != null ? SplatShader : Shader.Find(shaderName);\n"
-                "            material = new Material(SplatShader) { hideFlags = HideFlags.HideAndDontSave };\n"
-                "            material.SetBuffer(\"_Positions\", positions); material.SetBuffer(\"_Indices\", indices);\n"
-                "            material.SetBuffer(\"_Opacity\", opacity); material.SetBuffer(\"_ShDc\", dc); material.SetBuffer(\"_ShRest\", rest);\n"
-                "            if (sigma != null) material.SetBuffer(\"_Sigma\", sigma);\n"
-                "            material.SetInt(\"_RawCode\", 1);\n"
-                "            ready = true; status = $\"Method-specific {method} renderer ready ({primitiveCount:N0} primitives; {(deindexedSoup ? \"shader-level triangle soup\" : \"indexed mesh\")})\";\n"
-                "            yield break;\n        }\n"
-                "        public override void PrepareCamera(Camera camera)\n        {\n"
-                "            if (camera == null || material == null) return;\n"
-                "            if (msBenchDrawCommands == null)\n            {\n"
-                "                TargetCamera = camera;\n"
-                "                if (!InstallMeshSplatBenchCameraDraw()) { enabled = false; return; }\n"
-                "            }\n"
-                "            material.SetVector(\"_CameraWorldPos\", camera.transform.position);\n"
-                "            material.SetInt(\"_RawCode\", rawCode ? 1 : 0);\n"
-                "            material.SetFloat(\"_OpacityFloor\", opacityFloor);\n"
-                "            if (mode == 1)\n            {\n"
-                "                material.SetInt(\"_MeshAblation\", meshAblation);\n"
-                "                material.SetInt(\"_UseSh\", (meshAblation == 1 || meshAblation == 4) ? 0 : 1);\n"
-                "            }\n        }\n"
-                "        void OnRenderObject()\n        {\n"
-                "            if (!ready || Camera.current != TargetCamera || material == null) return;\n"
-                "            if (!material.SetPass(0)) { Debug.LogError(\"[MeshSplatBench] Shader pass is unsupported on \" + SystemInfo.graphicsDeviceType + \": \" + material.shader.name); enabled = false; return; }\n"
-                "            Graphics.DrawProceduralNow(MeshTopology.Triangles, primitiveCount * 3, 1);\n        }\n"
-                "        public override void SetOutputRawCodeValues(bool enabled) { rawCode = enabled; }\n"
-                "        bool InstallMeshSplatBenchCameraDraw() { return true; }\n"
-                "        void RemoveMeshSplatBenchCameraDraw() {}\n"
-                "        static int[] ReadInt(string p) { return null; }\n"
-                "        static float[] ReadFloat(string p) { return null; }\n"
-                "        static ComputeBuffer Upload(System.Array values) { return null; }\n"
-                "        void Fail(string message) {}\n"
-                "        void OnDestroy() { RemoveMeshSplatBenchCameraDraw(); ready=false; positions?.Release(); indices?.Release(); opacity?.Release(); sigma?.Release(); dc?.Release(); rest?.Release(); if(material!=null) Destroy(material); }\n}\n"
-            )
+            scripts, shader, capture, renderer_base, renderer = _write_legacy_capture_fixture(project)
 
             first = patch_unity_project(project)
             renderer.write_text(
@@ -535,10 +438,10 @@ class LegacyUnityVulkanPatchTests(unittest.TestCase):
             )
 
             repository_capture = Path(
-                "unity/Assets/MeshSplatBench/Scripts/ColmapBatchCapture.cs"
+                "unity/Assets/MeshSuite/Scripts/ColmapBatchCapture.cs"
             ).read_text()
             repository_renderer = Path(
-                "unity/Assets/MeshSplatBench/Scripts/MethodSpecificSplatRenderer.cs"
+                "unity/Assets/MeshSuite/Scripts/MethodSpecificSplatRenderer.cs"
             ).read_text()
             self.assertEqual(
                 repository_renderer.count('material.SetFloat("_GammaVertexRescale", gammaVertexRescale);'),
@@ -642,6 +545,43 @@ class LegacyUnityVulkanPatchTests(unittest.TestCase):
             )
             self.assertEqual(patch_unity_project(project), [])
 
+    def test_unity_namespace_follows_the_project_asset_folder(self) -> None:
+        from msbench.unity_video import unity_namespace
+
+        self.assertEqual(unity_namespace(Path("unity")), "MeshSuite")
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            self.assertEqual(unity_namespace(project), "MeshSuite")
+            (project / "Assets/MeshSplatBench").mkdir(parents=True)
+            self.assertEqual(unity_namespace(project), "MeshSplatBench")
+            (project / "Assets/MeshSuite").mkdir()
+            self.assertEqual(unity_namespace(project), "MeshSuite")
+
+    def test_renamed_project_patches_like_the_legacy_project(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            legacy, renamed = Path(tmp) / "legacy", Path(tmp) / "renamed"
+            _write_legacy_capture_fixture(legacy)
+            for source in sorted((legacy / "Assets/MeshSplatBench").rglob("*.*")):
+                target = renamed / "Assets/MeshSuite" / source.relative_to(legacy / "Assets/MeshSplatBench")
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(source.read_text().replace("MeshSplatBench", "MeshSuite"))
+
+            self.assertTrue(patch_unity_project(legacy))
+            self.assertTrue(patch_unity_project(renamed))
+            self.assertEqual(patch_unity_project(renamed), [])
+
+            patched = sorted((renamed / "Assets/MeshSuite").rglob("*.*"))
+            self.assertEqual(
+                [p.relative_to(renamed / "Assets/MeshSuite") for p in patched],
+                [p.relative_to(legacy / "Assets/MeshSplatBench")
+                 for p in sorted((legacy / "Assets/MeshSplatBench").rglob("*.*"))],
+            )
+            for path in patched:
+                expected = legacy / "Assets/MeshSplatBench" / path.relative_to(renamed / "Assets/MeshSuite")
+                text = path.read_text()
+                self.assertNotIn("MeshSplatBench", text)
+                self.assertEqual(text, expected.read_text().replace("MeshSplatBench", "MeshSuite"))
+
     def test_capture_validation_rejects_solid_frames(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -666,6 +606,84 @@ class LegacyUnityVulkanPatchTests(unittest.TestCase):
             reference_image_directory("kitchen", "triangle-splatting"), "images_2"
         )
 
+
+
+def test_unity_cameras_take_the_horizontal_focal_term_from_fx() -> None:
+    """COLMAP pixels need not be square (T&T truck: fx/fy = 1.006).
+
+    The native renderers use fovX = 2 atan(W / 2fx) and fovY = 2 atan(H / 2fy)
+    independently, so Unity's m00 must be 2fx/W (negated for the COLMAP raster
+    basis), not the aspect-derived value, or frames stretch horizontally.
+    """
+    scripts = Path(__file__).resolve().parents[2] / "unity" / "Assets" / "MeshSuite" / "Scripts"
+    capture = (scripts / "ColmapBatchCapture.cs").read_text()
+    video = (scripts / "TriAssetVideoBatchCapture.cs").read_text()
+    assert "projection.m00 = -(float)(2.0 * intr.Fx / intr.Width);" in capture
+    assert "projection.m00 = -projection.m00;" not in capture
+    assert "fx = frame.intrinsics[0];" in video
+    assert "projection.m00 = fx > 0f ? -(2.0f * fx / width) : -projection.m00;" in video
+
+
+def test_every_unity_render_target_uses_the_deployment_msaa() -> None:
+    """Image capture, FPS timing, Player profile and video all render with 2x MSAA.
+
+    Left to the quality level, Unity anti-aliased the 8-bit timing targets but
+    not the float image target, so the setting must be explicit on each target.
+    """
+    import re
+
+    from msbench.unity_video import DEPLOYMENT_MSAA_SAMPLES
+
+    scripts = Path(__file__).resolve().parents[2] / "unity" / "Assets" / "MeshSuite" / "Scripts"
+    capture = (scripts / "ColmapBatchCapture.cs").read_text()
+    video = (scripts / "TriAssetVideoBatchCapture.cs").read_text()
+    match = re.search(r"public const int DeploymentMsaaSamples = (\d+);", capture)
+    assert match and int(match.group(1)) == DEPLOYMENT_MSAA_SAMPLES == 2
+    assert "antiAliasing = DeploymentMsaaSamples," in capture
+    for path in scripts.glob("*.cs"):
+        text = path.read_text()
+        # The only RenderTexture constructor is the one inside CreateDeploymentTarget.
+        expected = 1 if path.name == "ColmapBatchCapture.cs" else 0
+        assert text.count("new RenderTexture(") == expected, path.name
+    assert capture.count("CreateDeploymentTarget(OutputWidth, OutputHeight, RenderTextureFormat.") == 3
+    assert video.count("ColmapBatchCapture.CreateDeploymentTarget(") == 2
+    assert "report.msaa_samples = EffectiveMsaaSamples(target);" in capture
+    assert '"capture_settings.json"' in capture
+
+
+def test_unity_outputs_without_deployment_msaa_are_rejected(tmp_path: Path) -> None:
+    import pytest
+
+    from tools.run_unity_triasset_eval import validate_capture_msaa, validate_runtime_profile
+    from tools.run_unity_triasset_player_profile import validate_profile
+
+    with pytest.raises(RuntimeError, match="did not record its render settings"):
+        validate_capture_msaa(tmp_path)
+    settings = tmp_path / "capture_settings.json"
+    settings.write_text(json.dumps({"msaa_samples": 1, "timing_msaa_samples": 2}))
+    with pytest.raises(RuntimeError, match="msaa_samples=1"):
+        validate_capture_msaa(tmp_path)
+    settings.write_text(json.dumps({"msaa_samples": 2, "timing_msaa_samples": 2}))
+    validate_capture_msaa(tmp_path)
+
+    view = {"cpu_frame_samples_ms": [1.0, 1.0], "gpu_frame_samples_ms": [1.0, 1.0]}
+    profile = tmp_path / "runtime_profile_run_01.json"
+    for samples, ok in ((None, False), (1, False), (2, True)):
+        payload = {"views": [view]}
+        if samples is not None:
+            payload["msaa_samples"] = samples
+        profile.write_text(json.dumps(payload))
+        checks = (
+            lambda: validate_runtime_profile(profile, expected_views=1, newer_than=0.0),
+            lambda: validate_profile(profile, expected_views=1, expected_frames=2, newer_than=0.0,
+                                     require_gpu_timing=True, gpu_timing_min_fraction=0.5),
+        )
+        for check in checks:
+            if ok:
+                check()
+            else:
+                with pytest.raises(RuntimeError, match="MSAA"):
+                    check()
 
 if __name__ == "__main__":
     unittest.main()

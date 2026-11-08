@@ -409,3 +409,36 @@ def test_is_dtu_scene_detects_cameras_npz(tmp_path):
     (tmp_path / "cameras.npz").write_bytes(b"")
 
     assert is_dtu_scene(SimpleNamespace(source_path=str(tmp_path))) is True
+
+
+def test_2dts_colmap_dataset_reads_images_2_directly(tmp_path):
+    from msbench.vendor.d2ts.diff_recon.datasets.Colmap_dataset import ColmapDataset
+    from msbench.vendor.d2ts.diff_recon.datasets.colmap_loader import CameraInfo
+    from msbench.vendor.d2ts.diff_recon.utils.file_handler import LocalHandler
+
+    handler = LocalHandler(str(tmp_path))
+    (tmp_path / "images_2").mkdir()
+    img = Image.new("RGB", (100, 80), (255, 0, 0))
+    img.save(tmp_path / "images_2" / "test.jpg")
+
+    cam_info = CameraInfo(
+        camera_id=0,
+        R=np.eye(3),
+        T=np.zeros(3),
+        FovY=1.0,
+        FovX=1.0,
+        image_path="images_2/test.jpg",
+        image_name="test",
+        width=100,
+        height=80,
+    )
+
+    dataset = ColmapDataset(
+        file_handler=handler,
+        cam_infos=[cam_info],
+        target_res=1,
+    )
+    cam = dataset[0]
+    assert cam.image_width == 100
+    assert cam.image_height == 80
+    assert cam.gt_image.shape == (3, 80, 100)

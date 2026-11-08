@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-source "$(dirname "${BASH_SOURCE[0]}")/tools/pipeline_common.sh"
-
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${REPO_ROOT}"
 
@@ -16,7 +14,6 @@ cd "${REPO_ROOT}"
 
 CONFIG_ROOT="configs"
 OUTPUT_SUBDIR="unity_native"
-EXPORT_TOPOLOGY="indexed"
 METHOD=""
 GPU_ID=""
 if [[ -n "${PYTHON_BIN:-}" ]]; then
@@ -61,7 +58,6 @@ Examples:
 Options:
   --config-root PATH       Config root (default: ${CONFIG_ROOT})
   --output-subdir NAME     Per-run asset directory (default: ${OUTPUT_SUBDIR})
-  --export-topology T      MeshSplatting export layout: indexed/mesh or soup/materialized-soup (default: ${EXPORT_TOPOLOGY})
   --method NAME            Method when using the target-first form
   --force                  Replace an existing .triasset package
   --continue-on-error      Export later scenes after an individual failure
@@ -83,6 +79,29 @@ require_value() {
 
 lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
 
+canonical_method() {
+    local name
+    name="$(lower "$1")"
+    name="${name//_/-}"
+    case "${name}" in
+        trianglesplatting) echo "triangle-splatting" ;;
+        meshsplatting) echo "mesh-splatting" ;;
+        t2-splat|t2splat) echo "t2splat" ;;
+        2dts|d2ts) echo "2dts" ;;
+        2dts-opaque|d2ts-opaque) echo "2dts-opaque" ;;
+        diffsoup) echo "diffsoup" ;;
+        *) echo "${name}" ;;
+    esac
+}
+
+# 2dts-opaque is 2DTS trained under the opaque strategy: it has its own configs,
+# outputs and reports, but runs on the 2dts package format and Unity renderers.
+engine_method() {
+    case "$1" in
+        2dts-opaque) echo "2dts" ;;
+        *) echo "$1" ;;
+    esac
+}
 
 dataset_label() {
     local name
@@ -163,7 +182,9 @@ resolve_python_bin() {
 }
 
 resolve_tb_cmd() {
-    if command -v "${TB_CMD}" >/dev/null 2>&1; then
+    # The msbench command runs whichever checkout the environment installed, so
+    # by default export with this checkout's exporter; MSBENCH_CMD selects one.
+    if [[ -n "${MSBENCH_CMD:-}" ]] && command -v "${TB_CMD}" >/dev/null 2>&1; then
         TB_CMD_ARR=("${TB_CMD}")
         TB_EXPORT_ARGS=(export-unity)
     else
@@ -188,26 +209,6 @@ print(value)
 PY
 }
 
-asset_export_topology_matches() {
-    local package="$1" expected="$2"
-    "${PYTHON_BIN}" - "${package}" "${expected}" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-manifest = Path(sys.argv[1]) / "manifest.json"
-expected = sys.argv[2]
-try:
-    rendering = json.loads(manifest.read_text()).get("rendering", {})
-except Exception:
-    raise SystemExit(1)
-actual = rendering.get("export_topology", "indexed")
-if expected == "soup":
-    raise SystemExit(0 if actual == "materialized-soup" else 1)
-raise SystemExit(0 if actual in ("indexed", None) else 1)
-PY
-}
-
 if [[ "$#" -lt 1 || "${1}" == "-h" || "${1}" == "--help" ]]; then usage; exit 0; fi
 
 POSITIONAL=()
@@ -215,7 +216,6 @@ while [[ "$#" -gt 0 ]]; do
     case "$1" in
         --config-root|--config_root) require_value "$@"; CONFIG_ROOT="$2"; shift 2 ;;
         --output-subdir|--output_subdir) require_value "$@"; OUTPUT_SUBDIR="$2"; shift 2 ;;
-        --export-topology|--export_topology) require_value "$@"; EXPORT_TOPOLOGY="$2"; shift 2 ;;
         --method) require_value "$@"; METHOD="$2"; shift 2 ;;
         --force) FORCE=1; shift ;;
         --continue-on-error) CONTINUE_ON_ERROR=1; shift ;;
@@ -238,18 +238,8 @@ else
     TARGETS=("${POSITIONAL[@]:0:$((${#POSITIONAL[@]} - 1))}")
 fi
 METHOD_ID="$(canonical_method "${METHOD}")"
+ENGINE_METHOD_ID="$(engine_method "${METHOD_ID}")"
 GPU_ID="$(lower "${GPU_ID}")"
-EXPORT_TOPOLOGY="$(lower "${EXPORT_TOPOLOGY}")"
-EXPORT_TOPOLOGY="${EXPORT_TOPOLOGY//_/-}"
-case "${EXPORT_TOPOLOGY}" in
-    indexed|mesh|indexed-mesh) EXPORT_TOPOLOGY="indexed" ;;
-    soup|materialized-soup|triangle-soup|deindexed|deindexed-soup) EXPORT_TOPOLOGY="soup" ;;
-    *) echo "--export-topology must be indexed/mesh or soup/materialized-soup: ${EXPORT_TOPOLOGY}" >&2; exit 1 ;;
-esac
-if [[ "${EXPORT_TOPOLOGY}" != "indexed" && "${METHOD_ID}" != "mesh-splatting" ]]; then
-    echo "--export-topology ${EXPORT_TOPOLOGY} is only supported for mesh-splatting" >&2
-    exit 1
-fi
 if [[ "${GPU_ID}" != "cpu" && ! "${GPU_ID}" =~ ^[0-9]+$ ]]; then
     echo "Invalid gpu_id: ${GPU_ID}. Expected a non-negative integer or 'cpu'." >&2
     exit 1
@@ -272,23 +262,25 @@ for target in "${EXPANDED_TARGETS[@]}"; do
     MODEL_PATH="$(config_value "${CONFIG_FILE}" "output.dir")"
     CHECKPOINT="$(config_value "${CONFIG_FILE}" "adapter.checkpoint")"
     BACKGROUND_COLOR="$(config_value "${CONFIG_FILE}" "adapter.render_params.bg_color")"
+    D2TS_GAMMA_RESCALE="$(config_value "${CONFIG_FILE}" "adapter.render_params.gamma_rescale")"
+    STE_THRESHOLD="$(config_value "${CONFIG_FILE}" "adapter.render_params.ste_threshold")"
     if [[ -z "${MODEL_PATH}" ]]; then
         echo "[${DATASET}/${SCENE}] Config missing output.dir: ${CONFIG_FILE}" >&2
         FAILED=1
         [[ "${CONTINUE_ON_ERROR}" -eq 1 ]] && continue || break
     fi
     [[ -n "${CHECKPOINT}" ]] || CHECKPOINT="${MODEL_PATH}/ckpt"
-    OUTPUT="${MODEL_PATH}/${OUTPUT_SUBDIR}/${METHOD_ID}"
+    OUTPUT="${MODEL_PATH}/${OUTPUT_SUBDIR}/${ENGINE_METHOD_ID}"
     PACKAGE="${OUTPUT}.triasset"
     REPLACE_INCOMPLETE=0
     if [[ -f "${PACKAGE}/manifest.json" && "${FORCE}" -eq 0 ]]; then
         VALIDATOR="${REPO_ROOT}/tools/validate_unity_triasset_cpu.py"
-        if "${PYTHON_BIN}" "${VALIDATOR}" "${PACKAGE}" --max-faces 10000 >/dev/null && asset_export_topology_matches "${PACKAGE}" "${EXPORT_TOPOLOGY}"; then
+        if "${PYTHON_BIN}" "${VALIDATOR}" "${PACKAGE}" --max-faces 10000 >/dev/null; then
             echo "[${DATASET}/${SCENE}] Valid Unity asset exists; skipping: ${PACKAGE}"
             SKIPPED=$((SKIPPED + 1))
             continue
         fi
-        echo "[${DATASET}/${SCENE}] Re-exporting stale or topology-mismatched Unity asset: ${PACKAGE}"
+        echo "[${DATASET}/${SCENE}] Re-exporting stale Unity asset: ${PACKAGE}"
         REPLACE_INCOMPLETE=1
     fi
     if [[ -e "${PACKAGE}" && ! -f "${PACKAGE}/manifest.json" ]]; then
@@ -308,9 +300,10 @@ for target in "${EXPANDED_TARGETS[@]}"; do
     if [[ "${#TB_EXPORT_ARGS[@]}" -gt 0 ]]; then
         CMD+=("${TB_EXPORT_ARGS[@]}")
     fi
-    CMD+=(--method "${METHOD_ID}" --checkpoint "${CHECKPOINT}" --output "${OUTPUT}")
-    CMD+=(--export-topology "${EXPORT_TOPOLOGY}")
+    CMD+=(--method "${ENGINE_METHOD_ID}" --checkpoint "${CHECKPOINT}" --output "${OUTPUT}")
     [[ -n "${BACKGROUND_COLOR}" ]] && CMD+=(--background-color "${BACKGROUND_COLOR}")
+    [[ "${ENGINE_METHOD_ID}" == "2dts" && "${D2TS_GAMMA_RESCALE}" == "False" ]] && CMD+=(--no-d2ts-gamma-rescale)
+    [[ -n "${STE_THRESHOLD}" && "${STE_THRESHOLD}" != "None" ]] && CMD+=(--d2ts-ste-threshold "${STE_THRESHOLD}")
     [[ "${FORCE}" -eq 1 || "${REPLACE_INCOMPLETE}" -eq 1 ]] && CMD+=(--force)
     if [[ "${GPU_ID}" == "cpu" ]]; then
         DEVICE_LABEL="cpu (CUDA hidden)"
@@ -324,11 +317,7 @@ for target in "${EXPANDED_TARGETS[@]}"; do
     [[ "${DRY_RUN}" -eq 1 ]] && continue
     mkdir -p "${MODEL_PATH}/logs"
     LOG_EXPORT_SUBDIR="${OUTPUT_SUBDIR//[^A-Za-z0-9_.-]/_}"
-    if [[ "${EXPORT_TOPOLOGY}" == "indexed" ]]; then
-        EXPORT_LOG="${MODEL_PATH}/logs/unity_export_${METHOD_ID}_${LOG_EXPORT_SUBDIR}.log"
-    else
-        EXPORT_LOG="${MODEL_PATH}/logs/unity_export_${METHOD_ID}_${LOG_EXPORT_SUBDIR}_${EXPORT_TOPOLOGY}.log"
-    fi
+    EXPORT_LOG="${MODEL_PATH}/logs/unity_export_${METHOD_ID}_${LOG_EXPORT_SUBDIR}.log"
     if ! CUDA_VISIBLE_DEVICES="${CUDA_DEVICE_VALUE}" "${CMD[@]}" 2>&1 | tee "${EXPORT_LOG}"; then
         echo "[${DATASET}/${SCENE}] Unity asset export failed" >&2
         FAILED=1

@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-source "$(dirname "${BASH_SOURCE[0]}")/tools/pipeline_common.sh"
-
-# single_train.sh - config-driven MeshSplatBench scene/dataset pipeline.
+# single_train.sh - config-driven MeshSuite scene/dataset pipeline.
 #
 # Primary interface:
 #   bash single_train.sh <method> <dataset/scene|dataset/all|all> <gpu_id> [options]
@@ -14,6 +12,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/tools/pipeline_common.sh"
 # Pipeline:
 #   train -> render configured image split -> compute image metrics
 #   -> optional DTU mesh metrics -> export video -> formatted summary
+#   DTU trains on every view and skips image rendering and image metrics.
 
 # ---------------------------------------------------------------------------
 # Defaults
@@ -33,6 +32,10 @@ if [[ -n "${PYTHON_BIN:-}" ]]; then
     PYTHON_BIN="${PYTHON_BIN}"
 elif [[ -n "${PYTHON:-}" ]]; then
     PYTHON_BIN="${PYTHON}"
+elif [[ -x "/home/zkx/miniconda3/envs/msbench/bin/python" ]]; then
+    PYTHON_BIN="/home/zkx/miniconda3/envs/msbench/bin/python"
+elif [[ -n "${CONDA_PREFIX:-}" && -x "${CONDA_PREFIX}/bin/python" ]]; then
+    PYTHON_BIN="${CONDA_PREFIX}/bin/python"
 elif command -v python >/dev/null 2>&1; then
     PYTHON_BIN="python"
 else
@@ -97,6 +100,7 @@ Examples:
   bash $0 triangle-splatting nerf_synthetic/lego 0
   bash $0 triangle-splatting mipnerf360/all 0
   bash $0 triangle-splatting all 0
+  bash $0 t2splat dtu/all 0           # T²-Splat: mipnerf360, tandt and dtu only
 
 Legacy form still works:
   bash $0 garden 0 --method triangle-splatting
@@ -132,6 +136,9 @@ Options:
   --dtu-unmasked           Alias for --dtu-full
   --python PATH            Python executable
   -h, --help               Show this help
+
+On DTU every method trains on all views, so only DTU mesh metrics are reported:
+image rendering and NVS metrics are skipped there, even when requested.
 
 Each stage reads configs/<method>/<dataset>/<scene>.yaml. By default, output
 paths are outputs/<method>/<dataset>/<scene>. When --max_primitives or a
@@ -179,10 +186,24 @@ validate_dtu_eval_mode() {
     esac
 }
 
+canonical_method() {
+    local name
+    name="$(lower "$1")"
+    name="${name//_/-}"
+    case "${name}" in
+        trianglesplatting) echo "triangle-splatting" ;;
+        meshsplatting) echo "mesh-splatting" ;;
+        t2-splat|t2splat) echo "t2splat" ;;
+        2dts|d2ts) echo "2dts" ;;
+        2dts-opaque|d2ts-opaque) echo "2dts-opaque" ;;
+        *) echo "${name}" ;;
+    esac
+}
 
 normalize_dataset() {
     local name
     name="$(lower "$1")"
+    name="${name##*/}"  # nested target, e.g. ablation/dtu -> dtu
     name="${name//_/-}"
     case "${name}" in
         mipnerf360|mipnerf-360|m360|360|nerf360) echo "mipnerf360" ;;
@@ -195,13 +216,18 @@ normalize_dataset() {
 }
 
 dataset_label() {
-    case "$(normalize_dataset "$1")" in
-        mipnerf360) echo "mipnerf360" ;;
-        tandt) echo "tandt" ;;
-        nerf_synthetic) echo "nerf_synthetic" ;;
-        dtu) echo "dtu" ;;
-        custom) echo "custom" ;;
-        *) echo "$(normalize_dataset "$1")" ;;
+    case "$1" in
+        */*) echo "$1" ;;  # nested target, e.g. ablation/dtu
+        *)
+            case "$(normalize_dataset "$1")" in
+                mipnerf360) echo "mipnerf360" ;;
+                tandt) echo "tandt" ;;
+                nerf_synthetic) echo "nerf_synthetic" ;;
+                dtu) echo "dtu" ;;
+                custom) echo "custom" ;;
+                *) echo "$(normalize_dataset "$1")" ;;
+            esac
+            ;;
     esac
 }
 
@@ -256,6 +282,13 @@ parse_target() {
         return
     fi
 
+    if [[ "${target}" == */*/* ]]; then
+        PARSED_DATASET="${target%/*}"
+        PARSED_SCENE="${target##*/}"
+        PARSED_RAW_TARGET="${target}"
+        return
+    fi
+
     if [[ "${target}" == */* ]]; then
         PARSED_DATASET="$(dataset_label "${target%%/*}")"
         PARSED_SCENE="${target#*/}"
@@ -270,6 +303,10 @@ parse_target() {
 
 scene_config_path() {
     local method="$1" dataset="$2" scene="$3"
+    if [[ -f "${CONFIG_ROOT}/${method}/${dataset}/${scene}.yaml" ]]; then
+        echo "${CONFIG_ROOT}/${method}/${dataset}/${scene}.yaml"
+        return 0
+    fi
     echo "${CONFIG_ROOT}/${method}/$(dataset_label "${dataset}")/${scene}.yaml"
 }
 
@@ -298,7 +335,7 @@ get_effective_cap() {
         mesh-splatting|mesh_splatting)
             cap="${CAP_MESH_SPLATTING}"
             ;;
-        2dts|d2ts)
+        2dts|d2ts|2dts-opaque)
             cap="${CAP_2DTS:-${CAP_MAX_PRIMITIVES}}"
             ;;
         *)
@@ -335,7 +372,9 @@ config_with_runtime_overrides() {
         tag="${tag}_${DTU_EVAL_MODE}"
     fi
 
-    output_file="${TEMP_OVERRIDE_CONFIG_DIR}/${METHOD_ID}_$(dataset_label "${dataset}")_${scene}${tag}.yaml"
+    local clean_tag_ds
+    clean_tag_ds="$(dataset_label "${dataset}" | tr '/' '_')"
+    output_file="${TEMP_OVERRIDE_CONFIG_DIR}/${METHOD_ID}_${clean_tag_ds}_${scene}${tag}.yaml"
 
     cat > "${output_file}" <<EOF
 _base_: ${base_abs}
@@ -582,6 +621,13 @@ expand_targets() {
             continue
         fi
 
+        if [[ "${target}" == */dtu/all || "${target}" == */dtu ]]; then
+            local prefix="${target%/all}"
+            prefix="${prefix%/dtu}"
+            for scene in "${DTU_SCENES[@]}"; do EXPANDED_TARGETS+=("${prefix}/dtu/${scene}"); done
+            continue
+        fi
+
         if [[ "${target}" == "dtu" || "${target}" == "dtu/all" || "${target}" == "all_dtu" ]]; then
             for scene in "${DTU_SCENES[@]}"; do EXPANDED_TARGETS+=("dtu/${scene}"); done
             continue
@@ -610,7 +656,8 @@ expand_targets() {
 
 log_prefix() {
     local dataset="$1" scene="$2"
-    echo "$(dataset_label "${dataset}")_${scene}_gpu${GPU_ID}"
+    local clean_ds="${dataset//\//_}"
+    echo "$(dataset_label "${clean_ds}")_${scene}_gpu${GPU_ID}"
 }
 
 # -- Metric readers --------------------------------------------------------
@@ -662,6 +709,26 @@ PY
     local metric_fps metric_train_memory metric_train_time
     read -r LAST_PSNR LAST_SSIM LAST_LPIPS metric_fps metric_train_memory metric_train_time <<< "${values}"
     [[ "${metric_fps}" != "N/A" ]] && LAST_RENDER_FPS="${metric_fps}"
+    [[ "${metric_train_memory}" != "N/A" ]] && LAST_TRAIN_MEMORY="${metric_train_memory}"
+    [[ "${metric_train_time}" != "N/A" ]] && LAST_TRAIN_TIME="${metric_train_time}"
+    return 0
+}
+
+read_train_stats_from_json() {
+    local stats_file="$1"
+    local values metric_train_memory metric_train_time
+    values=$("${PYTHON_BIN}" - "${stats_file}" <<'PY'
+import json, sys
+
+try:
+    with open(sys.argv[1]) as f:
+        d = json.load(f)
+    print(int(round(float(d["peak_gpu_memory_mib"]))), f"{float(d['total_time_s']):.1f}")
+except Exception:
+    print("N/A N/A")
+PY
+)
+    read -r metric_train_memory metric_train_time <<< "${values}"
     [[ "${metric_train_memory}" != "N/A" ]] && LAST_TRAIN_MEMORY="${metric_train_memory}"
     [[ "${metric_train_time}" != "N/A" ]] && LAST_TRAIN_TIME="${metric_train_time}"
     return 0
@@ -781,7 +848,7 @@ run_train_config() {
         "${dataset}" "${scene}" "${GPU_ID}" "${cmd[*]}" > "${train_log}"
 
     set +e
-    CUDA_VISIBLE_DEVICES="${GPU_ID}" "${cmd[@]}" >> "${train_log}" 2>&1
+    PYTHONUNBUFFERED=1 CUDA_VISIBLE_DEVICES="${GPU_ID}" "${cmd[@]}" >> "${train_log}" 2>&1
     local exit_code=$?
     set -e
 
@@ -947,6 +1014,25 @@ run_dtu_chamfer() {
     read_chamfer_from_json "${results_path}"
     echo "${LAST_CHAMFER}" > "${chamfer_file}"
     echo "[${dataset}/${scene}] DTU mesh metrics done. CD=${LAST_CHAMFER}"
+
+    # Methods that refine a coarse initial mesh (ExMesh) also report its CD.
+    local initial_mesh init_results final_chamfer="${LAST_CHAMFER}"
+    initial_mesh="$(config_value "${config_file}" "trainer.initial_mesh")"
+    [[ -n "${initial_mesh}" && -f "${initial_mesh}" ]] || return 0
+    init_results="${model_path}/init_mesh_metrics.json"
+    printf '\n[%s/%s] Initial mesh: %s\n\n' "${dataset}" "${scene}" "${initial_mesh}" >> "${chamfer_log}"
+    set +e
+    CUDA_VISIBLE_DEVICES="${GPU_ID}" "${cmd[@]}" --pred "${initial_mesh}" --no-force-export \
+        -o "${init_results}" >> "${chamfer_log}" 2>&1
+    exit_code=$?
+    set -e
+    if [[ "${exit_code}" -ne 0 ]]; then
+        echo "[${dataset}/${scene}] Initial-mesh metrics FAILED; see ${chamfer_log}"
+    else
+        read_chamfer_from_json "${init_results}"
+        echo "[${dataset}/${scene}] Initial-mesh metrics done. Init CD=${LAST_CHAMFER}"
+    fi
+    LAST_CHAMFER="${final_chamfer}"
 }
 
 # ---------------------------------------------------------------------------
@@ -957,7 +1043,7 @@ print_final_summary() {
 
     echo
     echo "=============================================================================================================="
-    echo "  MeshSplatBench Summary  (method: ${METHOD_ID})"
+    echo "  MeshSuite Summary  (method: ${METHOD_ID})"
     echo "=============================================================================================================="
     "${PYTHON_BIN}" "${FORMAT_METRICS}" --config "${SUMMARY_CONFIGS[@]}"
 }
@@ -1098,6 +1184,17 @@ for TARGET in "${EXPANDED_TARGETS[@]}"; do
     fi
     PREFIX="$(log_prefix "${DATASET}" "${SCENE}")"
 
+    # DTU trains on every view (no held-out test views), so only DTU mesh metrics
+    # are reported there; image rendering and NVS metrics are skipped.
+    SCENE_SKIP_RENDERING="${SKIP_RENDERING}"
+    SCENE_SKIP_NVS_METRICS="${SKIP_NVS_METRICS}"
+    SCENE_IS_DTU=0
+    if [[ "$(normalize_dataset "${DATASET}")" == "dtu" ]]; then
+        SCENE_IS_DTU=1
+        SCENE_SKIP_RENDERING=1
+        SCENE_SKIP_NVS_METRICS=1
+    fi
+
     TRAINING_ALREADY_DONE=0
     TRAINING_MARKER=""
     if [[ "${SKIP_TRAINING}" -eq 0 ]] && TRAINING_MARKER="$(training_complete_marker "${CONFIG_FILE}" "${MODEL_PATH}")"; then
@@ -1114,13 +1211,13 @@ for TARGET in "${EXPANDED_TARGETS[@]}"; do
 
     RENDERING_ALREADY_DONE=0
     RENDERING_MARKER=""
-    if [[ "${SKIP_RENDERING}" -eq 0 && "${FORCE_RERUN_EXISTING}" -eq 0 ]] && RENDERING_MARKER="$(rendering_complete_marker "${CONFIG_FILE}" "${MODEL_PATH}")"; then
+    if [[ "${SCENE_SKIP_RENDERING}" -eq 0 && "${FORCE_RERUN_EXISTING}" -eq 0 ]] && RENDERING_MARKER="$(rendering_complete_marker "${CONFIG_FILE}" "${MODEL_PATH}")"; then
         RENDERING_ALREADY_DONE=1
     fi
 
     METRICS_ALREADY_DONE=0
     METRICS_MARKER=""
-    if [[ "${SKIP_NVS_METRICS}" -eq 0 && "${FORCE_RERUN_EXISTING}" -eq 0 ]] && METRICS_MARKER="$(metrics_complete_marker "${CONFIG_FILE}" "${MODEL_PATH}")"; then
+    if [[ "${SCENE_SKIP_NVS_METRICS}" -eq 0 && "${FORCE_RERUN_EXISTING}" -eq 0 ]] && METRICS_MARKER="$(metrics_complete_marker "${CONFIG_FILE}" "${MODEL_PATH}")"; then
         METRICS_ALREADY_DONE=1
     fi
 
@@ -1179,7 +1276,7 @@ for TARGET in "${EXPANDED_TARGETS[@]}"; do
         fi
     fi
 
-    if [[ "${SKIP_RENDERING}" -eq 0 ]]; then
+    if [[ "${SCENE_SKIP_RENDERING}" -eq 0 ]]; then
         if [[ "${RENDERING_ALREADY_DONE}" -eq 1 ]]; then
             echo "[${DATASET}/${SCENE}] Rendering skipped; existing output detected at ${RENDERING_MARKER}. Use --rerun_existing to rebuild."
         else
@@ -1187,7 +1284,7 @@ for TARGET in "${EXPANDED_TARGETS[@]}"; do
         fi
     fi
 
-    if [[ "${SKIP_NVS_METRICS}" -eq 0 ]]; then
+    if [[ "${SCENE_SKIP_NVS_METRICS}" -eq 0 ]]; then
         if [[ "${METRICS_ALREADY_DONE}" -eq 1 ]]; then
             read_metrics_from_json "${METRICS_MARKER}"
             echo "[${DATASET}/${SCENE}] Metrics skipped; existing output detected at ${METRICS_MARKER}. Use --rerun_existing to rebuild."
@@ -1217,6 +1314,11 @@ for TARGET in "${EXPANDED_TARGETS[@]}"; do
     fi
 
     read_metrics_from_json "$(metrics_output_file "${CONFIG_FILE}" "${MODEL_PATH}")"
+    if [[ "${SCENE_IS_DTU}" -eq 1 ]]; then
+        LAST_PSNR="N/A"; LAST_SSIM="N/A"; LAST_LPIPS="N/A"; LAST_RENDER_FPS="N/A"
+        # DTU writes no image-metrics file, so training stats come from train_stats.json.
+        read_train_stats_from_json "${MODEL_PATH}/train_stats.json"
+    fi
     warn_diffsoup_metric_mismatch "${CONFIG_FILE}" "${MODEL_PATH}"
     echo "[${DATASET}/${SCENE}] Summary: PSNR=${LAST_PSNR} SSIM=${LAST_SSIM} LPIPS=${LAST_LPIPS} FPS=${LAST_RENDER_FPS} Mem=${LAST_TRAIN_MEMORY}MiB Time=${LAST_TRAIN_TIME}s Chamfer=${LAST_CHAMFER} Video=${LAST_VIDEO}"
     SUMMARY_ROWS+=("${DATASET}/${SCENE}|${LAST_PSNR}|${LAST_SSIM}|${LAST_LPIPS}|${LAST_RENDER_FPS}|${LAST_TRAIN_MEMORY}|${LAST_TRAIN_TIME}|${LAST_CHAMFER}|${LAST_VIDEO}")

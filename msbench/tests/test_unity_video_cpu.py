@@ -259,5 +259,204 @@ class UnityVideoTrajectoryTests(unittest.TestCase):
         self.assertTrue((proj / "ProjectSettings").is_dir())
 
 
+def _unity_eval_video_dry_run(tmp_path: Path, *extra: str) -> str:
+    import subprocess
+    import sys
+
+    repo = Path(__file__).resolve().parents[2]
+    scene = tmp_path / "data" / "truck"
+    (scene / "sparse" / "0").mkdir(parents=True, exist_ok=True)
+    for name in ("cameras.bin", "images.bin"):
+        (scene / "sparse" / "0" / name).write_bytes(b"")
+    (scene / "images").mkdir(exist_ok=True)
+    Image.new("RGB", (4, 4)).save(scene / "images" / "000001.png")
+    config = tmp_path / "configs" / "t2splat" / "tandt" / "truck.yaml"
+    config.parent.mkdir(parents=True, exist_ok=True)
+    config.write_text(
+        f"dataset:\n  root: {scene}\n  image_dir: images\n  resolution: 1\n"
+        f"output:\n  dir: {tmp_path / 'out' / 'truck'}\n"
+    )
+    result = subprocess.run(
+        ["bash", str(repo / "single_unity_eval.sh"), "t2splat", "tandt/truck", "cpu",
+         "--config-root", str(tmp_path / "configs"), "--unity", "/bin/true",
+         "--unity-project", str(repo / "unity"), "--python", sys.executable,
+         "--video", "--skip-export", "--skip-unity-patch", "--skip-capture",
+         "--skip-profile", "--skip-metrics", "--dry-run", *extra],
+        cwd=repo, capture_output=True, text=True, check=True,
+    )
+    return result.stdout
+
+
+def test_unity_eval_video_uses_scene_config_trajectory(tmp_path: Path) -> None:
+    out = _unity_eval_video_dry_run(tmp_path, "--standard-engine")
+    video = next(line for line in out.splitlines() if line.startswith("[tandt/truck:video] Command:"))
+    # render.video settings and the dataset protocol come from the scene config,
+    # as for the native `msbench render video` into <output.dir>/video.
+    assert f"--config {tmp_path / 'configs' / 't2splat' / 'tandt' / 'truck.yaml'}" in video
+    assert f"--dataset {tmp_path / 'data' / 'truck'}" in video
+    assert f"--output-dir {tmp_path / 'out' / 'truck' / 'unity_standard_engine' / 'video'}" in video
+    assert "--standard-engine" in video
+
+
+def test_unity_eval_video_skips_existing_video_unless_forced(tmp_path: Path) -> None:
+    video = tmp_path / "out" / "truck" / "unity_custom_engine" / "video" / "render_traj.mp4"
+    video.parent.mkdir(parents=True)
+    video.write_bytes(b"mp4")
+    skipped = _unity_eval_video_dry_run(tmp_path)
+    assert "Video complete; skipping" in skipped
+    assert "[tandt/truck:video] Command:" not in skipped
+    forced = _unity_eval_video_dry_run(tmp_path, "--force-video")
+    assert "[tandt/truck:video] Command:" in forced
+
+
+
+def test_wait_for_unity_project_release_outlasts_exiting_import_workers(tmp_path: Path) -> None:
+    from msbench import unity_video
+
+    worker = [(4242, "Unity -batchMode -name AssetImportWorkerHW0 -projectPath unity")]
+    states = iter([worker, worker, []])
+    with patch.object(unity_video, "find_running_unity_processes", side_effect=lambda _p: next(states)):
+        assert unity_video.wait_for_unity_project_release(tmp_path, timeout_s=5.0, poll_s=0.0) == []
+    with patch.object(unity_video, "find_running_unity_processes", return_value=worker):
+        assert unity_video.wait_for_unity_project_release(tmp_path, timeout_s=0.0, poll_s=0.0) == worker
+
+
+def test_unity_eval_recaptures_captures_without_deployment_msaa(tmp_path: Path) -> None:
+    import subprocess
+    import sys
+
+    repo = Path(__file__).resolve().parents[2]
+    scene = tmp_path / "data" / "truck"
+    (scene / "sparse" / "0").mkdir(parents=True)
+    for name in ("cameras.bin", "images.bin"):
+        (scene / "sparse" / "0" / name).write_bytes(b"")
+    (scene / "images").mkdir()
+    Image.new("RGB", (4, 4)).save(scene / "images" / "000001.png")
+    run = tmp_path / "out" / "truck"
+    config = tmp_path / "configs" / "t2splat" / "tandt" / "truck.yaml"
+    config.parent.mkdir(parents=True)
+    config.write_text(f"dataset:\n  root: {scene}\n  image_dir: images\n  resolution: 1\noutput:\n  dir: {run}\n")
+    # A finished capture from before the explicit MSAA protocol: images and FPS, no render settings.
+    capture = run / "unity_custom_engine"
+    (capture / "test").mkdir(parents=True)
+    Image.new("RGB", (4, 4)).save(capture / "test" / "000001.png")
+    (capture / "fps_per_test_view.csv").write_text("split\n")
+
+    def dry_run() -> str:
+        return subprocess.run(
+            ["bash", str(repo / "single_unity_eval.sh"), "t2splat", "tandt/truck", "cpu",
+             "--config-root", str(tmp_path / "configs"), "--unity", "/bin/true",
+             "--unity-project", str(repo / "unity"), "--python", sys.executable,
+             "--skip-export", "--skip-unity-patch", "--skip-profile", "--skip-metrics", "--dry-run"],
+            cwd=repo, capture_output=True, text=True, check=True,
+        ).stdout
+
+    assert "[tandt/truck:capture] Command:" in dry_run()
+    (capture / "capture_settings.json").write_text('{"msaa_samples": 2, "timing_msaa_samples": 2}')
+    assert "Capture complete; skipping" in dry_run()
+
+
+def test_unity_eval_rescores_metrics_older_than_the_capture(tmp_path: Path) -> None:
+    import os
+    import subprocess
+    import sys
+
+    from tools.evaluate_deployment_images import EVALUATOR_REVISION
+
+    repo = Path(__file__).resolve().parents[2]
+    scene = tmp_path / "data" / "truck"
+    (scene / "sparse" / "0").mkdir(parents=True)
+    for name in ("cameras.bin", "images.bin"):
+        (scene / "sparse" / "0" / name).write_bytes(b"")
+    (scene / "images").mkdir()
+    Image.new("RGB", (4, 4)).save(scene / "images" / "000001.png")
+    run = tmp_path / "out" / "truck"
+    config = tmp_path / "configs" / "t2splat" / "tandt" / "truck.yaml"
+    config.parent.mkdir(parents=True)
+    config.write_text(f"dataset:\n  root: {scene}\n  image_dir: images\n  resolution: 1\noutput:\n  dir: {run}\n")
+    capture = run / "unity_custom_engine"
+    (capture / "test").mkdir(parents=True)
+    frame = capture / "test" / "000001.png"
+    Image.new("RGB", (4, 4)).save(frame)
+    metrics = capture / "metrics_summary.json"
+    metrics.write_text(json.dumps({
+        "protocol": {"evaluator_revision": EVALUATOR_REVISION, "ground_truth": str(scene / "images")},
+        "test": {"psnr": 20.0, "ssim": 0.5, "lpips_vgg": 0.3},
+    }))
+
+    def dry_run() -> str:
+        return subprocess.run(
+            ["bash", str(repo / "single_unity_eval.sh"), "t2splat", "tandt/truck", "cpu",
+             "--config-root", str(tmp_path / "configs"), "--unity", "/bin/true",
+             "--unity-project", str(repo / "unity"), "--python", sys.executable,
+             "--skip-export", "--skip-unity-patch", "--skip-capture", "--skip-profile", "--dry-run"],
+            cwd=repo, capture_output=True, text=True, check=True,
+        ).stdout
+
+    os.utime(metrics, (1_000, 1_000))  # scored before the frames were (re-)captured
+    assert "[tandt/truck:metrics] Command:" in dry_run()
+    os.utime(metrics, None)
+    assert "Metrics complete; skipping" in dry_run()
+
+
+def _stale_msbench(tmp_path: Path) -> Path:
+    """An older msbench (no DEPLOYMENT_MSAA_SAMPLES), as installed from another checkout."""
+    stale = tmp_path / "other_checkout"
+    (stale / "msbench").mkdir(parents=True)
+    (stale / "msbench" / "__init__.py").write_text("")
+    (stale / "msbench" / "unity_video.py").write_text(
+        "LEGACY_UNITY_NAMESPACE = 'MeshSplatBench'\n"
+        "def unity_namespace(project):\n    return 'MeshSuite'\n"
+    )
+    return stale
+
+
+def test_unity_tools_import_their_own_checkout(tmp_path: Path) -> None:
+    import os
+    import subprocess
+    import sys
+
+    repo = Path(__file__).resolve().parents[2]
+    env = dict(os.environ, PYTHONPATH=str(_stale_msbench(tmp_path)))
+    for tool in ("run_unity_triasset_eval.py", "run_unity_triasset_player_profile.py",
+                 "build_unity_profile_player.py", "patch_legacy_unity_vulkan.py",
+                 "run_unity_triasset_video.py", "export_unity_triasset.py"):
+        result = subprocess.run([sys.executable, str(repo / "tools" / tool), "--help"],
+                                cwd=tmp_path, env=env, capture_output=True, text=True)
+        assert result.returncode == 0, f"{tool}: {result.stderr[-400:]}"
+
+
+def test_unity_export_uses_this_checkouts_exporter_by_default(tmp_path: Path) -> None:
+    import os
+    import subprocess
+    import sys
+
+    repo = Path(__file__).resolve().parents[2]
+    (tmp_path / "ckpt").mkdir()
+    config = tmp_path / "configs" / "t2splat" / "tandt" / "truck.yaml"
+    config.parent.mkdir(parents=True)
+    config.write_text(
+        f"dataset:\n  root: {tmp_path / 'data'}\noutput:\n  dir: {tmp_path / 'out'}\n"
+        f"adapter:\n  type: t2splat\n  checkpoint: {tmp_path / 'ckpt'}\n"
+    )
+
+    # An installed msbench command, which may run another checkout's code.
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "msbench").write_text("#!/bin/sh\nexit 0\n")
+    (bin_dir / "msbench").chmod(0o755)
+
+    def dry_run(**env: str) -> str:
+        environment = {k: v for k, v in os.environ.items() if k != "MSBENCH_CMD"} | env
+        environment["PATH"] = f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}"
+        return subprocess.run(
+            ["bash", str(repo / "single_export_unity.sh"), "t2splat", "tandt/truck", "cpu",
+             "--config-root", str(tmp_path / "configs"), "--python", sys.executable, "--dry-run", "--force"],
+            cwd=repo, env=environment, capture_output=True, text=True, check=True,
+        ).stdout
+
+    assert f"{repo / 'tools' / 'export_unity_triasset.py'} --method t2splat" in dry_run()
+    assert "msbench export-unity --method t2splat" in dry_run(MSBENCH_CMD="msbench")
+
 if __name__ == "__main__":
     unittest.main()

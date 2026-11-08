@@ -11,7 +11,7 @@ from pathlib import Path
 
 DEFAULT_METHODS = ("2dts", "diffsoup", "mesh-splatting", "triangle-splatting")
 DEFAULT_SCENES = ("bicycle", "bonsai", "counter", "flowers", "garden", "kitchen", "room", "stump", "treehill")
-DEFAULT_CONDITIONS = ("general-purpose", "method-aware")
+DEFAULT_CONDITIONS = ("standard-engine", "custom-engine")
 
 
 def quantile(values: list[float], q: float) -> float:

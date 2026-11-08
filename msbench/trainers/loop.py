@@ -1,4 +1,4 @@
-"""Training loop orchestrator for MeshSplatBench."""
+"""Training loop orchestrator for MeshSuite."""
 
 from __future__ import annotations
 

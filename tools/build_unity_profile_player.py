@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the MeshSplatBench standalone Unity profile Player."""
+"""Build the MeshSuite standalone Unity profile Player."""
 from __future__ import annotations
 
 import argparse
@@ -7,6 +7,14 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+
+# Import this checkout's msbench, even when the environment installed
+# (e.g. in editable mode) a different checkout.
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if sys.path[:1] != [str(REPO_ROOT)]:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from msbench.unity_video import unity_namespace
 
 
 def unity_graphics_arguments() -> list[str]:
@@ -32,15 +40,16 @@ def main() -> int:
         print(output)
         return 0
     output.parent.mkdir(parents=True, exist_ok=True)
+    namespace = unity_namespace(project)
     command = [
         str(unity), "-batchmode", *unity_graphics_arguments(), "-projectPath", str(project),
-        "-executeMethod", "MeshSplatBench.UnityNative.Editor.MeshSplatBenchProfilePlayerBuild.Build",
+        "-executeMethod", f"{namespace}.UnityNative.Editor.{namespace}ProfilePlayerBuild.Build",
         "-profile-player-output", str(output),
         "-profile-player-target", args.target,
         "-logFile", str(log_path),
         "-quit",
     ]
-    print("[MeshSplatBench] Building Unity profile Player:", " ".join(command), flush=True)
+    print("[MeshSuite] Building Unity profile Player:", " ".join(command), flush=True)
     env = os.environ.copy()
     if sys.platform.startswith("linux") and not env.get("DISPLAY"):
         env["DISPLAY"] = args.display or ":0"

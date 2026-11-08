@@ -1,36 +1,56 @@
-"""CLI bootstrap; isolated runs do not import PyTorch or renderer modules."""
+"""MeshSuite CLI entry point."""
 
-from __future__ import annotations
+import typer
 
-import sys
+from msbench.cli.inspect import inspect_app
+from msbench.cli.profile import profile_app
+from msbench.cli.eval import eval_app
+from msbench.cli.compare import compare_app
+from msbench.cli.train import TRAIN_CONTEXT_SETTINGS, train
+from msbench.cli.render import render_app
+from msbench.cli.export import export_app
+from msbench.cli.export_unity import export_unity_app
+
+app = typer.Typer(
+    name="msbench",
+    help="MeshSuite: a config-driven benchmark for triangle/splatting reconstruction.",
+    no_args_is_help=True,
+    rich_markup_mode="rich",
+)
+
+app.add_typer(inspect_app, name="inspect", help="Inspect a model and report statistics.")
+app.add_typer(profile_app, name="profile", help="Profile renderer performance.")
+app.add_typer(eval_app, name="eval", help="Evaluate rendering quality.")
+app.add_typer(compare_app, name="compare", help="Compare results across methods.")
+app.command(
+    name="train",
+    help="Train a triangle splatting model.",
+    context_settings=TRAIN_CONTEXT_SETTINGS,
+)(train)
+app.add_typer(export_app, name="export", help="Export trained geometry assets.")
+app.add_typer(render_app, name="render", help="Render images from a trained model.")
+app.add_typer(export_unity_app, name="export-unity", help="Export feature-preserving Unity-native assets.")
 
 
-def __getattr__(name: str):
-    if name == "app":
-        from msbench.cli.app import app
-        return app
-    raise AttributeError(name)
+@app.command()
+def version():
+    """Show MeshSuite version."""
+    from msbench import __version__
+    typer.echo(f"MeshSuite v{__version__}")
 
 
-def main() -> None:
-    if len(sys.argv) > 1 and sys.argv[1] == "run":
-        from msbench.cli.run import main as run_main
-        run_main(sys.argv[2:])
-        return
-    try:
-        from msbench.cli.app import app
-    except ModuleNotFoundError as exc:
-        message = (
-            f"Native commands need the runtime dependencies (missing {exc.name}). "
-            "Install msbench[runtime] in a method environment.\n"
-            "The control environment supports: msbench run --help\n"
-        )
-        if len(sys.argv) == 1 or sys.argv[1] in {"--help", "-h"}:
-            print(message)
-            return
-        raise SystemExit(message) from exc
-    app()
+@app.command()
+def backends():
+    """Show external renderer backend availability."""
+    import json
+
+    from msbench.renderers.backends import BACKENDS
+
+    typer.echo(json.dumps(
+        {name: spec.status() for name, spec in BACKENDS.items()},
+        indent=2,
+    ))
 
 
 if __name__ == "__main__":
-    main()
+    app()

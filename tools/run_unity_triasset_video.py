@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Render camera trajectory videos using the Unity-native TriAsset renderer.
 
-Renders videos for method-aware (procedural splatting) or general-purpose
-(standard Unity Mesh) conditions along the exact same PCA ellipse camera
+Renders videos for custom engine deployment (method-aware procedural
+splatting) or standard engine deployment (opaque Unity Mesh) along the exact same PCA ellipse camera
 trajectory as ``msbench render video``.
 """
 from __future__ import annotations
@@ -34,11 +34,11 @@ from msbench.unity_video import (
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Render video trajectories in Unity for MeshSplatBench assets.",
+        description="Render video trajectories in Unity for MeshSuite assets.",
     )
     parser.add_argument("--unity", type=Path, help="Path to Unity Editor binary.")
-    parser.add_argument("--unity-project", type=Path, help="Path to MeshSplatBench Unity project.")
-    parser.add_argument("--config", type=Path, help="MeshSplatBench render/training config YAML.")
+    parser.add_argument("--unity-project", type=Path, help="Path to MeshSuite Unity project.")
+    parser.add_argument("--config", type=Path, help="MeshSuite render/training config YAML.")
     parser.add_argument("--method", "-m", help="Method name (e.g. triangle-splatting, mesh-splatting, 2dts, diffsoup).")
     parser.add_argument("--triasset", type=Path, help="Path to source .triasset directory.")
     parser.add_argument("--dataset", "-d", type=Path, help="Path to dataset directory.")
@@ -57,18 +57,16 @@ def main() -> int:
     parser.add_argument("--image-dir", default="images", help="COLMAP image directory.")
     parser.add_argument("--resolution", type=int, default=1, help="Downscale factor or width.")
     parser.add_argument("--eval-every", type=int, default=8, help="Holdout stride.")
-    parser.add_argument("--topology", choices=("indexed", "mesh", "soup"), default="indexed")
-    parser.add_argument("--indexed-mesh-method-aware", action="store_true")
     parser.add_argument("--write-frames", action="store_true", help="Keep rendered PNG frames alongside MP4.")
     parser.add_argument("--background-color", choices=("black", "white"), default=None)
     parser.add_argument("--force-unity", action="store_true", help="Terminate conflicting Unity processes holding project lock before launching.")
 
     cond_group = parser.add_mutually_exclusive_group()
-    cond_group.add_argument("--method-aware", "--method-specific", dest="method_aware", action="store_true", default=True, help="Use method-aware procedural Unity renderer (default).")
-    cond_group.add_argument("--general-purpose", "--standard-mesh", dest="general_purpose", action="store_true", help="Use standard Unity Mesh baseline.")
+    cond_group.add_argument("--custom-engine", dest="custom_engine", action="store_true", default=True, help="Custom engine deployment: method-aware Unity renderer (default).")
+    cond_group.add_argument("--standard-engine", dest="standard_engine", action="store_true", help="Standard engine deployment: opaque vertex-colored Unity Mesh.")
 
     args = parser.parse_args()
-    condition = "general-purpose" if args.general_purpose else "method-aware"
+    condition = "standard-engine" if args.standard_engine else "custom-engine"
 
     unity_bin = args.unity or find_unity_executable()
     if unity_bin is None or not Path(unity_bin).is_file():
@@ -104,7 +102,7 @@ def main() -> int:
             dataset_path = dataset_path / dataset_cfg["scene"]
 
         run_dir = config_output_dir(cfg)
-        cond_folder = "unity_method_aware" if condition == "method-aware" else "unity_general_purpose"
+        cond_folder = "unity_custom_engine" if condition == "custom-engine" else "unity_standard_engine"
         default_out = Path(run_dir) / cond_folder / "video" if run_dir else Path(f"video_{cond_folder}")
         output_dir = Path(args.output_dir or default_out)
 
@@ -113,8 +111,13 @@ def main() -> int:
             from msbench.unity_assets import export_triasset
             ckpt = adapter_cfg.get("checkpoint")
             if ckpt:
-                print(f"[MeshSplatBench] Exporting triasset for {method} to {triasset_path}...")
-                export_triasset(method=method, checkpoint=ckpt, output_dir=triasset_path)
+                print(f"[MeshSuite] Exporting triasset for {method} to {triasset_path}...")
+                export_triasset(
+                    method,
+                    ckpt,
+                    triasset_path,
+                    d2ts_ste_threshold=(adapter_cfg.get("render_params") or {}).get("ste_threshold"),
+                )
 
         run_unity_video_for_scene(
             unity_bin=unity_bin,
@@ -124,8 +127,6 @@ def main() -> int:
             dataset_path=dataset_path,
             output_dir=output_dir,
             condition=condition,
-            topology="indexed" if args.topology == "mesh" else args.topology,
-            indexed_mesh_method_aware=args.indexed_mesh_method_aware,
             trajectory_path=args.trajectory,
             dataset_type=str(dataset_cfg.get("type", "auto")),
             image_dir=str(dataset_cfg.get("image_dir", args.image_dir)),
@@ -157,7 +158,7 @@ def main() -> int:
         else:
             dataset_path = None
 
-        cond_folder = "unity_method_aware" if condition == "method-aware" else "unity_general_purpose"
+        cond_folder = "unity_custom_engine" if condition == "custom-engine" else "unity_standard_engine"
         if args.outputs_root:
             scene_out = Path(args.outputs_root) / scene
             triasset = args.triasset or (scene_out / "unity_native" / f"{method}.triasset")
@@ -182,8 +183,6 @@ def main() -> int:
             dataset_path=dataset_path,
             output_dir=out_dir,
             condition=condition,
-            topology="indexed" if args.topology == "mesh" else args.topology,
-            indexed_mesh_method_aware=args.indexed_mesh_method_aware,
             trajectory_path=args.trajectory,
             image_dir=ref_img_dir,
             resolution=args.resolution,

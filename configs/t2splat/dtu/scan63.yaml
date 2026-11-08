@@ -1,0 +1,17 @@
+# @format
+
+_base_:
+  - ../../base/dtu.yaml
+  - ../../base/t2splat.yaml
+  - ../../base/t2splat-dtu.yaml
+
+experiment:
+  name: t2splat_scan63
+
+dataset:
+  scene: scan63
+
+trainer:
+  # Per-scene exception in upstream configs/dtu.yaml.
+  lambda_normals: 0.000001
+  final_visibility_threshold: 0.5

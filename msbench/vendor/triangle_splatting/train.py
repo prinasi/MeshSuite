@@ -1,4 +1,4 @@
-"""Native triangle-splatting training entry point for MeshSplatBench."""
+"""Native triangle-splatting training entry point for MeshSuite."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ except ImportError:
 
 
 def build_parser():
-    parser = ArgumentParser(description="MeshSplatBench triangle-splatting trainer")
+    parser = ArgumentParser(description="MeshSuite triangle-splatting trainer")
     model_params = ModelParams(parser)
     opt_params = OptimizationParams(parser)
     pipe_params = PipelineParams(parser)
@@ -66,7 +66,7 @@ def _prepare_output_and_logger(args):
         cfg_log_f.write(str(Namespace(**vars(args))))
 
     if TENSORBOARD_FOUND:
-        # MeshSplatBench unifies tensorboard output under a sibling logs/ folder when
+        # MeshSuite unifies tensorboard output under a sibling logs/ folder when
         # the model path is the shared ckpt/ directory.
         log_dir = args.model_path
         if os.path.basename(os.path.normpath(args.model_path)) == "ckpt":

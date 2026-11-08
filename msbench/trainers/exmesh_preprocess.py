@@ -1,0 +1,640 @@
+"""Independent, versioned 2DGS and PGSR initialization for ExMesh."""
+
+from __future__ import annotations
+
+import hashlib
+import importlib.util
+import argparse
+import json
+import re
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import time
+
+import numpy as np
+from PIL import Image
+
+TWO_DGS_URL = "https://github.com/hbb1/2d-gaussian-splatting.git"
+TWO_DGS_REVISION = "f3e3b9fa67bbd1c75e05167ff37391d8dab2a678"
+# The official ExMesh repository bundles the PGSR initializer its README recommends.
+EXMESH_URL = "https://github.com/Fan-Treasure/ExMesh.git"
+EXMESH_REVISION = "0bf121895ebd74642c1bab824a992c48f95296e8"
+
+
+def _sha256(path):
+    result = hashlib.sha256()
+    with Path(path).open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            result.update(chunk)
+    return result.hexdigest()
+
+
+def _record_effective_arguments(source, command, output):
+    """Capture defaults from the pinned source instead of retyping them."""
+    spec = importlib.util.spec_from_file_location(
+        "_msbench_2dgs_arguments", source / "arguments/__init__.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    parser = argparse.ArgumentParser()
+    module.ModelParams(parser)
+    module.OptimizationParams(parser)
+    module.PipelineParams(parser)
+    arguments, _ = parser.parse_known_args(command[1:])
+    files = (
+        "train.py",
+        "render.py",
+        "arguments/__init__.py",
+        "utils/mesh_utils.py",
+        "utils/camera_utils.py",
+        "gaussian_renderer/__init__.py",
+    )
+    result = dict(
+        arguments=vars(arguments), source_files_sha256={f: _sha256(source / f) for f in files}
+    )
+    (output / "effective_arguments.json").write_text(json.dumps(result, indent=2) + "\n")
+    return result
+
+
+def stage_colmap(dataset, output, resolution, *, background=None):
+    """Resize/compose RGB, retain alpha for TSDF, and scale camera intrinsics."""
+    from msbench.core.datasets import _resolve_resolution
+    from msbench.vendor.triangle_splatting.scene.colmap_loader import (
+        read_extrinsics_binary,
+        read_extrinsics_text,
+        read_intrinsics_binary,
+        read_intrinsics_text,
+    )
+
+    if background not in {None, "black", "white"}:
+        raise ValueError(f"Unsupported 2DGS input background: {background}")
+    dataset, output = Path(dataset), Path(output)
+    sparse = dataset / "sparse/0"
+    if not sparse.is_dir():
+        sparse = dataset / "sparse"
+    binary = (sparse / "cameras.bin").is_file() and (sparse / "images.bin").is_file()
+    cameras = (
+        read_intrinsics_binary(sparse / "cameras.bin")
+        if binary
+        else read_intrinsics_text(sparse / "cameras.txt")
+    )
+    images = (
+        read_extrinsics_binary(sparse / "images.bin")
+        if binary
+        else read_extrinsics_text(sparse / "images.txt")
+    )
+    target_sparse = output / "sparse/0"
+    target_sparse.mkdir(parents=True, exist_ok=True)
+    records, camera_lines, image_lines = [], [], []
+    for index, image in enumerate(sorted(images.values(), key=lambda item: item.name), 1):
+        camera = cameras[image.camera_id]
+        source_image = dataset / "images" / image.name
+        with Image.open(source_image) as source:
+            width, height = _resolve_resolution(*source.size, resolution)
+            channels = [
+                channel.resize((width, height)) for channel in source.convert("RGBA").split()
+            ]
+            if background is not None:
+                # Official 2DGS's COLMAP loader consumes RGB without alpha compositing.
+                # Bake the target background once, but keep alpha for TSDF masking.
+                rgb = np.stack([np.asarray(c) for c in channels[:3]], axis=-1).astype(np.float32)
+                alpha = np.asarray(channels[3], dtype=np.float32)[..., None] / 255.0
+                rgb = rgb * alpha + (255.0 if background == "white" else 0.0) * (1 - alpha)
+                channels[:3] = Image.fromarray(np.rint(rgb).astype(np.uint8)).split()
+            target = output / "images" / image.name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            Image.merge("RGBA", channels).save(target)
+        if camera.model == "PINHOLE":
+            fx, fy, cx, cy = camera.params
+        elif camera.model == "SIMPLE_PINHOLE":
+            focal, cx, cy = camera.params
+            fx = fy = focal
+        else:
+            raise ValueError(
+                f"2DGS initialization needs undistorted pinhole cameras: {camera.model}"
+            )
+        sx, sy = width / camera.width, height / camera.height
+        intrinsics = [fx * sx, fy * sy, cx * sx, cy * sy]
+        camera_lines.append(f"{index} PINHOLE {width} {height} " + " ".join(map(str, intrinsics)))
+        pose = " ".join(map(str, [*image.qvec, *image.tvec]))
+        image_lines.append(f"{image.id} {pose} {index} {image.name}\n\n")
+        records.append(
+            dict(
+                name=image.name,
+                width=width,
+                height=height,
+                input_sha256=_sha256(source_image),
+                intrinsics=intrinsics,
+            )
+        )
+    (target_sparse / "cameras.txt").write_text("\n".join(camera_lines) + "\n")
+    (target_sparse / "images.txt").write_text("".join(image_lines))
+    for name in ("points3D.bin", "points3D.txt", "points3D.ply"):
+        source, target = sparse / name, target_sparse / name
+        if source.is_file() and not target.exists():
+            target.symlink_to(source.resolve())
+    if not records:
+        raise ValueError("No training images for 2DGS initialization")
+    manifest = dict(
+        views=records,
+        split="all",
+        resolution=resolution,
+        background=background,
+        source=str(dataset.resolve()),
+        source_intrinsics_sha256=_sha256(sparse / ("cameras.bin" if binary else "cameras.txt")),
+        source_poses_sha256=_sha256(sparse / ("images.bin" if binary else "images.txt")),
+        source_cloud_sha256={
+            name: _sha256(sparse / name)
+            for name in ("points3D.bin", "points3D.txt", "points3D.ply")
+            if (sparse / name).is_file()
+        },
+    )
+    (output / "input_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    return manifest
+
+
+def stage_blender(dataset, output):
+    """Translate a Blender scene's training split into a COLMAP scene for 2DGS.
+
+    Uses the known Blender cameras (no SfM) and never reads transforms_test.json or
+    test images. The official 2DGS Blender loader cannot run on current Pillow, so
+    the scene then goes through stage_colmap and the 2DGS COLMAP loader like DTU.
+    """
+    from plyfile import PlyData
+    from scipy.spatial.transform import Rotation
+
+    dataset, output = Path(dataset), Path(output)
+    meta = json.loads((dataset / "transforms_train.json").read_text())
+    images, sparse = output / "images", output / "sparse/0"
+    images.mkdir(parents=True, exist_ok=True)
+    sparse.mkdir(parents=True, exist_ok=True)
+    camera_lines, image_lines = [], []
+    for index, frame in enumerate(meta["frames"], 1):
+        relative = Path(frame["file_path"]).with_suffix(".png")
+        target = images / relative.name
+        if target.exists() or target.is_symlink():
+            target.unlink()
+        target.symlink_to((dataset / relative).resolve())
+        with Image.open(target) as image:
+            width, height = image.size
+        focal = width / (2 * np.tan(meta["camera_angle_x"] / 2))
+        c2w = np.array(frame["transform_matrix"], dtype=np.float64)
+        c2w[:3, 1:3] *= -1
+        w2c = np.linalg.inv(c2w)
+        quat = Rotation.from_matrix(w2c[:3, :3]).as_quat()[[3, 0, 1, 2]]
+        camera_lines.append(
+            f"{index} PINHOLE {width} {height} {focal} {focal} {width / 2} {height / 2}"
+        )
+        pose = " ".join(map(str, [*quat, *w2c[:3, 3]]))
+        image_lines.append(f"{index} {pose} {index} {relative.name}\n\n")
+    if not image_lines:
+        raise ValueError("No training images for 2DGS initialization")
+    (sparse / "cameras.txt").write_text("\n".join(camera_lines) + "\n")
+    (sparse / "images.txt").write_text("".join(image_lines))
+    # The standard NeRF-Synthetic points3d.ply is a random initialization cloud, not
+    # ground truth; without it 2DGS would draw an unseeded one.
+    cloud = PlyData.read(dataset / "points3d.ply")["vertex"].data
+    with (sparse / "points3D.txt").open("w") as stream:
+        for i, row in enumerate(cloud, 1):
+            stream.write(
+                f"{i} {row['x']} {row['y']} {row['z']} "
+                f"{int(row['red'])} {int(row['green'])} {int(row['blue'])} 0\n"
+            )
+    return output
+
+
+def prepare_2dgs(config, *, dataset_root):
+    """Run/cache the separate initializer before the native ExMesh training loop."""
+    from msbench.core.config import Config
+
+    config = Config(config).to_dict()
+    options = config["preprocess"]
+    if options.get("type") == "exmesh_pgsr":
+        return prepare_pgsr(config, dataset_root=dataset_root)
+    if options["type"] != "exmesh_2dgs":
+        raise ValueError(f"Unsupported preprocessing type: {options['type']}")
+    background = "white" if config["trainer"].get("white_background", False) else "black"
+    if config["dataset"].get("background", background) != background:
+        raise ValueError("ExMesh initialization, training and evaluation backgrounds must agree")
+    if importlib.util.find_spec("diff_surfel_rasterization") is None:
+        raise ImportError(
+            "2DGS preprocessing requires the official diff_surfel_rasterization extension; "
+            "see 'ExMesh DTU protocols' in README.md"
+        )
+    output = Path(options["output"]).resolve()
+    source = Path(options["source_repo"]).resolve()
+    revision = options.get("source_revision", TWO_DGS_REVISION)
+    if not source.exists():
+        source.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["git", "clone", TWO_DGS_URL, str(source)], check=True)
+        subprocess.run(["git", "-C", str(source), "checkout", "--detach", revision], check=True)
+        subprocess.run(
+            ["git", "-C", str(source), "submodule", "update", "--init", "--recursive"], check=True
+        )
+    actual_revision = subprocess.check_output(
+        ["git", "-C", str(source), "rev-parse", "HEAD"], text=True
+    ).strip()
+    if actual_revision != revision:
+        raise ValueError(f"2DGS source revision mismatch: {actual_revision} != {revision}")
+    # 2DGS --eval holds out every 8th view by sorted name, matching dataset.eval_every: 8.
+    holdout = int(options.get("holdout", 0))
+    if holdout not in (0, 8):
+        raise ValueError(f"2DGS initialization supports holdout 0 or 8, got {holdout}")
+    synthetic = str(config["dataset"].get("type", "")).lower() == "synthetic"
+    if synthetic and holdout:
+        raise ValueError("NeRF-Synthetic 2DGS initialization uses the dataset's own train split")
+    settings = dict(
+        source_revision=revision,
+        dataset=str(Path(dataset_root).resolve()),
+        resolution=config["dataset"]["resolution"],
+        iterations=7000,
+        mesh_resolution=256,
+        holdout=holdout,
+        # Defaults from the official 2DGS DTU script (scripts/dtu_eval.py).
+        lambda_dist=options.get("lambda_dist", 1000.0),
+        depth_ratio=1.0,
+        num_cluster=options.get("num_cluster", 1),
+        background=background,
+        rgba_compositing="baked_rgb_preserved_alpha_v1",
+        seed=0,
+        tsdf="official bounded: depth_trunc=2*estimated_radius; voxel=depth_trunc/256; sdf_trunc=5*voxel",
+    )
+    if synthetic:
+        # Defaults from the official 2DGS NeRF-Synthetic script (scripts/nerf_eval.py):
+        # --white_background --lambda_normal 0.0, otherwise 2DGS defaults.
+        settings.update(
+            lambda_dist=options.get("lambda_dist", 0.0),
+            lambda_normal=0.0,
+            depth_ratio=0.0,
+            split="transforms_train",
+        )
+    output.mkdir(parents=True, exist_ok=True)
+    settings_path = output / "settings.json"
+    if settings_path.exists() and json.loads(settings_path.read_text()) != settings:
+        raise ValueError(
+            "Cached 2DGS settings differ; use a separate preprocessing output directory"
+        )
+    settings_path.write_text(json.dumps(settings, indent=2) + "\n")
+    if synthetic:
+        dataset_root = stage_blender(dataset_root, output / "blender_train")
+    manifest = stage_colmap(
+        dataset_root, output / "input", settings["resolution"], background=background
+    )
+    status_path = output / "status.json"
+    status = (
+        json.loads(status_path.read_text())
+        if status_path.exists()
+        else dict(settings=settings, stages={})
+    )
+    fingerprint = hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest()
+    if status.get("input_fingerprint", fingerprint) != fingerprint:
+        raise ValueError("2DGS preprocessing inputs changed; use a separate output directory")
+    status["input_fingerprint"] = fingerprint
+    model = output / "model"
+    commands = dict(
+        train=[
+            "train.py",
+            "-s",
+            str(output / "input"),
+            "-m",
+            str(model),
+            "--iterations",
+            "7000",
+            "-r",
+            "1",
+            "--lambda_dist",
+            str(settings["lambda_dist"]),
+            "--depth_ratio",
+            str(settings["depth_ratio"]),
+            "--test_iterations",
+            "-1",
+            "--save_iterations",
+            "7000",
+            "--quiet",
+        ],
+        extract=[
+            "render.py",
+            "-m",
+            str(model),
+            "--iteration",
+            "7000",
+            "--mesh_res",
+            "256",
+            "--num_cluster",
+            str(settings["num_cluster"]),
+            "--depth_ratio",
+            str(settings["depth_ratio"]),
+            "--skip_train",
+            "--skip_test",
+            "--quiet",
+        ],
+    )
+    if background == "white":
+        commands["train"].append("--white_background")
+    if synthetic:
+        commands["train"] += ["--lambda_normal", str(settings["lambda_normal"])]
+    if holdout:
+        commands["train"].append("--eval")
+    _record_effective_arguments(source, commands["train"], output)
+    mesh_path = model / "train/ours_7000/fuse_post.ply"
+    if (
+        status.get("mesh")
+        and mesh_path.is_file()
+        and _sha256(mesh_path) != status["mesh"]["sha256"]
+    ):
+        raise ValueError("Cached 2DGS coarse mesh checksum changed")
+    for name, command in commands.items():
+        if status["stages"].get(name, {}).get("status") == "complete":
+            expected = (
+                model / "point_cloud/iteration_7000/point_cloud.ply"
+                if name == "train"
+                else mesh_path
+            )
+            if not expected.is_file():
+                raise ValueError(f"Completed 2DGS cache is missing {expected}")
+            continue
+        log = output / f"{name}.log"
+        print(
+            f"ExMesh paper initialization: 2DGS {name}; {len(manifest['views'])} views; log={log}",
+            flush=True,
+        )
+        started = time.monotonic()
+        with log.open("w") as stream:
+            result = subprocess.run(
+                [sys.executable, "-u", *command],
+                cwd=source,
+                stdout=stream,
+                stderr=subprocess.STDOUT,
+            )
+        status["stages"][name] = dict(
+            status="complete" if result.returncode == 0 else "failed",
+            seconds=time.monotonic() - started,
+            command=command,
+            log=str(log),
+        )
+        status_path.write_text(json.dumps(status, indent=2) + "\n")
+        if result.returncode:
+            raise RuntimeError(
+                f"2DGS {name} failed ({result.returncode}):\n{log.read_text(errors='replace')[-5000:]}"
+            )
+    import open3d as o3d
+
+    mesh = o3d.io.read_triangle_mesh(str(mesh_path))
+    if not mesh.has_triangles() or not np.isfinite(np.asarray(mesh.vertices)).all():
+        raise ValueError("2DGS extraction produced an empty or invalid coarse mesh")
+    target = Path(config["trainer"]["initial_mesh"]).resolve()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if target != mesh_path:
+        shutil.copyfile(mesh_path, target)
+    status["mesh"] = dict(
+        path=str(target),
+        vertices=len(mesh.vertices),
+        faces=len(mesh.triangles),
+        sha256=_sha256(target),
+    )
+    extraction_log = (output / "extract.log").read_text(errors="replace")
+    status["tsdf_effective"] = {}
+    for key, label in (
+        ("voxel_size", "voxel_size"),
+        ("sdf_trunc", "sdf_trunc"),
+        ("depth_trunc", "depth_truc"),
+    ):
+        match = re.search(rf"^{label}:\s*([0-9.eE+-]+)", extraction_log, re.MULTILINE)
+        if match is None:
+            raise ValueError(f"Missing actual TSDF parameter in extraction log: {label}")
+        status["tsdf_effective"][key] = float(match.group(1))
+    if not np.isclose(
+        status["tsdf_effective"]["depth_trunc"] / status["tsdf_effective"]["voxel_size"], 256
+    ):
+        raise ValueError("Actual TSDF voxel/depth settings do not match resolution 256")
+    status_path.write_text(json.dumps(status, indent=2) + "\n")
+    print(
+        f"2DGS coarse mesh ready: {len(mesh.vertices)} vertices / {len(mesh.triangles)} faces",
+        flush=True,
+    )
+    return status
+
+
+def _decimate_mesh(source, target, faces):
+    """Quadric-decimate ``source`` to at most ``faces`` triangles and clean it up."""
+    import open3d as o3d
+
+    mesh = o3d.io.read_triangle_mesh(str(source))
+    if len(mesh.triangles) > faces:
+        mesh = mesh.simplify_quadric_decimation(faces)
+        mesh.remove_degenerate_triangles()
+        mesh.remove_duplicated_triangles()
+        mesh.remove_duplicated_vertices()
+        mesh.remove_non_manifold_edges()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    o3d.io.write_triangle_mesh(str(target), mesh)
+    return mesh
+
+
+def prepare_pgsr(config, *, dataset_root):
+    """Run/cache the PGSR initializer bundled with the official ExMesh repository.
+
+    Training follows the official README (5k iterations, -r 2, --ncc_scale 0.5);
+    TSDF extraction exposes the official ``run_dtu_init.py`` options plus an
+    optional quadric decimation of the fused mesh to ``target_faces``.
+    """
+    from msbench.core.config import Config
+
+    config = Config(config).to_dict()
+    options = config.get("preprocess", {})
+    if options.get("type") != "exmesh_pgsr":
+        raise ValueError(f"Unsupported preprocessing type: {options.get('type')}")
+
+    dataset = Path(dataset_root).resolve()
+    output = Path(options["output"]).resolve()
+    target = Path(config["trainer"]["initial_mesh"]).resolve()
+    holdout = int(options.get("holdout", 0))
+    target_faces = options.get("target_faces")
+    white_bg = bool(config["trainer"].get("white_background", False))
+    train_settings = dict(
+        dataset=str(dataset),
+        holdout=holdout,
+        iterations=int(options.get("iterations", 5000)),
+        resolution=int(options.get("resolution", 2)),
+        ncc_scale=float(options.get("ncc_scale", 0.5)),
+        white_background=white_bg,
+    )
+    extract_settings = dict(
+        voxel_size=float(options.get("voxel_size", 0.01)),
+        max_depth=float(options.get("max_depth", 5.0)),
+        num_cluster=int(options.get("num_cluster", 1)),
+        use_depth_filter=bool(options.get("use_depth_filter", False)),
+        target_faces=None if target_faces is None else int(target_faces),
+    )
+    settings = dict(**train_settings, **extract_settings)
+
+    state_path = output / "pgsr_status.json"
+    state = json.loads(state_path.read_text()) if state_path.exists() else dict(stages={})
+    if target.exists() and state.get("settings") == settings:
+        print(f"ExMesh coarse mesh already exists at {target}, reusing it.", flush=True)
+        return state
+
+    source_repo = Path(options["source_repo"]).resolve()
+    revision = options.get("source_revision", EXMESH_REVISION)
+    if not source_repo.exists():
+        source_repo.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["git", "clone", EXMESH_URL, str(source_repo)], check=True)
+        subprocess.run(["git", "-C", str(source_repo), "checkout", "--detach", revision], check=True)
+    actual_revision = subprocess.check_output(
+        ["git", "-C", str(source_repo), "rev-parse", "HEAD"], text=True
+    ).strip()
+    if actual_revision != revision:
+        raise ValueError(f"ExMesh source revision mismatch: {actual_revision} != {revision}")
+    source = source_repo / options.get("source_subdir", "PGSR")
+    # Guards against inheriting another initializer's source (e.g. the 2DGS repo).
+    if not (source / "train.py").is_file() or not (source / "submodules/diff-plane-rasterization").is_dir():
+        raise FileNotFoundError(f"Not a PGSR source tree: {source}")
+
+    output.mkdir(parents=True, exist_ok=True)
+    (output / "pgsr_settings.json").write_text(json.dumps(settings, indent=2) + "\n")
+
+    work = output / "source"
+    if not work.exists():
+        shutil.copytree(
+            source,
+            work,
+            ignore=shutil.ignore_patterns(".git", "__pycache__", "build", "*.egg-info"),
+        )
+    input_dir = output / "input"
+    input_dir.mkdir(exist_ok=True)
+    for name in ("images", "mask", "cameras.npz"):
+        src, dst = dataset / name, input_dir / name
+        if not src.exists():
+            continue
+        if dst.exists() or dst.is_symlink():
+            if not dst.is_symlink() or dst.resolve() != src:
+                if dst.is_dir() and not dst.is_symlink():
+                    shutil.rmtree(dst)
+                else:
+                    dst.unlink()
+                dst.symlink_to(src, target_is_directory=src.is_dir())
+        else:
+            dst.symlink_to(src, target_is_directory=src.is_dir())
+
+    sparse = dataset / "sparse/0"
+    if not sparse.is_dir():
+        sparse = dataset / "sparse"
+    (input_dir / "sparse").mkdir(exist_ok=True)
+    for src in sparse.iterdir():
+        if src.suffix not in {".txt", ".bin"}:
+            continue
+        dst = input_dir / "sparse" / src.name
+        if not dst.exists():
+            dst.symlink_to(src)
+
+    names = sorted(p.stem for p in (dataset / "images").glob("*.png"))
+    split = dict(
+        train=[n for i, n in enumerate(names) if not holdout or i % holdout],
+        test=[n for i, n in enumerate(names) if holdout and i % holdout == 0],
+    )
+    (input_dir / "split.json").write_text(json.dumps(split, indent=2) + "\n")
+
+    model = output / "model"
+    iterations = train_settings["iterations"]
+    commands = dict(
+        train=[
+            "train.py",
+            "-s",
+            str(input_dir),
+            "-m",
+            str(model),
+            "--quiet",
+            "-r",
+            str(train_settings["resolution"]),
+            "--ncc_scale",
+            str(train_settings["ncc_scale"]),
+            "--iterations",
+            str(iterations),
+        ],
+        extract=[
+            "render.py",
+            "-m",
+            str(model),
+            "--quiet",
+            "--iteration",
+            str(iterations),
+            "--num_cluster",
+            str(extract_settings["num_cluster"]),
+            "--voxel_size",
+            str(extract_settings["voxel_size"]),
+            "--max_depth",
+            str(extract_settings["max_depth"]),
+        ],
+    )
+    if white_bg:
+        commands["train"].append("--white_background")
+    if extract_settings["use_depth_filter"]:
+        commands["extract"].append("--use_depth_filter")
+    stage_settings = dict(train=train_settings, extract=extract_settings)
+
+    mesh_ply = model / "mesh/tsdf_fusion_post.ply"
+    state.update(settings=settings, split=split)
+    stale = False  # a retrained model invalidates its extracted mesh
+    for name, command in commands.items():
+        stage = state["stages"].get(name, {})
+        cached = stage.get("status") == "complete" and stage.get("settings") == stage_settings[name]
+        if not stale and cached and (name == "train" or mesh_ply.exists()):
+            continue
+        stale = True
+        log = output / f"{name}.log"
+        print(
+            f"PGSR {name}: {len(split['train'])} train / {len(split['test'])} held-out views; log={log}",
+            flush=True,
+        )
+        start = time.monotonic()
+        with log.open("w") as stream:
+            result = subprocess.run(
+                [sys.executable, "-u", *command], cwd=work, stdout=stream, stderr=subprocess.STDOUT
+            )
+        state["stages"][name] = dict(
+            status="complete" if result.returncode == 0 else "failed",
+            duration_seconds=time.monotonic() - start,
+            command=command,
+            settings=stage_settings[name],
+            log=str(log),
+        )
+        state_path.write_text(json.dumps(state, indent=2) + "\n")
+        if result.returncode:
+            print(log.read_text(errors="replace")[-6000:], flush=True)
+            raise RuntimeError(f"PGSR {name} failed with exit code {result.returncode}")
+
+    if extract_settings["target_faces"]:
+        mesh = _decimate_mesh(mesh_ply, target, extract_settings["target_faces"])
+    else:
+        import open3d as o3d
+
+        mesh = o3d.io.read_triangle_mesh(str(mesh_ply))
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target != mesh_ply:
+            shutil.copyfile(mesh_ply, target)
+    if not mesh.has_triangles() or not np.isfinite(np.asarray(mesh.vertices)).all():
+        raise RuntimeError("PGSR did not produce a valid nonempty mesh")
+    state["mesh"] = dict(path=str(target), vertices=len(mesh.vertices), faces=len(mesh.triangles))
+    state_path.write_text(json.dumps(state, indent=2) + "\n")
+    print(
+        f"PGSR coarse mesh ready: {len(mesh.vertices)} vertices / {len(mesh.triangles)} faces",
+        flush=True,
+    )
+    return state
+
+
+def prepare_exmesh_initializer(config, *, dataset_root):
+    from msbench.core.config import Config
+
+    config = Config(config).to_dict()
+    options = config.get("preprocess", {})
+    ptype = options.get("type", "exmesh_2dgs")
+    if ptype == "exmesh_pgsr":
+        return prepare_pgsr(config, dataset_root=dataset_root)
+    elif ptype == "exmesh_2dgs":
+        return prepare_2dgs(config, dataset_root=dataset_root)
+    else:
+        raise ValueError(f"Unsupported preprocessing type: {ptype}")
+

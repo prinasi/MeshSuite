@@ -1,0 +1,72 @@
+# @format
+
+# T²-Splat method defaults (Tang et al., NeurIPS 2026; github.com/t2-splat/T2Splat
+# @ b1b44d1). Method settings reproduce the authors' per-scene repo presets
+# (configs/common.yaml + configs/<dataset>.yaml; user-approved exception, see
+# AGENTS.md); the dataset protocol comes from the shared dataset bases.
+# Unlisted options keep upstream's OptimizationParams defaults.
+
+trainer:
+  type: t2splat
+  # Stage I geometry (30k) + Stage II residual per-face Mip-textures (5k).
+  max_steps: 35000
+  # MeshSuite trains every method without external normal/depth priors.
+  disable_priors: true
+  # configs/common.yaml `training:` block.
+  enable_heartbeat: true
+  heartbeat_start_iter: 12000
+  heartbeat_end_iter: 20000
+  heartbeat_interval: 1000
+  heartbeat_collapse_ratio: 0.08
+  heartbeat_split_top_k: 5.0
+  heartbeat_split_momentum_std: 0.001
+  heartbeat_w_spatial: 1.0
+  heartbeat_w_color: 0.5
+  heartbeat_w_opacity: 0.3
+  heartbeat_split_end: 0
+  heartbeat_collapse_start: 0
+  heartbeat_collapse_w_spatial: 5.0
+  lambda_vertex_normal: 0.0
+  start_vertex_normal: 30000
+  lambda_mesh_smooth: 0.0
+  mesh_smooth_start_iter: 12000
+  mesh_smooth_method: cot
+  lambda_mesh_edge: 0.0
+  mesh_edge_start_iter: 12000
+  lambda_mesh_nc: 0.0
+  mesh_nc_start_iter: 12000
+  mesh_viz_interval: 0
+  # configs/common.yaml `texture:` block (paper App. A.1); iterations 0 skips Stage II.
+  texture:
+    iterations: 5000
+    face_tex_res: 8
+    legacy_residual: true
+    use_mip_texture: true
+    lr_face_texture: 0.0005
+    lr_geometry: 0.0
+    lr_sh: 0.004
+    lambda_l1: 0.8
+    lambda_ssim: 0.2
+    lambda_tv: 0.01
+    lambda_l2: 0.01
+    lr_decay_start: 1000
+    lr_decay_ratio: 0.1
+    texture_adam_offload: false
+
+adapter:
+  type: t2splat
+  checkpoint: outputs/{method}/{dataset}/{scene}/ckpt/point_cloud/iteration_{max_steps}
+  render_params:
+    # Upstream render.py renders with 4x supersampling.
+    render_scaling: 4
+
+# T²-Splat outputs its mesh directly; it is exported as trained (no TSDF).
+mesh:
+  output: outputs/{method}/{dataset}/{scene}/mesh/mesh.ply
+  clean: false
+output:
+  mesh_file: outputs/{method}/{dataset}/{scene}/mesh/mesh.ply
+
+eval:
+  mesh:
+    geometry_mode: mesh

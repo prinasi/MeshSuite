@@ -265,7 +265,7 @@ def profile_renderer(
     warmup: int = 5,
     include_backward: bool = False,
 ) -> dict[str, Any]:
-    """Collect the adapter-independent MeshSplatBench renderer profile schema."""
+    """Collect the adapter-independent MeshSuite renderer profile schema."""
     forward = profile_forward(renderer, cameras, repeats=repeats, warmup=warmup)
     def memory_fn():
         with torch.no_grad():

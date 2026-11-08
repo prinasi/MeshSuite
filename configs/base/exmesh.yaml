@@ -1,0 +1,42 @@
+# ExMesh method defaults. Dataset protocol (resolution, background, splits) comes
+# from the shared dataset bases, e.g. configs/base/dtu.yaml.
+
+adapter:
+  type: exmesh
+  checkpoint: outputs/{method}/{dataset}/{scene}/ckpt/final.pt
+
+trainer:
+  type: exmesh
+  # Paper Sec. 4.1: 1k warm-up, topology updates over 1k-7k, last 1k frozen (8k total).
+  # The official repo defaults to 10k; position_lr_max_steps keeps its 10k LR schedule.
+  max_steps: 8000
+  seed: 0
+  topology_enabled: true
+  texture_resolution: [2560, 2560]
+  lr_vertices_init: 0.0005
+  feature_lr: 0.0025
+  position_lr_max_steps: 10000
+  lambda_dssim: 0.2
+  lambda_depth: 0.1
+  lambda_silhouette: 0.005
+  lambda_smooth: 3000
+  lambda_deviation: 10000
+  split_from_iter: 1000
+  split_until_iter: 7000
+  densification_interval: 500
+  max_shapes: 200000
+
+loop:
+  log_interval: 100
+  # Checkpoints are ~230 MB each on DTU; ckpt/final.pt is always written at the end.
+  save_interval: 5000
+
+# ExMesh trains the mesh directly and exports it at the end of training.
+mesh:
+  output: outputs/{method}/{dataset}/{scene}/mesh/mesh.ply
+output:
+  mesh_file: outputs/{method}/{dataset}/{scene}/mesh/mesh.ply
+
+eval:
+  mesh:
+    geometry_mode: mesh

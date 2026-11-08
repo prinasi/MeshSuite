@@ -1,4 +1,4 @@
-"""Dataset loading abstractions for MeshSplatBench."""
+"""Dataset loading abstractions for MeshSuite."""
 
 from __future__ import annotations
 
@@ -13,12 +13,6 @@ import torch
 from PIL import Image
 
 from msbench.core.cameras import CameraBatch
-from msbench.core.image_sources import (
-    is_prepared_image_dir,
-    is_legacy_image_cache,
-    require_prepared_image_dir,
-    resolve_colmap_image_source,
-)
 from msbench.vendor.dtu_utils import decompose_dtu_projection, load_dtu_pil_image
 from msbench.vendor.training_images import load_rgba_for_training
 from msbench.vendor.triangle_splatting.utils.general_utils import PILtoTorch
@@ -39,12 +33,19 @@ class DatasetSample:
 def _resolve_resolution(
     width: int,
     height: int,
-    resolution: int = 1,
+    resolution: int | list[int] | tuple[int, int] = 1,
     rounding: str = "round",
 ) -> tuple[int, int]:
     """Match the native 3DGS/triangle-splatting resolution semantics."""
     if rounding not in {"round", "floor"}:
         raise ValueError("resolution rounding must be 'round' or 'floor'")
+    if isinstance(resolution, (list, tuple)):
+        if len(resolution) != 2 or any(
+            not isinstance(value, int) or isinstance(value, bool) or value <= 0
+            for value in resolution
+        ):
+            raise ValueError("Explicit resolution must be [width, height] with positive integers")
+        return tuple(resolution)
     if resolution in {1, 2, 4, 8}:
         if rounding == "floor":
             new_width = width // resolution
@@ -189,11 +190,6 @@ def _camera_batch_from_w2c(
 
 
 def _resolve_image_path(root: Path, image_dir: str, name: str) -> Path | None:
-    if is_prepared_image_dir(image_dir):
-        path = root / image_dir / (name + ".png" if is_legacy_image_cache(image_dir) else name)
-        if not path.is_file():
-            raise FileNotFoundError(f"Prepared COLMAP image missing: {path}")
-        return path
     candidates = [
         root / image_dir / name,
         root / "images" / name,
@@ -281,15 +277,18 @@ class ColmapDataset(DatasetBase):
         image_dir: str = "images",
         resolution: int = 1,
         resolution_rounding: str = "round",
-        image_preprocessing: str = "stored",
+        background: str | None = None,
+        use_alpha: bool = False,
+        dtu_eval_mode: str = "full",
     ):
         super().__init__(dataset_path, split)
         self.eval_every = eval_every
-        self.image_dir, self.resolution = resolve_colmap_image_source(
-            image_dir, resolution, root=self.dataset_path, image_preprocessing=image_preprocessing,
-        )
-        require_prepared_image_dir(self.dataset_path, self.image_dir)
+        self.image_dir = image_dir
+        self.resolution = resolution
         self.resolution_rounding = resolution_rounding
+        self.background = background
+        self.use_alpha = use_alpha
+        self.dtu_eval_mode = str(dtu_eval_mode).lower()
         self._samples = self._load_samples()
 
     def _load_samples(self) -> list[DatasetSample]:
@@ -354,7 +353,8 @@ class ColmapDataset(DatasetBase):
             w2c[:3, :3] = im.qvec2rotmat()
             w2c[:3, 3] = im.tvec
 
-            gt = _load_image(image_path, size=(width, height))
+            bg_color = _background_color(self.background) if self.use_alpha else None
+            gt = _load_image(image_path, size=(width, height), bg_color=bg_color)
             camera = _camera_batch_from_w2c(
                 w2c,
                 K,
@@ -367,7 +367,13 @@ class ColmapDataset(DatasetBase):
                     "split": self.split,
                 },
             )
-            samples.append(DatasetSample(camera=camera, image=gt, name=Path(im.name).stem, image_path=image_path))
+            mask = _load_alpha_mask(image_path, size=(width, height)) if self.use_alpha else None
+            metadata = {
+                "eval_background_color": bg_color,
+                "dtu_eval_mode": self.dtu_eval_mode,
+            }
+            samples.append(DatasetSample(camera=camera, image=gt, name=Path(im.name).stem,
+                                         image_path=image_path, mask=mask, metadata=metadata))
         return samples
 
     def __len__(self) -> int:
@@ -613,7 +619,6 @@ def load_dataset(
     dtu_eval_mode: str = "full",
     background: str | None = None,
     use_alpha: bool = True,
-    image_preprocessing: str = "stored",
 ) -> DatasetBase:
     dtype = str(infer_dataset_type(dataset_path, dataset_type)).lower()
     if dtype in {"colmap", "mipnerf360", "tanks", "tanksandtemples", "tankstemple"}:
@@ -624,7 +629,9 @@ def load_dataset(
             image_dir=image_dir,
             resolution=resolution,
             resolution_rounding=resolution_rounding,
-            image_preprocessing=image_preprocessing,
+            background=background,
+            use_alpha=use_alpha and background is not None,
+            dtu_eval_mode=dtu_eval_mode,
         )
     if dtype in {"blender", "synthetic", "nerf-synthetic", "nerf_synthetic"}:
         return NerfSyntheticDataset(

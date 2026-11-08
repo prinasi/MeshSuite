@@ -14,7 +14,7 @@ from msbench.primitives.triangle import IndependentTriangle
 
 
 def primitive_to_mesh_arrays(primitive: Any) -> tuple[np.ndarray, np.ndarray]:
-    """Convert a MeshSplatBench primitive to numpy vertices/faces."""
+    """Convert a MeshSuite primitive to numpy vertices/faces."""
     if isinstance(primitive, IndexedMeshTriangle):
         vertices = primitive.vertices.detach().cpu().numpy().astype(np.float32)
         faces = primitive.faces.detach().cpu().numpy().astype(np.int64)

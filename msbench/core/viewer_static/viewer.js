@@ -1564,7 +1564,7 @@ export class MeshFrameRenderer extends WorkerFrameRenderer {
 }
 
 
-// GaussianSplattingFrameRenderer removed — MeshSplatBench does not use the 3DGS local renderer.
+// GaussianSplattingFrameRenderer removed — MeshSuite does not use the 3DGS local renderer.
 
 
 async function promise_parallel_n(tasks, num_parallel) {
@@ -2914,7 +2914,7 @@ export class Viewer extends THREE.EventDispatcher {
     }
   }
 
-  // set_3dgs_renderer removed — MeshSplatBench does not use the 3DGS local renderer.
+  // set_3dgs_renderer removed — MeshSuite does not use the 3DGS local renderer.
 
   set_remote_renderer({
     websocket_url,

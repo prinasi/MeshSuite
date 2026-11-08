@@ -1,0 +1,52 @@
+# @format
+
+# T²-Splat on DTU: upstream configs/dtu.yaml, the authors' per-scene best preset
+# (20k geometry iterations, 650k points, legacy RDT, 5% safe Heartbeat, direct
+# visibility pruning, no texture stage, no external priors). Per-scene overrides
+# live in configs/t2splat/dtu/<scan>.yaml. The DTU protocol (all views,
+# resolution 2, white foreground) still comes from configs/base/dtu.yaml.
+# Upstream also saves 12k/18k checkpoints and topology snapshots for
+# diagnostics; they are I/O only and omitted here.
+
+trainer:
+  max_steps: 20000
+  texture:
+    iterations: 0
+  sigma_until: 30000
+  final_opacity_iter: 24000
+  start_upsampling: 20000
+  feature_lr: 0.004
+  size_probs_zero: 0.0
+  splitt_large_triangles: 500
+  start_pruning: 3000
+  weight_lr: 0.05
+  lambda_weight: 0.0
+  prune_size: 1300
+  densify_until_iter: 10000
+  run_restricted_delaunay: 11000
+  iteration_mesh: 8000
+  lambda_normals: 0.00001
+  lambda_normals_super: 0.0
+  depth_lambda_init: 0.0
+  depth_lambda_final: 0.0
+  lambda_vertex: 0.0
+  lr_triangles_points_init: 0.00052
+  prune_triangles_threshold: 0.17
+  enable_heartbeat: true
+  heartbeat_start_iter: 12000
+  heartbeat_end_iter: 18000
+  heartbeat_interval: 1000
+  heartbeat_collapse_ratio: 0.05
+  heartbeat_split_top_k: 5.0
+  heartbeat_safety: true
+  heartbeat_max_edge_len_ratio: 2.0
+  rdt_backend: legacy
+  visibility_pruning: legacy
+  final_visibility_threshold: 0.6
+  topology_monitor_interval: 1000
+  max_points: 650000
+
+# Upstream create_ply.py --clean --geometry-only before DTU evaluation.
+mesh:
+  clean: true
+  min_faces_ratio: 0.01

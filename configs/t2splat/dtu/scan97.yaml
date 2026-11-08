@@ -1,0 +1,16 @@
+# @format
+
+_base_:
+  - ../../base/dtu.yaml
+  - ../../base/t2splat.yaml
+  - ../../base/t2splat-dtu.yaml
+
+experiment:
+  name: t2splat_scan97
+
+dataset:
+  scene: scan97
+
+trainer:
+  # Per-scene exception in upstream configs/dtu.yaml.
+  final_visibility_threshold: 0.5

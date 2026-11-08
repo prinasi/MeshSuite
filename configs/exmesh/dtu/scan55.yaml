@@ -1,0 +1,12 @@
+_base_:
+  - ../../base/dtu.yaml
+  - ../../base/exmesh.yaml
+  - ../../base/exmesh-dtu.yaml
+experiment:
+  name: exmesh_scan55
+dataset:
+  scene: scan55
+trainer:
+  # Per-scene weights from the official ExMesh scripts/run_dtu.py.
+  lambda_smooth: 3000
+  lambda_depth: 0.01

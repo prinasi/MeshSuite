@@ -1,4 +1,4 @@
-"""Config-driven builders for MeshSplatBench components."""
+"""Config-driven builders for MeshSuite components."""
 
 from __future__ import annotations
 

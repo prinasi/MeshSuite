@@ -1,6 +1,6 @@
 """Dual point cloud geometry export for nerfbaselines-compatible viewer.
 
-Exports two standard PLY point clouds from any MeshSplatBench primitive:
+Exports two standard PLY point clouds from any MeshSuite primitive:
   * geometry_viewer_points.ply — lightweight (300K–1M pts) for browser viewer
   * geometry_cg_points.ply      — high-fidelity (up to 3M pts) for CG tools
 
@@ -463,7 +463,7 @@ def write_mesh_obj(
         materials = {"mat_default": (0.8, 0.8, 0.8)}
 
     with mtl_path.open("w", encoding="utf-8") as f:
-        f.write("# MeshSplatBench material palette\n")
+        f.write("# MeshSuite material palette\n")
         for name in sorted(materials):
             r, g, b = materials[name]
             f.write(f"newmtl {name}\n")
@@ -474,7 +474,7 @@ def write_mesh_obj(
             f.write("illum 1\n\n")
 
     with obj_path.open("w", encoding="utf-8") as f:
-        f.write("# MeshSplatBench CG mesh export\n")
+        f.write("# MeshSuite CG mesh export\n")
         f.write(f"mtllib {mtl_path.name}\n")
         f.write("o msbench_geometry\n")
         for idx, v in enumerate(vertices):
@@ -517,7 +517,7 @@ def write_mesh_glb(
     GLB is preferred over PLY for Unity/Blender mesh import because it
     supports indexed geometry, vertex colors, and standard coordinate
     conventions. The glTF spec uses +Y up, right-handed, meters —
-    MeshSplatBench world is also +Y up, so no axis flip is needed.
+    MeshSuite world is also +Y up, so no axis flip is needed.
     """
     import trimesh
 
@@ -547,7 +547,7 @@ def _extract_indexed_mesh_from_primitive(
     primitives that don't have indexed mesh data.
     """
     # Check for indexed mesh data. Older adapters may expose V/F while
-    # MeshSplatBench primitives use vertices/faces.
+    # MeshSuite primitives use vertices/faces.
     V = getattr(primitive, "V", None)
     F = getattr(primitive, "F", None)
     if V is None or F is None:

@@ -73,6 +73,66 @@ def test_diffsoup_synthetic_default_uses_mobilenerf_mesh(monkeypatch, tmp_path):
     assert "--n_points" not in calls["argv"]
 
 
+@pytest.mark.parametrize("eval_split, holdout", [(False, 0), (True, 8)])
+def test_diffsoup_dtu_holdout_follows_dataset_eval_split(monkeypatch, tmp_path, eval_split, holdout):
+    calls = {}
+    monkeypatch.setattr(
+        diffsoup_native,
+        "_load_reference_script",
+        lambda examples_dir, script_name: SimpleNamespace(main=lambda **kw: calls.update(kw)),
+    )
+    monkeypatch.setattr(diffsoup_native, "_reference_import_context", lambda examples_dir: nullcontext())
+
+    diffsoup_native._run_mip360_script(
+        examples_dir=tmp_path,
+        trainer_cfg={"eval_split": eval_split},
+        dataset_root=str(tmp_path),
+        output_dir=tmp_path / "out",
+        max_steps=10,
+        dataset_kind="dtu",
+        dataset_cfg={"type": "dtu", "eval_split": eval_split, "eval_every": 8, "resolution": 2},
+    )
+
+    assert calls["dataset_type"] == "dtu"
+    assert calls["dtu_holdout"] == holdout
+
+
+def test_diffsoup_dtu_loader_holdout_zero_uses_every_view(tmp_path):
+    for dependency in ("imageio", "torchvision", "cv2"):
+        pytest.importorskip(dependency)
+    import importlib.util
+
+    import numpy as np
+    from PIL import Image
+
+    spec = importlib.util.spec_from_file_location(
+        "_diffsoup_example_utils", diffsoup_native.DEFAULT_DIFFSOUP_EXAMPLES_DIR / "utils.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    load_dtu_scene = module.load_dtu_scene
+
+    (tmp_path / "images").mkdir()
+    cams = {}
+    K = np.array([[50.0, 0, 8, 0], [0, 50.0, 8, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
+    for i in range(10):
+        Image.new("RGB", (16, 16)).save(tmp_path / "images" / f"{i:06d}.png")
+        w2c = np.eye(4)
+        w2c[2, 3] = 3.0 + 0.1 * i
+        cams[f"world_mat_{i}"] = K @ w2c
+        cams[f"scale_mat_{i}"] = np.eye(4)
+    np.savez(tmp_path / "cameras.npz", **cams)
+
+    def count(split, holdout):
+        return len(load_dtu_scene(str(tmp_path), split=split, holdout=holdout, downscale=1,
+                                  use_alpha=False)["frames"])
+
+    assert count("train", 8) == 8 and count("test", 8) == 2
+    assert count("train", 0) == 10
+    with pytest.raises(RuntimeError, match="No DTU frames"):
+        count("test", 0)
+
+
 def test_diffsoup_reference_script_loads_with_vendored_runtime():
     for dependency in ("open3d", "torchvision", "pytorch_msssim"):
         pytest.importorskip(dependency)

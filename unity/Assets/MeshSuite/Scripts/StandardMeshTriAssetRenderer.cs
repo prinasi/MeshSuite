@@ -1,0 +1,210 @@
+using System;
+using System.Collections;
+using System.IO;
+using UnityEngine;
+using UnityEngine.Rendering;
+
+namespace MeshSuite.UnityNative
+{
+    /// <summary>
+    /// Unity MeshRenderer deployment path: a method-agnostic indexed Mesh
+    /// baseline with baked DC vertex color, or a baked RGBA atlas drawn with a
+    /// plain textured alpha-cutout material when the package provides one.
+    /// </summary>
+    public sealed class StandardMeshTriAssetRenderer : TriAssetRenderer
+    {
+        public Camera TargetCamera;
+        public Shader VertexColorShader;
+
+        Mesh mesh;
+        Material material;
+        Texture2D atlas;
+        MeshFilter meshFilter;
+        MeshRenderer meshRenderer;
+        bool ready;
+        string status = "Waiting to load standard Mesh";
+
+        public override bool IsReady => ready;
+        public override string Status => status;
+
+        void Awake()
+        {
+            AssetDirectory = TriAssetRuntimeOptions.Get("-triasset", AssetDirectory);
+        }
+
+        IEnumerator Start()
+        {
+            if (String.IsNullOrWhiteSpace(AssetDirectory) || !Directory.Exists(AssetDirectory))
+            {
+                Fail("Asset directory does not exist: " + AssetDirectory);
+                yield break;
+            }
+            string buffers = Path.Combine(AssetDirectory, "buffers");
+            string positionsPath = Path.Combine(buffers, "positions.bin");
+            string indicesPath = Path.Combine(buffers, "indices.bin");
+            string dcPath = Path.Combine(buffers, "sh_dc.bin");
+            string atlasPath = Path.Combine(AssetDirectory, "atlas.png");
+            string uvPath = Path.Combine(buffers, "uvs.bin");
+            bool textured = File.Exists(atlasPath);
+            if (textured && !File.Exists(uvPath))
+            {
+                Fail("Baked atlas requires the uvs buffer.");
+                yield break;
+            }
+            if (!File.Exists(positionsPath) || !File.Exists(indicesPath))
+            {
+                Fail("Standard Mesh baseline requires positions and indices buffers.");
+                yield break;
+            }
+
+            status = "Loading indexed positions";
+            yield return null;
+            float[] positions = ReadFloatArray(positionsPath);
+            if (positions.Length % 3 != 0) { Fail("positions.bin is not float3 data."); yield break; }
+            int vertexCount = positions.Length / 3;
+
+            status = "Loading indexed triangles";
+            yield return null;
+            int[] indices = ReadIntArray(indicesPath);
+            if (indices.Length % 3 != 0) { Fail("indices.bin is not triangle data."); yield break; }
+            int triangleCount = indices.Length / 3;
+
+            status = textured ? "Loading baked atlas" : File.Exists(dcPath) ? "Baking SH DC to standard vertex RGB" : "No standard color field; using default white material";
+            yield return null;
+            Vector3[] vertices = new Vector3[vertexCount];
+            Color32[] colors = new Color32[vertexCount];
+            const float c0 = 0.28209479177387814f;
+            for (int i = 0, p = 0; i < vertexCount; ++i, p += 3)
+                vertices[i] = new Vector3(positions[p], positions[p + 1], positions[p + 2]);
+            Vector2[] uvs = null;
+            if (textured)
+            {
+                float[] rawUvs = ReadFloatArray(uvPath);
+                if (rawUvs.Length != vertexCount * 2) { Fail("uvs.bin is not per-vertex float2 data."); yield break; }
+                uvs = new Vector2[vertexCount];
+                for (int i = 0, p = 0; i < vertexCount; ++i, p += 2)
+                    uvs[i] = new Vector2(rawUvs[p], rawUvs[p + 1]);
+                // Native image code values: linear, so no sRGB decode on sampling.
+                atlas = new Texture2D(2, 2, TextureFormat.RGBA32, false, true)
+                {
+                    name = "MeshSuite baked atlas",
+                    filterMode = FilterMode.Bilinear,
+                    wrapMode = TextureWrapMode.Clamp,
+                    anisoLevel = 0
+                };
+                if (!atlas.LoadImage(File.ReadAllBytes(atlasPath), true)) { Fail("Could not decode " + atlasPath); yield break; }
+            }
+            else if (File.Exists(dcPath))
+            {
+                float[] dc = ReadFloatArray(dcPath);
+                if (dc.Length == vertexCount * 3)
+                    for (int i = 0, p = 0; i < vertexCount; ++i, p += 3)
+                        colors[i] = DcColor(dc, p, c0);
+                else if (dc.Length == triangleCount * 3)
+                    for (int tri = 0, p = 0; tri < triangleCount; ++tri, p += 3)
+                    {
+                        Color32 color = DcColor(dc, p, c0);
+                        int ib = tri * 3;
+                        for (int corner = 0; corner < 3; ++corner)
+                        {
+                            int vertex = indices[ib + corner];
+                            if ((uint)vertex >= (uint)vertexCount) { Fail("indices.bin references an invalid vertex."); yield break; }
+                            colors[vertex] = color;
+                        }
+                    }
+                else { Fail("sh_dc.bin is neither per-vertex nor per-triangle RGB data."); yield break; }
+                dc = null;
+            }
+            else
+                for (int i = 0; i < vertexCount; ++i) colors[i] = new Color32(255, 255, 255, 255);
+            positions = null;
+            GC.Collect();
+
+            status = "Uploading standard indexed Unity Mesh";
+            yield return null;
+            mesh = new Mesh { name = "MeshSuite standard mesh compatibility baseline", indexFormat = IndexFormat.UInt32 };
+            mesh.vertices = vertices;
+            if (textured) mesh.uv = uvs;
+            else mesh.colors32 = colors;
+            mesh.SetIndices(indices, MeshTopology.Triangles, 0, false);
+            mesh.RecalculateBounds();
+            vertices = null;
+            colors = null;
+            uvs = null;
+            indices = null;
+            GC.Collect();
+
+            string shaderName = textured ? "MeshSuite/StandardTextureCutoutRaw" : "MeshSuite/StandardVertexColorRaw";
+            Shader shader = textured ? Shader.Find(shaderName) : (VertexColorShader != null ? VertexColorShader : Shader.Find(shaderName));
+            if (shader == null) { Fail(shaderName + " shader was not found."); yield break; }
+            material = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
+            if (textured) material.mainTexture = atlas;
+            meshFilter = GetComponent<MeshFilter>();
+            if (meshFilter == null) meshFilter = gameObject.AddComponent<MeshFilter>();
+            meshRenderer = GetComponent<MeshRenderer>();
+            if (meshRenderer == null) meshRenderer = gameObject.AddComponent<MeshRenderer>();
+            meshFilter.sharedMesh = mesh;
+            meshRenderer.sharedMaterial = material;
+            meshRenderer.shadowCastingMode = ShadowCastingMode.Off;
+            meshRenderer.receiveShadows = false;
+            meshRenderer.lightProbeUsage = LightProbeUsage.Off;
+            meshRenderer.reflectionProbeUsage = ReflectionProbeUsage.Off;
+            ready = true;
+            status = $"Standard indexed Mesh ready: {vertexCount:N0} vertices, {triangleCount:N0} triangles" + (textured ? $"; baked {atlas.width}x{atlas.height} atlas" : File.Exists(dcPath) ? "; DC vertex color" : "; default white (no standard appearance field)");
+            Debug.Log("[MeshSuite] " + status);
+        }
+
+        static byte ToByte(float value) => (byte)Mathf.Clamp(Mathf.RoundToInt(Mathf.Clamp01(value) * 255f), 0, 255);
+        static Color32 DcColor(float[] dc, int offset, float c0) => new Color32(ToByte(c0 * dc[offset] + 0.5f), ToByte(c0 * dc[offset + 1] + 0.5f), ToByte(c0 * dc[offset + 2] + 0.5f), 255);
+
+        static float[] ReadFloatArray(string path)
+        {
+            long bytes = new FileInfo(path).Length;
+            if ((bytes & 3) != 0 || bytes / 4 > Int32.MaxValue) throw new InvalidDataException("Invalid float32 buffer: " + path);
+            float[] values = new float[(int)(bytes / 4)];
+            ReadInto(path, values, (int)bytes);
+            return values;
+        }
+
+        static int[] ReadIntArray(string path)
+        {
+            long bytes = new FileInfo(path).Length;
+            if ((bytes & 3) != 0 || bytes / 4 > Int32.MaxValue) throw new InvalidDataException("Invalid int32 buffer: " + path);
+            int[] values = new int[(int)(bytes / 4)];
+            ReadInto(path, values, (int)bytes);
+            return values;
+        }
+
+        static void ReadInto(string path, Array destination, int byteLength)
+        {
+            const int blockSize = 4 * 1024 * 1024;
+            byte[] block = new byte[blockSize];
+            using FileStream stream = File.OpenRead(path);
+            int offset = 0;
+            while (offset < byteLength)
+            {
+                int requested = Math.Min(block.Length, byteLength - offset);
+                int count = stream.Read(block, 0, requested);
+                if (count <= 0) throw new EndOfStreamException(path);
+                Buffer.BlockCopy(block, 0, destination, offset, count);
+                offset += count;
+            }
+        }
+
+        void Fail(string message)
+        {
+            status = "ERROR: " + message;
+            Debug.LogError("[MeshSuite] " + message);
+        }
+
+        void OnDestroy()
+        {
+            ready = false;
+            if (meshFilter != null) meshFilter.sharedMesh = null;
+            if (meshRenderer != null) meshRenderer.sharedMaterial = null;
+            if (mesh != null) Destroy(mesh);
+            if (material != null) Destroy(material);
+            if (atlas != null) Destroy(atlas);
+        }
+    }
+}

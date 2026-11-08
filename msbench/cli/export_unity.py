@@ -12,20 +12,20 @@ export_unity_app = typer.Typer(no_args_is_help=True)
 
 @export_unity_app.callback(invoke_without_command=True)
 def export_unity(
-    method: str = typer.Option(..., "--method", "-m", help="2dts, triangle-splatting, mesh-splatting, or diffsoup."),
+    method: str = typer.Option(..., "--method", "-m", help="2dts, triangle-splatting, mesh-splatting, t2splat, or diffsoup."),
     checkpoint: Path = typer.Option(..., "--checkpoint", "-c", exists=True, help="Checkpoint file or run directory."),
     output: Path = typer.Option(..., "--output", "-o", help="Output .triasset directory."),
     force: bool = typer.Option(False, "--force", help="Replace an existing output package."),
     mesh_opacity_floor: float | None = typer.Option(None, "--mesh-opacity-floor", help="Override MeshSplatting opacity floor for a legacy checkpoint."),
-    export_topology: str = typer.Option(
-        "indexed",
-        "--export-topology",
-        help="MeshSplatting export layout: indexed/mesh or soup/materialized-soup.",
-    ),
     d2ts_gamma_rescale: bool | None = typer.Option(
         None,
         "--d2ts-gamma-rescale/--no-d2ts-gamma-rescale",
         help="Override the non-serialized 2DTS gamma-rescale flag for a legacy checkpoint.",
+    ),
+    d2ts_ste_threshold: float | None = typer.Option(
+        None,
+        "--d2ts-ste-threshold",
+        help="2DTS opaque strategy threshold (adapter.render_params.ste_threshold): keep only triangles at or above it and deploy them as solid.",
     ),
     background_color: str | None = typer.Option(
         None,
@@ -35,7 +35,7 @@ def export_unity(
 ):
     """Export full renderer inputs for a Unity-native method renderer.
 
-    This does not produce a generic mesh.  Use it with the MeshSplatBench Unity
+    This does not produce a generic mesh.  Use it with the MeshSuite Unity
     package so view-dependent appearance, opacity, and neural features remain
     available to method-specific shaders.
     """
@@ -49,8 +49,8 @@ def export_unity(
             output,
             overwrite=force,
             mesh_opacity_floor=mesh_opacity_floor,
-            export_topology=export_topology,
             d2ts_gamma_rescale=d2ts_gamma_rescale,
+            d2ts_ste_threshold=d2ts_ste_threshold,
             background_color=background_color,
         )
     except (FileNotFoundError, FileExistsError, KeyError, TypeError, ValueError) as exc:

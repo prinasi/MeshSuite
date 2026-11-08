@@ -1,0 +1,25 @@
+# @format
+
+# T²-Splat on Tanks & Temples (train/truck): upstream configs/tandt.yaml
+# (4M points, 8x8 textures, no external priors) and the configs/common.yaml
+# `outdoor:` block, with the preset's prior weights zeroed.
+
+trainer:
+  rdt_backend: surface
+  visibility_pruning: progressive_collapse
+  heartbeat_safety: true
+  topology_monitor_interval: 1000
+  visibility_prune_start_iter: 21000
+  visibility_prune_end_iter: 27000
+  visibility_prune_interval: 1000
+  visibility_prune_threshold_start: 0.05
+  visibility_prune_threshold_end: 0.5
+  visibility_prune_max_face_ratio: 0.02
+  start_vertex_normal: 20000
+  max_points: 4000000
+  # outdoor, then the preset's scene_defaults (prior supervision off)
+  lambda_normals: 0.00005
+  iteration_mesh: 7000
+  lambda_normals_super: 0.0
+  depth_lambda_init: 0.0
+  depth_lambda_final: 0.0

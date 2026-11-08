@@ -1,4 +1,4 @@
-"""Training infrastructure for MeshSplatBench."""
+"""Training infrastructure for MeshSuite."""
 
 from msbench.trainers.hooks import TrainingMethod
 from msbench.trainers.loop import TrainingLoop, TrainingConfig

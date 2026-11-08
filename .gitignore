@@ -48,6 +48,9 @@ unity_metrics_report.md
 
 # Unity project/build caches.
 # Keep ProjectSettings, Packages, and Assets committed; ignore generated caches.
+# tools/patch_legacy_unity_vulkan.py backups, and the .meta files Unity makes for them.
+*.msbench-vulkan.bak
+*.msbench-vulkan.bak.meta
 [Ll]ibrary/
 [Tt]emp/
 [Oo]bj/
@@ -78,5 +81,8 @@ debug.txt
 
 # OS files
 .DS_Store
-videos/
-docs/
+# Local temporary video outputs (keep docs/static/videos for project page)
+/videos/
+
+# Local agent/developer guidelines (not published)
+AGENTS.md
