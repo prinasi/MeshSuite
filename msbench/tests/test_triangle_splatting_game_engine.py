@@ -149,6 +149,18 @@ def test_single_train_flag_rejects_other_methods():
     assert "--train_game_engine applies only to triangle-splatting" in result.stderr
 
 
+@pytest.mark.parametrize("script", ["single_export_unity.sh", "single_unity_eval.sh", "single_unity_video.sh"])
+def test_unity_scripts_map_every_variant_to_its_base_method(script):
+    # A second engine_method() definition silently replaces the first in bash.
+    assert (REPO / script).read_text().count("\nengine_method() {") == 1
+    probe = (
+        f'eval "$(sed -n "/^engine_method() {{/,/^}}/p" {script})"; '
+        f"for m in 2dts-opaque {VARIANT} 2dts triangle-splatting; do engine_method $m; done"
+    )
+    out = subprocess.run(["bash", "-c", probe], cwd=REPO, capture_output=True, text=True, check=True).stdout
+    assert out.split() == ["2dts", "triangle-splatting", "2dts", "triangle-splatting"]
+
+
 def test_unity_eval_deploys_the_variant_as_triangle_splatting(tmp_path: Path):
     scene = tmp_path / "data" / "garden"
     (scene / "sparse" / "0").mkdir(parents=True)
