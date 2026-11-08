@@ -467,6 +467,21 @@ _DATASET_PROTOCOL_EXCEPTIONS = {
 }
 
 
+def test_output_method_names_a_variant_output_tree(tmp_path: Path):
+    config = tmp_path / "variant.yaml"
+    config.write_text(
+        "adapter:\n  type: 2dts\n"
+        "trainer:\n  type: 2dts\n"
+        "dataset:\n  name: tandt\n  scene: truck\n"
+        "output:\n  method: 2dts-variant\n  dir: outputs/{method}/{dataset}/{scene}\n"
+    )
+    assert load_config(config)["output"]["dir"] == "outputs/2dts-variant/tandt/truck"
+
+    capped = tmp_path / "capped.yaml"
+    capped.write_text(f"_base_: {config}\ntrainer:\n  max_primitives: 8000\n")
+    assert load_config(capped)["output"]["dir"] == "outputs/abl/2dts-variant-8000/tandt/truck"
+
+
 def test_all_methods_share_scene_dataset_protocol():
     from collections import defaultdict
 

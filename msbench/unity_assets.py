@@ -26,6 +26,12 @@ SCHEMA_VERSION = "1.0"
 EXPORT_CONTRACT_REVISION = 3
 PACKAGE_SUFFIX = ".triasset"
 
+# The opaque strategy anneals gamma to 50; well below that the 2DTS window is
+# too soft to deploy as a solid triangle.
+D2TS_TERMINAL_SOLID_MIN_GAMMA = 10.0
+# Logit stored for surviving triangles, as upstream's toRawTriangle does.
+D2TS_SOLID_OPACITY_LOGIT = 10.0
+
 
 @dataclass
 class BufferSpec:
@@ -124,6 +130,7 @@ def export_triasset(
     overwrite: bool = False,
     mesh_opacity_floor: float | None = None,
     d2ts_gamma_rescale: bool | None = None,
+    d2ts_ste_threshold: float | None = None,
     background_color: str | None = None,
 ) -> TriAssetPackage:
     """Export the complete renderer state required for a Unity-native port.
@@ -166,7 +173,12 @@ def export_triasset(
         elif method == "t2splat":
             renderer = _export_t2splat(writer, payload)
         elif method == "2dts":
-            renderer = _export_d2ts(writer, payload, gamma_rescale_override=d2ts_gamma_rescale)
+            renderer = _export_d2ts(
+                writer,
+                payload,
+                gamma_rescale_override=d2ts_gamma_rescale,
+                ste_threshold=d2ts_ste_threshold,
+            )
         else:
             renderer = _export_diffsoup(writer, payload)
 
@@ -549,6 +561,7 @@ def _export_d2ts(
     payload: Any,
     *,
     gamma_rescale_override: bool | None = None,
+    ste_threshold: float | None = None,
 ) -> dict[str, Any]:
     if isinstance(payload, tuple):
         state = _expect_dict(payload[0], "2dts")
@@ -572,9 +585,15 @@ def _export_d2ts(
     triangles = _required_tensor(state, "_vertex", "2dts")
     if triangles.ndim != 3 or triangles.shape[1:] != (3, 3):
         raise ValueError(f"2dts _vertex must be [N,3,3], got {tuple(triangles.shape)}")
-    count = int(triangles.shape[0])
     f_dc = _required_tensor(state, "_f_dc", "2dts")
     f_rest = _required_tensor(state, "_f_rest", "2dts")
+    opacity = _required_tensor(state, "_opacity", "2dts")
+    source_count = int(triangles.shape[0])
+    if ste_threshold is not None:
+        keep = _d2ts_surviving_triangles(opacity, gamma=gamma, ste_threshold=ste_threshold)
+        triangles, f_dc, f_rest = triangles[keep], f_dc[keep], f_rest[keep]
+        opacity = torch.full_like(opacity[keep], D2TS_SOLID_OPACITY_LOGIT)
+    count = int(triangles.shape[0])
     # Legacy 2DTS checkpoints never serialise active_sh_degree (the trainer
     # only records it in its logs).  Derive the full degree from the stored
     # coefficient count, mirroring D2TSAdapter.load_checkpoint so Unity
@@ -583,10 +602,10 @@ def _export_d2ts(
     max_sh_degree = int(math.sqrt(coeff_dim) - 1)
     writer.tensor("positions", triangles.reshape(-1, 3), "triangle-soup positions")
     writer.tensor("indices", torch.arange(count * 3, dtype=torch.int32).reshape(count, 3), "triangle indices")
-    writer.tensor("opacity_logits", _required_tensor(state, "_opacity", "2dts"), "per-triangle opacity logits")
+    writer.tensor("opacity_logits", opacity, "per-triangle opacity logits")
     writer.tensor("sh_dc", f_dc, "per-triangle or per-vertex SH DC")
     writer.tensor("sh_rest", f_rest, "per-triangle or per-vertex SH residual")
-    return {
+    renderer = {
         "renderer": "2dts",
         "primitive_topology": "triangle-soup",
         "primitive_count": count,
@@ -603,6 +622,40 @@ def _export_d2ts(
         "unity_method_aware_requires_per_camera_depth_sort": True,
         "unity_method_aware_status": "portability-baseline",
     }
+    if ste_threshold is not None:
+        renderer.update(
+            {
+                "ste_threshold": float(ste_threshold),
+                "source_primitive_count": source_count,
+                "terminal_solid_eligible": True,
+                "terminal_solid_condition": f"gamma>={D2TS_TERMINAL_SOLID_MIN_GAMMA:g} and sigmoid(opacity)>=ste_threshold",
+                "native_compositing": "pixel_depth_sorted_front_to_back",
+                "unity_method_aware_requires_per_camera_depth_sort": False,
+                "unity_method_aware_status": "opaque-terminal-solid",
+            }
+        )
+    return renderer
+
+
+def _d2ts_surviving_triangles(opacity: torch.Tensor, *, gamma: float, ste_threshold: float) -> torch.Tensor:
+    """Select the triangles an opaque-strategy 2DTS checkpoint actually renders.
+
+    The opaque strategy renders ``sigmoid(logit) >= threshold`` as opacity 1 and
+    everything else as opacity 0. The threshold is config state that checkpoints
+    do not serialise, and without it a deployment would draw the rejected
+    triangles as well.
+    """
+    if not 0.0 < ste_threshold < 1.0:
+        raise ValueError(f"2dts ste_threshold must be in (0, 1), got {ste_threshold}")
+    if gamma < D2TS_TERMINAL_SOLID_MIN_GAMMA:
+        raise ValueError(
+            f"2dts checkpoint has gamma={gamma:g}, below the terminal solid regime "
+            f"(>={D2TS_TERMINAL_SOLID_MIN_GAMMA:g}); it has not finished solidifying"
+        )
+    keep = torch.sigmoid(opacity.reshape(-1)) >= ste_threshold
+    if not keep.any():
+        raise ValueError(f"no 2dts triangle reaches ste_threshold={ste_threshold}")
+    return keep
 
 
 def _d2ts_gamma_vertex_rescale(gamma: float) -> float:

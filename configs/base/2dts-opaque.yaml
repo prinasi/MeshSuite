@@ -1,4 +1,20 @@
 # @format
 
+# Mesh-oriented 2DTS, the mesh setting of the paper (arXiv v3 Sec. 4.3): 30K
+# iterations, gamma 1 for the first 20K and then 1 to 50 over the last 10K, with
+# opacity binarised through the straight-through threshold throughout.
+
+trainer:
+  max_steps: 30000
+
+adapter:
+  render_params:
+    gamma_rescale: true
+    ste_threshold: 0.3
+    sort_level: 2
+
+output:
+  method: 2dts-opaque
+
 d2ts:
   strategy: opaque

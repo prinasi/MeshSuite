@@ -112,7 +112,12 @@ def main() -> int:
             ckpt = adapter_cfg.get("checkpoint")
             if ckpt:
                 print(f"[MeshSuite] Exporting triasset for {method} to {triasset_path}...")
-                export_triasset(method=method, checkpoint=ckpt, output_dir=triasset_path)
+                export_triasset(
+                    method,
+                    ckpt,
+                    triasset_path,
+                    d2ts_ste_threshold=(adapter_cfg.get("render_params") or {}).get("ste_threshold"),
+                )
 
         run_unity_video_for_scene(
             unity_bin=unity_bin,
