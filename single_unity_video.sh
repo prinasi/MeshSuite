@@ -92,9 +92,20 @@ require_value() {
     fi
 }
 
+# triangle-splatting-game-engine is Triangle Splatting trained with the official
+# train_game_engine.py recipe: it has its own configs, outputs and reports, but
+# runs on the triangle-splatting package format and Unity renderers.
+engine_method() {
+    case "$1" in
+        triangle-splatting-game-engine) echo "triangle-splatting" ;;
+        *) echo "$1" ;;
+    esac
+}
+
 canonical_method() {
     case "$(echo "$1" | tr '[:upper:]' '[:lower:]' | tr '_' '-')" in
         triangle-splatting|trianglesplatting|triangle_splatting|ts) echo "triangle-splatting" ;;
+        triangle-splatting-game-engine|trianglesplatting-game-engine|ts-game-engine) echo "triangle-splatting-game-engine" ;;
         mesh-splatting|meshsplatting|mesh_splatting|ms) echo "mesh-splatting" ;;
         2dts|d2ts) echo "2dts" ;;
         diffsoup|diff-soup) echo "diffsoup" ;;
@@ -152,6 +163,7 @@ else
 fi
 
 METHOD_ID="$(canonical_method "${METHOD}")"
+ENGINE_METHOD_ID="$(engine_method "${METHOD_ID}")"
 if [[ -z "${OUTPUT_NAME}" ]]; then
     OUTPUT_NAME="unity_custom_engine"
     [[ "${CONDITION}" == "standard-engine" ]] && OUTPUT_NAME="unity_standard_engine"
@@ -220,7 +232,7 @@ for target in "${RESOLVED_TARGETS[@]}"; do
     echo "[${METHOD_ID}/${target}] Preparing video rendering..."
 
     CMD=("${PYTHON_BIN}" "tools/run_unity_triasset_video.py"
-        --method "${METHOD_ID}"
+        --method "${ENGINE_METHOD_ID}"
         --frames "${FRAMES}"
         --fps "${FPS}"
         --zoom "${ZOOM}"

@@ -115,6 +115,28 @@ bash single_train.sh t2splat dtu/all 0
 bash single_train.sh t2splat mipnerf360/all 0
 ```
 
+### Triangle Splatting for game engines
+
+`triangle-splatting-game-engine` trains Triangle Splatting with the official
+repository's `train_game_engine.py`, which produces opaque, solid triangles for
+import into a game engine. After densification, an extra loss pushes triangles towards
+opaque and sharp ones, and pruning also drops transparent triangles (opacity
+≤ 0.1, then ≤ 0.7 after 29K iterations) and soft ones (σ ≥ 1 after 28K). Every
+other setting, including the dataset protocol, comes from the matching
+`configs/triangle-splatting` scene config. Configs cover Mip-NeRF 360, Tanks &
+Temples train and NeRF-Synthetic. Outputs go to
+`outputs/triangle-splatting-game-engine/<dataset>/<scene>`.
+
+```bash
+bash single_train.sh triangle-splatting mipnerf360/all 0 --train_game_engine
+# Same as:
+bash single_train.sh triangle-splatting-game-engine mipnerf360/all 0
+bash single_unity_eval.sh triangle-splatting-game-engine mipnerf360/all 0 --standard-engine
+```
+
+The Unity scripts deploy it with the `triangle-splatting` package format and
+renderers, and keep its reports under its own name.
+
 ## Installation
 
 ### Option 1: Conda Environment (Recommended)

@@ -79,12 +79,23 @@ require_value() {
 
 lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
 
+# triangle-splatting-game-engine is Triangle Splatting trained with the official
+# train_game_engine.py recipe: it has its own configs, outputs and reports, but
+# runs on the triangle-splatting package format and Unity renderers.
+engine_method() {
+    case "$1" in
+        triangle-splatting-game-engine) echo "triangle-splatting" ;;
+        *) echo "$1" ;;
+    esac
+}
+
 canonical_method() {
     local name
     name="$(lower "$1")"
     name="${name//_/-}"
     case "${name}" in
         trianglesplatting) echo "triangle-splatting" ;;
+        trianglesplatting-game-engine|ts-game-engine) echo "triangle-splatting-game-engine" ;;
         meshsplatting) echo "mesh-splatting" ;;
         t2-splat|t2splat) echo "t2splat" ;;
         2dts|d2ts) echo "2dts" ;;
@@ -228,6 +239,7 @@ else
     TARGETS=("${POSITIONAL[@]:0:$((${#POSITIONAL[@]} - 1))}")
 fi
 METHOD_ID="$(canonical_method "${METHOD}")"
+ENGINE_METHOD_ID="$(engine_method "${METHOD_ID}")"
 GPU_ID="$(lower "${GPU_ID}")"
 if [[ "${GPU_ID}" != "cpu" && ! "${GPU_ID}" =~ ^[0-9]+$ ]]; then
     echo "Invalid gpu_id: ${GPU_ID}. Expected a non-negative integer or 'cpu'." >&2
@@ -258,7 +270,7 @@ for target in "${EXPANDED_TARGETS[@]}"; do
         [[ "${CONTINUE_ON_ERROR}" -eq 1 ]] && continue || break
     fi
     [[ -n "${CHECKPOINT}" ]] || CHECKPOINT="${MODEL_PATH}/ckpt"
-    OUTPUT="${MODEL_PATH}/${OUTPUT_SUBDIR}/${METHOD_ID}"
+    OUTPUT="${MODEL_PATH}/${OUTPUT_SUBDIR}/${ENGINE_METHOD_ID}"
     PACKAGE="${OUTPUT}.triasset"
     REPLACE_INCOMPLETE=0
     if [[ -f "${PACKAGE}/manifest.json" && "${FORCE}" -eq 0 ]]; then
@@ -288,7 +300,7 @@ for target in "${EXPANDED_TARGETS[@]}"; do
     if [[ "${#TB_EXPORT_ARGS[@]}" -gt 0 ]]; then
         CMD+=("${TB_EXPORT_ARGS[@]}")
     fi
-    CMD+=(--method "${METHOD_ID}" --checkpoint "${CHECKPOINT}" --output "${OUTPUT}")
+    CMD+=(--method "${ENGINE_METHOD_ID}" --checkpoint "${CHECKPOINT}" --output "${OUTPUT}")
     [[ -n "${BACKGROUND_COLOR}" ]] && CMD+=(--background-color "${BACKGROUND_COLOR}")
     [[ "${METHOD_ID}" == "2dts" && "${D2TS_GAMMA_RESCALE}" == "False" ]] && CMD+=(--no-d2ts-gamma-rescale)
     [[ "${FORCE}" -eq 1 || "${REPLACE_INCOMPLETE}" -eq 1 ]] && CMD+=(--force)

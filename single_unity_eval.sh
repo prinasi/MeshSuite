@@ -163,12 +163,23 @@ require_value() {
 
 lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
 
+# triangle-splatting-game-engine is Triangle Splatting trained with the official
+# train_game_engine.py recipe: it has its own configs, outputs and reports, but
+# runs on the triangle-splatting package format and Unity renderers.
+engine_method() {
+    case "$1" in
+        triangle-splatting-game-engine) echo "triangle-splatting" ;;
+        *) echo "$1" ;;
+    esac
+}
+
 canonical_method() {
     local name
     name="$(lower "$1")"
     name="${name//_/-}"
     case "${name}" in
         trianglesplatting) echo "triangle-splatting" ;;
+        trianglesplatting-game-engine|ts-game-engine) echo "triangle-splatting-game-engine" ;;
         meshsplatting) echo "mesh-splatting" ;;
         t2-splat|t2splat) echo "t2splat" ;;
         2dts|d2ts) echo "2dts" ;;
@@ -561,6 +572,7 @@ else
 fi
 
 METHOD_ID="$(canonical_method "${METHOD}")"
+ENGINE_METHOD_ID="$(engine_method "${METHOD_ID}")"
 GPU_ID="$(lower "${GPU_ID}")"
 PROFILE_RUNTIME="$(lower "${PROFILE_RUNTIME}")"
 if [[ "${GPU_ID}" != "cpu" && ! "${GPU_ID}" =~ ^[0-9]+$ ]]; then
@@ -735,7 +747,7 @@ for target in "${EXPANDED_TARGETS[@]}"; do
         DATASET_PATH="$(abs_path "${DATASET_PATH}")"
     fi
     RESULT_DIR="${MODEL_PATH}/${OUTPUT_NAME}"
-    TRI_ASSET="${MODEL_PATH}/${ASSET_SUBDIR}/${METHOD_ID}.triasset"
+    TRI_ASSET="${MODEL_PATH}/${ASSET_SUBDIR}/${ENGINE_METHOD_ID}.triasset"
     REF_IMAGE_DIR="$(resolve_reference_image_dir "${DATASET}" "${SCENE}" "${DATASET_PATH}" "${IMAGE_DIR}" "${RESOLUTION}" "${REFERENCE_IMAGE_DIR_OVERRIDE}")"
     REF_PATH="${DATASET_PATH}/${REF_IMAGE_DIR}"
     if [[ "${REF_IMAGE_DIR}" != "${REFERENCE_IMAGE_DIR_OVERRIDE:-${IMAGE_DIR}}" ]]; then
@@ -808,7 +820,7 @@ for target in "${EXPANDED_TARGETS[@]}"; do
                 --unity-project "${UNITY_PROJECT_DIR}"
                 --datasets-root "${UNITY_DATASETS_ROOT}"
                 --outputs-root "${UNITY_OUTPUTS_ROOT}"
-                --method "${METHOD_ID}"
+                --method "${ENGINE_METHOD_ID}"
                 --asset-subdir "${ASSET_SUBDIR}"
                 --output-name "${OUTPUT_NAME}"
                 --scenes "${UNITY_SCENE_NAME}"
@@ -837,7 +849,7 @@ for target in "${EXPANDED_TARGETS[@]}"; do
                         --player "${UNITY_PLAYER_BIN}"
                         --datasets-root "${UNITY_DATASETS_ROOT}"
                         --outputs-root "${UNITY_OUTPUTS_ROOT}"
-                        --method "${METHOD_ID}"
+                        --method "${ENGINE_METHOD_ID}"
                         --asset-subdir "${ASSET_SUBDIR}"
                         --output-name "${OUTPUT_NAME}"
                         --scenes "${UNITY_SCENE_NAME}"
@@ -860,7 +872,7 @@ for target in "${EXPANDED_TARGETS[@]}"; do
                         --unity-project "${UNITY_PROJECT_DIR}"
                         --datasets-root "${UNITY_DATASETS_ROOT}"
                         --outputs-root "${UNITY_OUTPUTS_ROOT}"
-                        --method "${METHOD_ID}"
+                        --method "${ENGINE_METHOD_ID}"
                         --asset-subdir "${ASSET_SUBDIR}"
                         --output-name "${OUTPUT_NAME}"
                         --scenes "${UNITY_SCENE_NAME}"
@@ -927,7 +939,7 @@ for target in "${EXPANDED_TARGETS[@]}"; do
                 --unity "${UNITY_BIN}"
                 --unity-project "${UNITY_PROJECT_DIR}"
                 --config "${CONFIG_FILE}"
-                --method "${METHOD_ID}"
+                --method "${ENGINE_METHOD_ID}"
                 --dataset "${DATASET_PATH}"
                 --triasset "${TRI_ASSET}"
                 --output-dir "${RESULT_DIR}/video"
