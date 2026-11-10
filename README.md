@@ -614,7 +614,7 @@ cutout shader existed needs `--force-player-build`.
 ### Mesh-oriented 2DTS (`2dts --opaque`)
 
 `configs/2dts/` trains 2DTS as the volumetric radiance field its paper evaluates on
-Mip-NeRF 360 and Tanks & Temples. The optional `--opaque` flag (method id
+Mip-NeRF 360, Tanks & Temples and NeRF-Synthetic. The optional `--opaque` flag (method id
 `2dts-opaque`) trains the same scenes with the same dataset protocol and primitive
 budgets, but ends on solid triangles: gamma anneals from 1 to 50 over the last 10k of
 30k iterations, opacity is binarised at 0.3, and the renderer sorts per pixel. Its
@@ -623,8 +623,9 @@ outputs stay separate, in `outputs/2dts-opaque/` and
 
 The flag has no scene configs of its own. Each run uses the `configs/2dts` scene config
 followed by `configs/base/2dts-opaque-<dataset>.yaml`, which adds the shared recipe in
-`configs/base/2dts-opaque.yaml` and selects the dataset's opaque native preset. Only
-Mip-NeRF 360 and Tanks & Temples have that overlay. `single_train.sh`,
+`configs/base/2dts-opaque.yaml` and selects the dataset's opaque native preset.
+Mip-NeRF 360, Tanks & Temples and NeRF-Synthetic have that overlay; DTU has none, since
+`configs/2dts` already trains DTU opaque. `single_train.sh`,
 `single_export_unity.sh`, `single_unity_eval.sh` and `single_unity_video.sh` accept
 `--opaque`; the method id `2dts-opaque` names only the output tree and reports and is
 not accepted as a method argument.
@@ -634,16 +635,27 @@ which it evaluates on NeRF-Synthetic and DTU only. Tanks & Temples takes its oth
 settings from the authors' mesh preset (`config/TanksAndTemples_VanillaTS.yaml`,
 which itself runs 40k iterations). The authors publish no such preset or results for
 Mip-NeRF 360, so `configs/2dts/native/mipnerf360-opaque.yaml` applies the same recipe
-and takes `scale_pruning.radii_threshold` from their Mip-NeRF 360 preset. This
-configuration is beyond the v5 manuscript.
+and takes `scale_pruning.radii_threshold` from their Mip-NeRF 360 preset.
+
+For NeRF-Synthetic the authors run two stages: `config/NerfSynthetic_VanillaTS.yaml` for
+30k iterations, then `config/NerfSynthetic_VanillaTS_mesh.yaml` from its 30k point
+cloud to 60k (the 60k schedule of the paper's v1/v2). The single 30k run the paper
+states takes precedence, so `configs/2dts/native/nerf_synthetic-opaque.yaml` applies the
+Tanks & Temples recipe with the settings the NeRF-Synthetic presets change: their dataset
+section, `max_grow_ratio`, scale pruning, and geometric losses from 3k with
+`w_distortion` 0.05. It leaves out the second stage's settings and its `render_spp: 2`
+(2x2 supersampling in training), since MeshSuite's de facto 2DTS renderer draws one
+sample per pixel. The budget is the 2dts scene config's 1M triangles, while upstream
+prunes its second stage to 41k–112k. This configuration is beyond the v5 manuscript.
 
 ```bash
 # De facto renderer: train, render the held-out views, score them.
 bash single_train.sh 2dts mipnerf360/all 0 --opaque
 bash single_train.sh 2dts tandt/all 0 --opaque
+bash single_train.sh 2dts nerf_synthetic/all 0 --opaque
 
 # Custom and standard engine deployment.
-for dataset in mipnerf360 tandt; do
+for dataset in mipnerf360 tandt nerf_synthetic; do
   ./single_unity_eval.sh 2dts "$dataset/all" 0 --opaque --unity "$UNITY" --unity-project unity \
     --report-name "unity_metrics_report_$dataset"
   ./single_unity_eval.sh 2dts "$dataset/all" 0 --opaque --unity "$UNITY" --unity-project unity \
@@ -652,6 +664,7 @@ done
 
 python3 tools/format_metrics.py --method 2dts-opaque --dataset mipnerf360/all
 python3 tools/format_metrics.py --method 2dts-opaque --dataset tandt/all
+python3 tools/format_metrics.py --method 2dts-opaque --dataset nerf_synthetic/all
 ```
 
 The export applies the threshold the native renderer uses
