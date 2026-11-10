@@ -52,8 +52,7 @@ Defaults cover:
   settings  ${ALL_CONDITIONS[*]}
 Variant groups run their base method with its flag and keep the variant id for their
 reports: triangle-splatting-game-engine is triangle-splatting --train_game_engine and
-2dts-opaque is 2dts --opaque. Groups without configs (2dts-opaque on nerf_synthetic)
-are skipped.
+2dts-opaque is 2dts --opaque. Groups without configs are skipped.
 
 Options:
   --unity PATH           Unity Editor executable (default: \$UNITY)

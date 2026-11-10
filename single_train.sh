@@ -144,7 +144,8 @@ Options:
                            outputs/triangle-splatting-game-engine/<dataset>/<scene>
   --opaque                 2DTS only: train the mesh-oriented opaque setting (method id
                            2dts-opaque): each 2dts scene config followed by
-                           configs/base/2dts-opaque-<dataset>.yaml (mipnerf360, tandt);
+                           configs/base/2dts-opaque-<dataset>.yaml (mipnerf360, tandt,
+                           nerf_synthetic);
                            outputs go to outputs/2dts-opaque/<dataset>/<scene>
   --dtu_eval_mode MODE     Override DTU mode for this run: foreground (masked) or full (unmasked)
   --dtu-foreground         Shortcut for --dtu_eval_mode foreground (default in dtu.yaml)

@@ -22,8 +22,11 @@ REPO = Path(__file__).resolve().parents[2]
 SCENES = {
     "mipnerf360": ("bicycle", "bonsai", "counter", "flowers", "garden", "kitchen", "room", "stump", "treehill"),
     "tandt": ("train", "truck"),
+    "nerf_synthetic": ("chair", "drums", "ficus", "hotdog", "lego", "materials", "mic", "ship"),
 }
 TARGETS = [(dataset, scene) for dataset, scenes in SCENES.items() for scene in scenes]
+# Datasets that had per-scene configs/2dts-opaque files before `--opaque`.
+RETIRED_TARGETS = [(dataset, scene) for dataset, scene in TARGETS if dataset in {"mipnerf360", "tandt"}]
 ENTRY_SCRIPTS = ("single_train.sh", "single_export_unity.sh", "single_unity_eval.sh", "single_unity_video.sh")
 
 
@@ -68,7 +71,7 @@ def _write_checkpoint(path: Path, opacity: list[float], *, gamma: float = 50.0) 
     torch.save((state, {}, None, gamma), path)
 
 
-@pytest.mark.parametrize("dataset,scene", TARGETS)
+@pytest.mark.parametrize("dataset,scene", RETIRED_TARGETS)
 def test_opaque_flag_reproduces_the_retired_scene_configs(dataset: str, scene: str, tmp_path: Path):
     # Checkpoints trained from the per-scene 2dts-opaque configs stay valid.
     flag = load_config(_opaque_config(dataset, scene, tmp_path))
@@ -123,7 +126,12 @@ def test_native_presets_follow_the_paper_schedule_and_upstream_recipe(dataset: s
 
     # Shared dataset protocol, not upstream's train-on-everything setting.
     assert native["dataset"]["hold_test_set"] is True
-    assert native["dataset"]["hold_interval"] == 8
+    if dataset == "nerf_synthetic":
+        # The official test split, exactly as the volumetric preset reads it.
+        volumetric = yaml.safe_load((REPO / "configs/2dts/native/nerf_synthetic.yaml").read_text())
+        assert native["dataset"] == volumetric["dataset"]
+    else:
+        assert native["dataset"]["hold_interval"] == 8
     # The paper's mesh setting (arXiv v3 Sec. 4.3); learning-rate decay ends at the anneal.
     assert update["gamma_schedule"] == {"start_iter": 20_000, "end_iter": 30_000, "gamma_init": 1.0, "gamma_final": 50.0}
     assert trainer["iterations"] == 30_000
@@ -137,24 +145,39 @@ def test_native_presets_follow_the_paper_schedule_and_upstream_recipe(dataset: s
     assert model["optimizer"]["f_rest"]["v_init"] == 0.0002
     assert update["opacity_reset"]["reset_value"] == 0.29
     assert update["densification"]["split_scale_threshold"] == 0.01
+    # A single run, so densification from the start rather than upstream's second
+    # NeRF-Synthetic stage from a 30K point cloud.
+    assert update["densification"]["start_iter"] == 500
+    assert native["trainer"]["start_pointcloud"] is None
+    # MeshSuite's de facto 2DTS renderer draws one sample per pixel.
+    assert "render_spp" not in model
     assert update["contribution_pruning"]["interval_iter"] == -1
     assert update["contribution_pruning"]["contrib_sum_threshold"] == 2.0
     assert "opacity_pruning" not in update
     assert trainer["smoothness_loss"]["w_normal"] == 0.05
     assert trainer["geometry_loss"]["w_geometry"] == 0.05
-    assert trainer["distortion_loss"]["w_distortion"] == 0.01
-    assert trainer["distortion_loss"]["start_iter"] == 6_000
     # MeshSuite scores no geometry on these datasets, and the zero-weight
     # consistency loss would only load neighbour views.
     assert trainer["save_pcd_iterations"] is None
     assert "neighbor_cams_args" not in native["dataset"]
     assert "consistency_loss" not in trainer
 
-    expected_radii = {"tandt": 0.5, "mipnerf360": -1}[dataset]
-    assert update["scale_pruning"]["radii_threshold"] == expected_radii
+    # Settings upstream's presets vary by dataset: Tanks & Temples from its mesh preset,
+    # Mip-NeRF 360 radii from its preset, NeRF-Synthetic from NerfSynthetic_VanillaTS(_mesh).yaml.
+    expected = {
+        "tandt": {"radii": 0.5, "scale": None, "grow": 0.015, "distortion": 0.01, "loss_start": 6_000},
+        "mipnerf360": {"radii": -1, "scale": None, "grow": 0.015, "distortion": 0.01, "loss_start": 6_000},
+        "nerf_synthetic": {"radii": -1, "scale": 0.5, "grow": 0.01, "distortion": 0.05, "loss_start": 3_000},
+    }[dataset]
+    assert update["scale_pruning"]["radii_threshold"] == expected["radii"]
+    assert update["scale_pruning"]["scale_threshold"] == expected["scale"]
+    assert update["densification"]["max_grow_ratio"] == expected["grow"]
+    assert trainer["distortion_loss"]["w_distortion"] == expected["distortion"]
+    for loss in ("smoothness_loss", "geometry_loss", "distortion_loss"):
+        assert trainer[loss]["start_iter"] == expected["loss_start"], loss
 
 
-@pytest.mark.parametrize("dataset,scene", [("mipnerf360", "bicycle"), ("tandt", "truck")])
+@pytest.mark.parametrize("dataset,scene", [("mipnerf360", "bicycle"), ("tandt", "truck"), ("nerf_synthetic", "chair")])
 def test_resolved_native_config_solidifies_over_the_last_third(dataset: str, scene: str, tmp_path: Path, monkeypatch):
     monkeypatch.chdir(REPO)
     cfg = load_config(_opaque_config(dataset, scene, tmp_path))
@@ -298,7 +321,6 @@ def test_opaque_covers_exactly_the_datasets_with_an_overlay():
     assert {dataset: configured_scenes(REPO / "configs", "2dts-opaque", dataset) for dataset in SCENES} == {
         dataset: set(scenes) for dataset, scenes in SCENES.items()
     }
-    assert configured_scenes(REPO / "configs", "2dts-opaque", "nerf_synthetic") == set()
     assert configured_scenes(REPO / "configs", "2dts-opaque", "dtu") == set()
     assert not (REPO / "configs" / "2dts-opaque").exists()
 
@@ -309,9 +331,9 @@ def test_opaque_flag_is_rejected_outside_2dts_and_its_datasets(tmp_path: Path):
         rejected = _shell(f"opaque_method {method}")
         assert rejected.returncode != 0
         assert f"--opaque applies only to 2dts, not {method}" in rejected.stderr
-    # No overlay for NeRF-Synthetic: the missing overlay is what callers report.
-    missing = _shell(f"scene_config_for configs 2dts-opaque nerf_synthetic chair {tmp_path}")
-    assert missing.stdout.strip() == "configs/base/2dts-opaque-nerf_synthetic.yaml"
+    # No overlay for DTU, where 2dts is already opaque: the missing overlay is what callers report.
+    missing = _shell(f"scene_config_for configs 2dts-opaque dtu scan24 {tmp_path}")
+    assert missing.stdout.strip() == "configs/base/2dts-opaque-dtu.yaml"
     assert not any(tmp_path.iterdir())
 
 
