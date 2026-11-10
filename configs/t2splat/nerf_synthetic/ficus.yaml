@@ -1,0 +1,12 @@
+# @format
+
+_base_:
+  - ../../base/nerf_synthetic.yaml
+  - ../../base/t2splat.yaml
+  - ../../base/t2splat-nerf_synthetic.yaml
+
+experiment:
+  name: t2splat_nerf_synthetic_ficus
+
+dataset:
+  scene: ficus

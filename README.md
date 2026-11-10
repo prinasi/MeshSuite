@@ -27,7 +27,7 @@ MeshSuite provides a single, consistent evaluation framework for comparing diffe
 | MeshSplatting                | `MeshSplattingAdapter`     | Config/train/render/eval/profile/export support |
 | DiffSoup                     | `DiffSoupAdapter`          | Config/train/render/eval/export support; In-shader Micro-MLP support |
 | ExMesh                       | `ExMeshAdapter`            | Native training/render/eval/profile/export; DTU and NeRF-Synthetic configs; beyond the paper |
-| T²-Splat                     | `T2SplatAdapter`           | Native two-stage training/render/eval/profile/mesh export; Mip-NeRF 360, Tanks & Temples and DTU configs; beyond the paper |
+| T²-Splat                     | `T2SplatAdapter`           | Native two-stage training/render/eval/profile/mesh export; Mip-NeRF 360, Tanks & Temples, DTU and NeRF-Synthetic configs; beyond the paper |
 
 ### ExMesh
 
@@ -90,12 +90,17 @@ authors' per-scene repository presets (upstream `configs/common.yaml` and
 - Mip-NeRF 360 and Tanks & Temples: 30k geometry and 5k texture iterations
   with 8×8 Mip-textures.
 - DTU: the 20k-iteration, geometry-only per-scene best preset.
+- NeRF-Synthetic: neither the paper nor the repository covers it, so its configs
+  use upstream's generic scene preset (`configs/tandt.yaml` `scene_defaults`: 4M
+  points, surface RDT, progressive visibility collapse, 30k + 5k iterations) from
+  upstream's 100k random-point initialization. These are not paper-reproduction
+  settings.
 
 `msbench/tests/test_t2splat.py` checks every scene config against the options
-that upstream's `scripts/run_pipeline.py` resolves. No method uses external
+that upstream's `scripts/run_pipeline.py` resolves (NeRF-Synthetic against the
+Tanks & Temples truck preset). No method uses external
 normal/depth priors. On DTU, T²-Splat's own mesh is scored after removing small
-components, as upstream `create_ply.py --clean --geometry-only` does. As in the
-paper, there are no NeRF-Synthetic configs.
+components, as upstream `create_ply.py --clean --geometry-only` does.
 
 Reproduced results match the paper: Mip-NeRF 360 bicycle 23.95 PSNR / 0.705 SSIM
 (paper 23.96 / 0.709), Tanks & Temples truck 22.94 / 0.836 (22.91 / 0.836), and DTU
@@ -108,11 +113,16 @@ The Mip-NeRF 360 presets need a GPU with about 24 GB (bicycle peaks at 24 GB; ga
 runs out of memory on 12 GB in the restricted Delaunay step). DTU and truck fit in
 12 GB.
 
+On NeRF-Synthetic chair (the derived recipe above; there is no paper number to match)
+T²-Splat reaches 33.51 PSNR / 0.975 SSIM / 0.035 LPIPS with 148k faces, peaking at
+8.8 GB and training in 35 minutes on an RTX 3060.
+
 ```bash
 pip install -e ".[t2splat]" && pip install --no-build-isolation ./submodules/effrdel
 MSBENCH_CUDA_BACKENDS=t2splat,simple-knn python setup.py build_ext --inplace
 bash single_train.sh t2splat dtu/all 0
 bash single_train.sh t2splat mipnerf360/all 0
+bash single_train.sh t2splat nerf_synthetic/all 0
 ```
 
 ### Triangle Splatting for game engines

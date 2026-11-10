@@ -1,0 +1,35 @@
+# @format
+
+# T²-Splat on NeRF-Synthetic. Neither the paper nor the authors' repository covers
+# NeRF-Synthetic, so the settings come from upstream's generic scene preset:
+# configs/tandt.yaml `scene_defaults` (outdoor kind, 4M points, external-prior
+# weights zeroed, no per-scene overrides) on top of configs/common.yaml. This is
+# T²-Splat's novel-view-synthesis recipe, the training block it shares with its
+# Mip-NeRF 360 preset: Safe RDT "surface" backend, progressive visibility collapse,
+# 30k geometry + 5k texture iterations. msbench/tests/test_t2splat.py checks that
+# these configs resolve to the same train.py options as configs/t2splat/tandt/truck.yaml.
+# Upstream's Blender loader starts from 100k random points in [-1.3, 1.3]^3. The
+# dataset protocol (white background, official test split) comes from
+# configs/base/nerf_synthetic.yaml.
+
+trainer:
+  rdt_backend: surface
+  visibility_pruning: progressive_collapse
+  heartbeat_safety: true
+  topology_monitor_interval: 1000
+  visibility_prune_start_iter: 21000
+  visibility_prune_end_iter: 27000
+  visibility_prune_interval: 1000
+  visibility_prune_threshold_start: 0.05
+  visibility_prune_threshold_end: 0.5
+  visibility_prune_max_face_ratio: 0.02
+  start_vertex_normal: 20000
+  max_points: 4000000
+  # outdoor, then the preset's scene_defaults (prior supervision off)
+  lambda_normals: 0.00005
+  iteration_mesh: 7000
+  lambda_normals_super: 0.0
+  depth_lambda_init: 0.0
+  depth_lambda_final: 0.0
+  # Keep training images in host memory (GPU memory only; no effect on results).
+  data_device: cpu

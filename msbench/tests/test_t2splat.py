@@ -19,6 +19,8 @@ PRESETS = json.loads((Path(__file__).with_name("data_t2splat_upstream_presets.js
 # Options MeshSuite sets itself: total length comes from trainer.max_steps and the
 # in-training test reports (logging only) are disabled.
 RUNNER_OWNED = {"iterations", "final_only_monitoring"}
+# Neither the paper nor upstream covers NeRF-Synthetic; its configs are derived (see below).
+NERF_SYNTHETIC = ("chair", "drums", "ficus", "hotdog", "lego", "materials", "mic", "ship")
 
 
 def _scene_configs():
@@ -43,11 +45,34 @@ def _effective_options(argv: list[str]):
     return model_params.extract(args), opt
 
 
-def test_t2splat_covers_its_paper_datasets_only():
-    datasets = {dataset for dataset, _, _ in _scene_configs()}
-    # The paper evaluates Mip-NeRF 360, Tanks & Temples and DTU; no NeRF-Synthetic.
-    assert datasets == {"mipnerf360", "tandt", "dtu"}
-    assert {(d, s) for d, s, _ in _scene_configs()} == {(v["dataset"], s) for s, v in PRESETS.items()}
+def test_t2splat_covers_the_upstream_presets_and_nerf_synthetic():
+    scenes = {(d, s) for d, s, _ in _scene_configs()}
+    # The paper and upstream presets cover Mip-NeRF 360, Tanks & Temples and DTU.
+    upstream = {(v["dataset"], s) for s, v in PRESETS.items()}
+    assert {d for d, _ in upstream} == {"mipnerf360", "tandt", "dtu"}
+    assert scenes == upstream | {("nerf_synthetic", s) for s in NERF_SYNTHETIC}
+
+
+@pytest.mark.parametrize("scene", NERF_SYNTHETIC)
+def test_t2splat_nerf_synthetic_uses_the_generic_upstream_preset(scene, tmp_path):
+    """NeRF-Synthetic resolves to upstream's scene_defaults preset, as T&T truck does."""
+
+    def resolve(path):
+        cfg = Config.fromfile(str(REPO / path))
+        trainer = _trainer(cfg)
+        argv = geometry_argv(trainer, dataset_root=str(tmp_path), model_path=tmp_path,
+                             geometry_iterations=30000)
+        return cfg, trainer, *_effective_options(argv)
+
+    cfg, trainer, model, opt = resolve(f"configs/t2splat/nerf_synthetic/{scene}.yaml")
+    truck_cfg, truck_trainer, _, truck_opt = resolve("configs/t2splat/tandt/truck.yaml")
+    assert vars(opt) == vars(truck_opt)
+    assert texture_settings(trainer) == texture_settings(truck_trainer)
+    assert cfg.trainer.max_steps == truck_cfg.trainer.max_steps == 35000
+    assert opt.rdt_backend == "surface" and opt.visibility_pruning == "progressive_collapse"
+    # Shared NeRF-Synthetic protocol: official test split held out, white, full resolution.
+    assert model.eval is True and model.white_background is True and model.resolution == 1
+    assert cfg.mesh.clean is False and cfg.eval.mesh.geometry_mode == "mesh"
 
 
 def test_t2splat_dataset_protocol_is_identical_to_other_methods():
