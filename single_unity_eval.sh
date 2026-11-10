@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+source "$(dirname "${BASH_SOURCE[0]}")/tools/pipeline_common.sh"
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${REPO_ROOT}"
 
@@ -166,21 +168,6 @@ require_value() {
 
 lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
 
-canonical_method() {
-    local name
-    name="$(lower "$1")"
-    name="${name//_/-}"
-    case "${name}" in
-        trianglesplatting) echo "triangle-splatting" ;;
-        trianglesplatting-game-engine|ts-game-engine) echo "triangle-splatting-game-engine" ;;
-        meshsplatting) echo "mesh-splatting" ;;
-        t2-splat|t2splat) echo "t2splat" ;;
-        2dts|d2ts) echo "2dts" ;;
-        2dts-opaque|d2ts-opaque) echo "2dts-opaque" ;;
-        diffsoup) echo "diffsoup" ;;
-        *) echo "${name}" ;;
-    esac
-}
 
 # Method variants have their own configs, outputs and reports, but run on their
 # base method's package format and Unity renderers: 2dts-opaque is 2DTS trained
@@ -449,6 +436,21 @@ resolve_reference_image_dir() {
     local SEEN_CANDIDATES=()
     if [[ -n "${override}" ]]; then
         printf '%s\n' "${override}"
+        return 0
+    fi
+    if [[ "${image_dir}" == /* ]]; then
+        printf '%s\n' "${image_dir}"
+        return 0
+    fi
+    if [[ "${METHOD_ID}" == "2dts" && "${dataset}" == "mipnerf360" && "${IMAGE_PREPROCESSING:-stored}" == "legacy_bilinear_floor" ]]; then
+        "${PYTHON_BIN}" - "${dataset_path}" "${image_dir}" "${resolution}" <<'PY'
+import sys
+from msbench.core.image_sources import LEGACY_PREPROCESSING, resolve_colmap_image_source
+directory, _ = resolve_colmap_image_source(
+    sys.argv[2], int(sys.argv[3]), root=sys.argv[1], image_preprocessing=LEGACY_PREPROCESSING,
+)
+print(directory)
+PY
         return 0
     fi
     if [[ "${resolution}" =~ ^[2-9][0-9]*$ && -n "${image_dir}" ]]; then
@@ -732,6 +734,7 @@ for target in "${EXPANDED_TARGETS[@]}"; do
     MODEL_PATH="$(config_value "${CONFIG_FILE}" "output.dir")"
     DATASET_PATH="$(config_value "${CONFIG_FILE}" "dataset.root")"
     IMAGE_DIR="$(config_value "${CONFIG_FILE}" "dataset.image_dir")"
+    IMAGE_PREPROCESSING="$(config_value "${CONFIG_FILE}" "dataset.image_preprocessing")"
     RESOLUTION="$(config_value "${CONFIG_FILE}" "dataset.resolution")"
     TRAINER_DOWNSCALE="$(config_value "${CONFIG_FILE}" "trainer.downscale")"
     if [[ -z "${MODEL_PATH}" ]]; then
@@ -765,7 +768,11 @@ for target in "${EXPANDED_TARGETS[@]}"; do
     RESULT_DIR="${MODEL_PATH}/${OUTPUT_NAME}"
     TRI_ASSET="${MODEL_PATH}/${ASSET_SUBDIR}/${ENGINE_METHOD_ID}.triasset"
     REF_IMAGE_DIR="$(resolve_reference_image_dir "${DATASET}" "${SCENE}" "${DATASET_PATH}" "${IMAGE_DIR}" "${RESOLUTION}" "${REFERENCE_IMAGE_DIR_OVERRIDE}")"
-    REF_PATH="${DATASET_PATH}/${REF_IMAGE_DIR}"
+    if [[ "${REF_IMAGE_DIR}" == /* ]]; then
+        REF_PATH="${REF_IMAGE_DIR}"
+    else
+        REF_PATH="${DATASET_PATH}/${REF_IMAGE_DIR}"
+    fi
     if [[ "${REF_IMAGE_DIR}" != "${REFERENCE_IMAGE_DIR_OVERRIDE:-${IMAGE_DIR}}" ]]; then
         echo "[${LABEL}] Reference image dir resolved to ${REF_IMAGE_DIR} (config requested ${IMAGE_DIR})"
     fi

@@ -22,26 +22,6 @@ dependencies:
   - wheel
   - pip:
       - numpy<2.0.0
-      - Pillow
-      - imageio[ffmpeg]
-      - opencv-python
-      - scipy
-      - trimesh
-      - pytorch-msssim
-      - lpips
-      - typer>=0.9
-      - pyyaml
-      - rich
-      - tabulate
-      - tensorboard
-      - torchmetrics
-      - shapely
-      - plyfile
-      - open3d==0.19.0
-      - scikit-image
-      - scikit-learn
-      - matplotlib
-      - mediapy
-      - nanobind>=2.11.0
-      # Install the project after activation as documented in README.md,
-      # so its build uses this environment's PyTorch and CUDA toolkit.
+      # Python-only install; build the CUDA extensions after activation as
+      # documented in README.md, so they use this environment's PyTorch and CUDA toolkit.
+      - -e .[runtime,cuda,method-2dts,method-triangle-splatting,method-mesh-splatting,method-diffsoup,geometry]

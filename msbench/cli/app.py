@@ -1,4 +1,4 @@
-"""MeshSplatBench CLI entry point."""
+"""MeshSuite CLI entry point."""
 
 import typer
 
@@ -13,7 +13,7 @@ from msbench.cli.export_unity import export_unity_app
 
 app = typer.Typer(
     name="msbench",
-    help="MeshSplatBench: a config-driven benchmark for triangle/splatting reconstruction.",
+    help="MeshSuite: a config-driven benchmark for triangle/splatting reconstruction.",
     no_args_is_help=True,
     rich_markup_mode="rich",
 )
@@ -34,9 +34,9 @@ app.add_typer(export_unity_app, name="export-unity", help="Export feature-preser
 
 @app.command()
 def version():
-    """Show MeshSplatBench version."""
+    """Show MeshSuite version."""
     from msbench import __version__
-    typer.echo(f"MeshSplatBench v{__version__}")
+    typer.echo(f"MeshSuite v{__version__}")
 
 
 @app.command()

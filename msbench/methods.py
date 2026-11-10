@@ -14,9 +14,17 @@ class MethodSpec:
     cuda_backends: tuple[str, ...]
     aliases: tuple[str, ...] = ()
     training_module: str | None = None
+    # Third-party modules the method imports at runtime; MeshSuite does not build them.
+    runtime_modules: tuple[str, ...] = ()
 
 
 METHODS = {
+    "exmesh": MethodSpec(
+        "exmesh", "exmesh", "msbench.vendor.exmesh",
+        "msbench.renderers.exmesh_adapter", (), (),
+        "msbench.trainers.exmesh_method",
+        runtime_modules=("nvdiffrast.torch", "xatlas"),
+    ),
     "2dts": MethodSpec(
         "2dts", "d2ts", "msbench.vendor.d2ts.diff_recon",
         "msbench.renderers.d2ts_adapter", ("2dts", "simple-knn"), ("d2ts",),
@@ -33,6 +41,11 @@ METHODS = {
         ("mesh-splatting", "simple-knn"), ("meshsplatting",),
         "msbench.trainers.mesh_splatting_method",
     ),
+    "t2splat": MethodSpec(
+        "t2splat", "t2splat", "msbench.vendor.t2splat",
+        "msbench.renderers.t2splat_adapter",
+        ("t2splat", "simple-knn"), ("t2-splat", "t^2-splat", "t²-splat"),
+    ),
     "diffsoup": MethodSpec(
         "diffsoup", "diffsoup", "msbench.vendor.diffsoup",
         "msbench.renderers.diffsoup_adapter", ("diffsoup",), (),
@@ -44,6 +57,7 @@ CUDA_MODULES = {
     "2dts": "msbench.vendor._cmod.d2ts_rasterization._C",
     "triangle-splatting": "msbench.vendor._cmod.triangle_splatting_rasterization._C",
     "mesh-splatting": "msbench.vendor._cmod.mesh_splatting_rasterization._C",
+    "t2splat": "msbench.vendor._cmod.t2splat_rasterization._C",
     "simple-knn": "msbench.vendor._cmod.simple_knn._C",
     "diffsoup": "msbench.vendor.diffsoup.diffsoup._core",
 }

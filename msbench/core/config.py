@@ -160,7 +160,7 @@ def resolve_dataset_config(config: Mapping[str, Any]) -> dict[str, Any]:
     root = dataset.get("root", dataset.get("dataset_path", ""))
     if dtype in COLMAP_TYPES or (dtype == "auto" and is_colmap_scene(root)):
         image_dir, resolution = resolve_colmap_image_source(
-            str(dataset.get("image_dir", "images")), int(dataset.get("resolution", 1)),
+            str(dataset.get("image_dir", "images")), dataset.get("resolution", 1),
             root=root, image_preprocessing=str(dataset.get("image_preprocessing", "stored")),
         )
         dataset["image_dir"] = image_dir

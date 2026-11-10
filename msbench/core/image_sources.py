@@ -50,10 +50,21 @@ def validate_legacy_image_cache(root: str | Path, directory: str | Path) -> dict
     return manifest
 
 
+def _standard_factor(resolution) -> int | None:
+    """Return 2/4/8 for a standard downscale factor; None for widths, -1 or [W, H]."""
+    if isinstance(resolution, bool) or not isinstance(resolution, (int, str)):
+        return None
+    try:
+        factor = int(resolution)
+    except ValueError:
+        return None
+    return factor if factor in {2, 4, 8} else None
+
+
 def resolve_colmap_image_source(
-    image_dir: str, resolution: int, *, root: str | Path | None = None,
+    image_dir: str, resolution, *, root: str | Path | None = None,
     image_preprocessing: str = "stored",
-) -> tuple[str, int]:
+) -> tuple[str, object]:
     """Resolve standard downscale factors to disk images, without resizing twice.
 
     Explicit custom folders and target-width/automatic resolution controls keep
@@ -62,12 +73,13 @@ def resolve_colmap_image_source(
     """
     if image_preprocessing not in {"stored", LEGACY_PREPROCESSING}:
         raise ValueError(f"Unknown image preprocessing protocol: {image_preprocessing}")
-    if image_preprocessing == LEGACY_PREPROCESSING and image_dir == "images" and resolution in {2, 4, 8}:
+    factor = _standard_factor(resolution)
+    if image_preprocessing == LEGACY_PREPROCESSING and image_dir == "images" and factor is not None:
         if root is None:
             raise ValueError("Dataset root is required for the legacy preprocessing cache")
-        return str(legacy_image_cache_dir(root, resolution)), 1
-    if image_dir == "images" and resolution in {2, 4, 8}:
-        return f"images_{resolution}", 1
+        return str(legacy_image_cache_dir(root, factor)), 1
+    if image_dir == "images" and factor is not None:
+        return f"images_{factor}", 1
     return image_dir, resolution
 
 
