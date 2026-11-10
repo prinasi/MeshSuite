@@ -270,9 +270,8 @@ def _export_dry_run(method: str, tmp_path: Path, *flags: str) -> str:
     return result.stdout + result.stderr
 
 
-@pytest.mark.parametrize("method,flags", [("2dts", ("--opaque",)), ("2dts-opaque", ())])
-def test_export_wrapper_passes_the_threshold_and_the_engine_method(tmp_path: Path, method, flags):
-    output = _export_dry_run(method, tmp_path, *flags)
+def test_export_wrapper_passes_the_threshold_and_the_engine_method(tmp_path: Path):
+    output = _export_dry_run("2dts", tmp_path, "--opaque")
     assert "--method 2dts " in output
     assert "--d2ts-ste-threshold 0.3" in output
     assert f"{tmp_path}/run/unity_native/2dts" in output
@@ -287,8 +286,9 @@ def test_export_wrapper_leaves_the_volumetric_run_alone(tmp_path: Path):
 def test_variant_tables_agree_between_shell_and_python():
     methods = sorted({path.name for path in (REPO / "configs").iterdir() if path.is_dir() and path.name != "base"})
     for method in [*methods, *METHOD_VARIANTS]:
-        base = _shell(f"variant_base_method {method}").stdout.strip()
-        assert (base or None) == METHOD_VARIANTS.get(method, (None,))[0], method
+        spec = _shell(f"variant_spec {method}").stdout.split()
+        assert (tuple(spec) or None) == METHOD_VARIANTS.get(method), method
+        assert _shell(f"method_cli_args {method}").stdout.split() == (spec or [method])
         for dataset in ("mipnerf360", "tandt", "nerf_synthetic", "dtu"):
             inputs = _shell(f"scene_config_inputs configs {method} {dataset} truck").stdout.split()
             assert inputs == [str(path) for path in scene_config_inputs("configs", method, dataset, "truck")]
@@ -304,10 +304,11 @@ def test_opaque_covers_exactly_the_datasets_with_an_overlay():
 
 
 def test_opaque_flag_is_rejected_outside_2dts_and_its_datasets(tmp_path: Path):
-    assert _shell("opaque_method 2dts; opaque_method 2dts-opaque").stdout.split() == ["2dts-opaque"] * 2
-    rejected = _shell("opaque_method triangle-splatting")
-    assert rejected.returncode != 0
-    assert "--opaque applies only to 2dts, not triangle-splatting" in rejected.stderr
+    assert _shell("opaque_method 2dts").stdout.strip() == "2dts-opaque"
+    for method in ("triangle-splatting", "2dts-opaque"):
+        rejected = _shell(f"opaque_method {method}")
+        assert rejected.returncode != 0
+        assert f"--opaque applies only to 2dts, not {method}" in rejected.stderr
     # No overlay for NeRF-Synthetic: the missing overlay is what callers report.
     missing = _shell(f"scene_config_for configs 2dts-opaque nerf_synthetic chair {tmp_path}")
     assert missing.stdout.strip() == "configs/base/2dts-opaque-nerf_synthetic.yaml"
@@ -315,9 +316,21 @@ def test_opaque_flag_is_rejected_outside_2dts_and_its_datasets(tmp_path: Path):
 
 
 @pytest.mark.parametrize("script", ENTRY_SCRIPTS)
+def test_the_variant_id_is_not_a_method_argument(script: str):
+    # Like a flag-only variant should: 2dts-opaque names outputs and reports only.
+    result = subprocess.run(
+        ["bash", script, "2dts-opaque", "tandt/truck", "0", "--python", sys.executable],
+        cwd=REPO, capture_output=True, text=True,
+    )
+    assert result.returncode != 0
+    assert "Unknown method: 2dts-opaque. Use: 2dts ... --opaque" in result.stderr
+
+
+@pytest.mark.parametrize("script", ENTRY_SCRIPTS)
 def test_every_entry_script_accepts_the_opaque_flag(script: str):
     text = (REPO / script).read_text()
     assert "--opaque) " in text and "OPAQUE=1" in text
+    assert 'reject_variant_method "${METHOD_ID}" || exit 1' in text
     assert 'METHOD_ID="$(opaque_method "${METHOD_ID}")" || exit 1' in text
     assert "scene_config_for " in text
     assert "configs/2dts-opaque" not in text

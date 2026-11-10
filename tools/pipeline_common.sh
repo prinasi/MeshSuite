@@ -10,29 +10,52 @@ canonical_method() {
         meshsplatting|ms) echo "mesh-splatting" ;;
         t2-splat) echo "t2splat" ;;
         d2ts) echo "2dts" ;;
-        d2ts-opaque) echo "2dts-opaque" ;;
         diff-soup) echo "diffsoup" ;;
         *) echo "${name}" ;;
     esac
 }
 
-# Method variants selected by a command-line flag. A variant has no scene configs
-# of its own: it runs its base method's scene config followed by
-# configs/base/<variant>-<dataset>.yaml, while the variant name labels its output
-# tree (output.method), reports and logs. Mirrors METHOD_VARIANTS in
-# msbench/methods.py.
-variant_base_method() {
+# Method variants selected by a command-line flag on their base method, never by
+# name: variant id -> "<base method> <flag>". A variant has no scene configs of its
+# own: it runs its base method's scene config followed by
+# configs/base/<variant>-<dataset>.yaml, while the variant id labels its output tree
+# (output.method), reports and logs. Mirrors METHOD_VARIANTS in msbench/methods.py.
+variant_spec() {
     case "$1" in
-        2dts-opaque) echo "2dts" ;;
+        2dts-opaque) echo "2dts --opaque" ;;
         *) return 1 ;;
     esac
+}
+
+variant_base_method() {
+    local spec
+    spec="$(variant_spec "$1")" || return 1
+    echo "${spec%% *}"
+}
+
+variant_flag() {
+    local spec
+    spec="$(variant_spec "$1")" || return 1
+    echo "${spec#* }"
+}
+
+# A variant id is not a method argument; point to the flag that selects it.
+reject_variant_method() {
+    variant_spec "$1" >/dev/null || return 0
+    echo "Unknown method: $1. Use: $(variant_base_method "$1") ... $(variant_flag "$1")" >&2
+    return 1
+}
+
+# The method arguments that select METHOD on another entry script.
+method_cli_args() {
+    variant_spec "$1" || echo "$1"
 }
 
 # `--opaque` selects 2dts-opaque: 2DTS trained and deployed under the opaque
 # strategy (configs/base/2dts-opaque.yaml).
 opaque_method() {
     case "$1" in
-        2dts|2dts-opaque) echo "2dts-opaque" ;;
+        2dts) echo "2dts-opaque" ;;
         *) echo "--opaque applies only to 2dts, not $1" >&2; return 1 ;;
     esac
 }

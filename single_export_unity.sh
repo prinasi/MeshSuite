@@ -237,6 +237,7 @@ else
     TARGETS=("${POSITIONAL[@]:0:$((${#POSITIONAL[@]} - 1))}")
 fi
 METHOD_ID="$(canonical_method "${METHOD}")"
+reject_variant_method "${METHOD_ID}" || exit 1
 if [[ "${TRAIN_GAME_ENGINE}" -eq 1 ]]; then
     case "${METHOD_ID}" in
         triangle-splatting|triangle-splatting-game-engine) METHOD_ID="triangle-splatting-game-engine" ;;

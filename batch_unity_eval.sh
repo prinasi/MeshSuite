@@ -50,8 +50,8 @@ Defaults cover:
   methods   ${ALL_METHODS[*]}
   datasets  ${ALL_DATASETS[*]}
   settings  ${ALL_CONDITIONS[*]}
-2dts-opaque is 2dts --opaque. Groups without configs (2dts-opaque on nerf_synthetic)
-are skipped.
+The 2dts-opaque group runs 2dts --opaque and keeps the variant id for its reports.
+Groups without configs (2dts-opaque on nerf_synthetic) are skipped.
 
 Options:
   --unity PATH           Unity Editor executable (default: \$UNITY)
@@ -221,6 +221,7 @@ for method in "${METHODS[@]}"; do
             continue
         fi
         scenes=("${configured[@]}")
+        read -r -a method_args <<<"$(method_cli_args "${method}")"
         for condition in "${CONDITIONS[@]}"; do
             group="${method}/${condition}/${dataset}"
             asset_subdir="$(asset_subdir_for "${method}" "${condition}")"
@@ -241,7 +242,7 @@ for method in "${METHODS[@]}"; do
                     [[ -f "${export_marker}" ]] || flags+=(--force-export)
                     [[ -f "${STATUS_DIR}/player_built" ]] || flags+=(--force-player-build)
                     echo "[${group}/${scene}] attempt $((attempt + 1))/$((RETRIES + 1))"
-                    if run_logged "${log}" bash single_unity_eval.sh "${method}" "${dataset}/${scene}" "${GPU_ID}" \
+                    if run_logged "${log}" bash single_unity_eval.sh "${method_args[@]}" "${dataset}/${scene}" "${GPU_ID}" \
                         "--${condition}" "${COMMON_ARGS[@]}" "${flags[@]}" \
                         --report-dir "${EVAL_ROOT}/scratch_reports/${group}/${scene}" \
                         "${EXTRA_ARGS[@]}"; then
@@ -273,7 +274,7 @@ for method in "${METHODS[@]}"; do
             fi
             report_dir="${REPORTS_DIR}/${group}"
             # Only this campaign's completed scenes enter the report, never older outputs.
-            if run_logged "${LOG_DIR}/${group}/report.log" bash single_unity_eval.sh "${method}" "${done_targets[@]}" "${GPU_ID}" \
+            if run_logged "${LOG_DIR}/${group}/report.log" bash single_unity_eval.sh "${method_args[@]}" "${done_targets[@]}" "${GPU_ID}" \
                 "--${condition}" --report-only --config-root "${CONFIG_ROOT}" --python "${PYTHON_BIN}" \
                 --report-dir "${report_dir}" "${EXTRA_ARGS[@]}"; then
                 if [[ "${DRY_RUN}" -eq 0 ]]; then

@@ -624,7 +624,8 @@ followed by `configs/base/2dts-opaque-<dataset>.yaml`, which adds the shared rec
 `configs/base/2dts-opaque.yaml` and selects the dataset's opaque native preset. Only
 Mip-NeRF 360 and Tanks & Temples have that overlay. `single_train.sh`,
 `single_export_unity.sh`, `single_unity_eval.sh` and `single_unity_video.sh` accept
-`--opaque`, and `2dts-opaque` still works as the method name.
+`--opaque`; the method id `2dts-opaque` names only the output tree and reports and is
+not accepted as a method argument.
 
 The schedule is the one the paper states for its mesh setting (arXiv v3, Sec. 4.3),
 which it evaluates on NeRF-Synthetic and DTU only. Tanks & Temples takes its other

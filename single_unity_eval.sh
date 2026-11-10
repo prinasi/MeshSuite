@@ -585,6 +585,7 @@ else
 fi
 
 METHOD_ID="$(canonical_method "${METHOD}")"
+reject_variant_method "${METHOD_ID}" || exit 1
 if [[ "${TRAIN_GAME_ENGINE}" -eq 1 ]]; then
     case "${METHOD_ID}" in
         triangle-splatting|triangle-splatting-game-engine) METHOD_ID="triangle-splatting-game-engine" ;;
@@ -675,7 +676,8 @@ if [[ "${NEEDS_UNITY}" -eq 1 ]]; then
 fi
 
 if [[ "${SKIP_EXPORT}" -eq 0 && "${BAKE_DIFFSOUP}" -eq 0 ]]; then
-    EXPORT_CMD=("bash" "${REPO_ROOT}/single_export_unity.sh" "${METHOD_ID}")
+    read -r -a EXPORT_METHOD_ARGS <<<"$(method_cli_args "${METHOD_ID}")"
+    EXPORT_CMD=("bash" "${REPO_ROOT}/single_export_unity.sh" "${EXPORT_METHOD_ARGS[@]}")
     EXPORT_CMD+=("${EXPANDED_TARGETS[@]}" "${GPU_ID}")
     EXPORT_CMD+=(--config-root "${CONFIG_ROOT}" --output-subdir "${ASSET_SUBDIR}" --python "${PYTHON_BIN}")
     [[ "${FORCE_EXPORT}" -eq 1 ]] && EXPORT_CMD+=(--force)
