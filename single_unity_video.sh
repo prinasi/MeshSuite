@@ -32,6 +32,7 @@ FORCE_UNITY=0
 CONTINUE_ON_ERROR=0
 DRY_RUN=0
 TRAIN_GAME_ENGINE=0
+OPAQUE=0
 REFERENCE_IMAGE_DIR_OVERRIDE=""
 
 if [[ -n "${PYTHON_BIN:-}" ]]; then
@@ -84,6 +85,8 @@ Options:
   --continue-on-error      Keep running subsequent scenes when a scene fails
   --train_game_engine      Triangle Splatting only: use the train_game_engine.py variant,
                            same as method triangle-splatting-game-engine
+  --opaque                 2DTS only: the mesh-oriented opaque setting (method id
+                           2dts-opaque), trained with single_train.sh --opaque
   --dry-run                Print commands without launching Unity
   -h, --help               Show this help message
 EOF
@@ -132,6 +135,7 @@ while [[ $# -gt 0 ]]; do
         --reference-image-dir|--reference_image_dir) require_value "$@"; REFERENCE_IMAGE_DIR_OVERRIDE="$2"; shift 2 ;;
         --continue-on-error) CONTINUE_ON_ERROR=1; shift ;;
         --train_game_engine|--train-game-engine) TRAIN_GAME_ENGINE=1; shift ;;
+        --opaque) OPAQUE=1; shift ;;
         --dry-run|--dry_run) DRY_RUN=1; shift ;;
         --python) require_value "$@"; PYTHON_BIN="$2"; shift 2 ;;
         -h|--help) usage; exit 0 ;;
@@ -169,7 +173,12 @@ if [[ "${TRAIN_GAME_ENGINE}" -eq 1 ]]; then
             ;;
     esac
 fi
+if [[ "${OPAQUE}" -eq 1 ]]; then
+    METHOD_ID="$(opaque_method "${METHOD_ID}")" || exit 1
+fi
 ENGINE_METHOD_ID="$(engine_method "${METHOD_ID}")"
+VARIANT_CONFIG_DIR="$(variant_config_dir "${METHOD_ID}")"
+[[ -z "${VARIANT_CONFIG_DIR}" ]] || trap 'rm -rf -- "${VARIANT_CONFIG_DIR}"' EXIT
 if [[ -z "${OUTPUT_NAME}" ]]; then
     OUTPUT_NAME="unity_custom_engine"
     [[ "${CONDITION}" == "standard-engine" ]] && OUTPUT_NAME="unity_standard_engine"
@@ -229,7 +238,7 @@ FAILED=0
 for target in "${RESOLVED_TARGETS[@]}"; do
     dset="$(dirname "${target}")"
     scene="$(basename "${target}")"
-    cfg="${CONFIG_ROOT}/${METHOD_ID}/${dset}/${scene}.yaml"
+    cfg="$(scene_config_for "${CONFIG_ROOT}" "${METHOD_ID}" "${dset}" "${scene}" "${VARIANT_CONFIG_DIR}")"
     if [[ ! -f "${cfg}" ]]; then
         cfg="${CONFIG_ROOT}/${METHOD_ID}/${dset}.yaml"
     fi

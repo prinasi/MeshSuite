@@ -12,6 +12,7 @@ set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${REPO_ROOT}"
+source tools/pipeline_common.sh
 
 ALL_METHODS=(triangle-splatting triangle-splatting-game-engine 2dts 2dts-opaque diffsoup mesh-splatting)
 ALL_DATASETS=(mipnerf360 tandt nerf_synthetic)
@@ -49,7 +50,8 @@ Defaults cover:
   methods   ${ALL_METHODS[*]}
   datasets  ${ALL_DATASETS[*]}
   settings  ${ALL_CONDITIONS[*]}
-Groups without configs (2dts-opaque on nerf_synthetic) are skipped.
+2dts-opaque is 2dts --opaque. Groups without configs (2dts-opaque on nerf_synthetic)
+are skipped.
 
 Options:
   --unity PATH           Unity Editor executable (default: \$UNITY)
@@ -209,17 +211,21 @@ FAILURES=()
 
 for method in "${METHODS[@]}"; do
     for dataset in "${DATASETS_SEL[@]}"; do
-        if [[ ! -d "${CONFIG_ROOT}/${method}/${dataset}" ]]; then
+        read -r -a scenes <<<"$(scenes_for "${dataset}")"
+        configured=()
+        for scene in "${scenes[@]}"; do
+            has_scene_config "${CONFIG_ROOT}" "${method}" "${dataset}" "${scene}" && configured+=("${scene}")
+        done
+        if [[ "${#configured[@]}" -eq 0 ]]; then
             echo "[skip] ${method}/${dataset}: no configs"
             continue
         fi
-        read -r -a scenes <<<"$(scenes_for "${dataset}")"
+        scenes=("${configured[@]}")
         for condition in "${CONDITIONS[@]}"; do
             group="${method}/${condition}/${dataset}"
             asset_subdir="$(asset_subdir_for "${method}" "${condition}")"
             done_targets=()
             for scene in "${scenes[@]}"; do
-                [[ -f "${CONFIG_ROOT}/${method}/${dataset}/${scene}.yaml" ]] || continue
                 done_marker="${STATUS_DIR}/done/${group}/${scene}"
                 if [[ -f "${done_marker}" ]]; then
                     echo "[${group}/${scene}] Completed in this campaign; skipping"

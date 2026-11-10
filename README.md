@@ -609,14 +609,22 @@ triangles have too few vertices to carry its appearance. The bake needs CUDA and
 scene's COLMAP dataset, and `--force-export` re-bakes. A Player built before the
 cutout shader existed needs `--force-player-build`.
 
-### Mesh-oriented 2DTS (`2dts-opaque`)
+### Mesh-oriented 2DTS (`2dts --opaque`)
 
 `configs/2dts/` trains 2DTS as the volumetric radiance field its paper evaluates on
-Mip-NeRF 360 and Tanks & Temples. `2dts-opaque` trains the same scenes with the same
-dataset protocol and primitive budgets, but ends on solid triangles: gamma anneals
-from 1 to 50 over the last 10k of 30k iterations, opacity is binarised at 0.3, and
-the renderer sorts per pixel. Its outputs stay separate, in `outputs/2dts-opaque/`
-and `outputs/unity_reports/2dts-opaque/`.
+Mip-NeRF 360 and Tanks & Temples. The optional `--opaque` flag (method id
+`2dts-opaque`) trains the same scenes with the same dataset protocol and primitive
+budgets, but ends on solid triangles: gamma anneals from 1 to 50 over the last 10k of
+30k iterations, opacity is binarised at 0.3, and the renderer sorts per pixel. Its
+outputs stay separate, in `outputs/2dts-opaque/` and
+`outputs/unity_reports/2dts-opaque/`.
+
+The flag has no scene configs of its own. Each run uses the `configs/2dts` scene config
+followed by `configs/base/2dts-opaque-<dataset>.yaml`, which adds the shared recipe in
+`configs/base/2dts-opaque.yaml` and selects the dataset's opaque native preset. Only
+Mip-NeRF 360 and Tanks & Temples have that overlay. `single_train.sh`,
+`single_export_unity.sh`, `single_unity_eval.sh` and `single_unity_video.sh` accept
+`--opaque`, and `2dts-opaque` still works as the method name.
 
 The schedule is the one the paper states for its mesh setting (arXiv v3, Sec. 4.3),
 which it evaluates on NeRF-Synthetic and DTU only. Tanks & Temples takes its other
@@ -628,14 +636,14 @@ configuration is beyond the v5 manuscript.
 
 ```bash
 # De facto renderer: train, render the held-out views, score them.
-bash single_train.sh 2dts-opaque mipnerf360/all 0
-bash single_train.sh 2dts-opaque tandt/all 0
+bash single_train.sh 2dts mipnerf360/all 0 --opaque
+bash single_train.sh 2dts tandt/all 0 --opaque
 
 # Custom and standard engine deployment.
 for dataset in mipnerf360 tandt; do
-  ./single_unity_eval.sh 2dts-opaque "$dataset/all" 0 --unity "$UNITY" --unity-project unity \
+  ./single_unity_eval.sh 2dts "$dataset/all" 0 --opaque --unity "$UNITY" --unity-project unity \
     --report-name "unity_metrics_report_$dataset"
-  ./single_unity_eval.sh 2dts-opaque "$dataset/all" 0 --unity "$UNITY" --unity-project unity \
+  ./single_unity_eval.sh 2dts "$dataset/all" 0 --opaque --unity "$UNITY" --unity-project unity \
     --report-name "unity_metrics_report_$dataset" --standard-engine
 done
 
@@ -701,7 +709,8 @@ rebuilt:
 
 `batch_unity_eval.sh` re-evaluates both engine deployment settings for every method
 and variant (`triangle-splatting`, `triangle-splatting-game-engine`, `2dts`,
-`2dts-opaque`, `diffsoup` with its baked Std. package, `mesh-splatting`) on
+`2dts-opaque` (`2dts --opaque`), `diffsoup` with its baked Std. package,
+`mesh-splatting`) on
 Mip-NeRF 360, Tanks and Temples and NeRF-Synthetic, and merges the results into one
 text file:
 
@@ -780,9 +789,6 @@ configs/2dts/
 ├── dtu/scan24.yaml
 ├── mipnerf360/bicycle.yaml
 ├── native/dtu.yaml
-└── tandt/truck.yaml
-configs/2dts-opaque/
-├── mipnerf360/bicycle.yaml
 └── tandt/truck.yaml
 configs/exmesh/
 ├── dtu/scan24.yaml

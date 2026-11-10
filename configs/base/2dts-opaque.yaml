@@ -1,8 +1,18 @@
 # @format
 
-# Mesh-oriented 2DTS, the mesh setting of the paper (arXiv v3 Sec. 4.3): 30K
-# iterations, gamma 1 for the first 20K and then 1 to 50 over the last 10K, with
-# opacity binarised through the straight-through threshold throughout.
+# Mesh-oriented 2DTS, selected with `--opaque` on the 2dts method (method id
+# 2dts-opaque): the mesh setting of the paper (arXiv v3 Sec. 4.3), 30K iterations,
+# gamma 1 for the first 20K and then 1 to 50 over the last 10K, with opacity
+# binarised through the straight-through threshold throughout.
+#
+# The variant has no scene configs of its own. `--opaque` runs a 2dts scene config
+# followed by configs/base/2dts-opaque-<dataset>.yaml, which inherits this file and
+# picks the dataset's opaque native preset; a dataset without that file has no opaque
+# recipe. Scene budgets and the dataset protocol therefore stay those of the 2dts
+# scene config, and output.method keeps the runs in their own output tree.
+
+experiment:
+  name: 2dts_opaque_{scene}
 
 trainer:
   max_steps: 30000

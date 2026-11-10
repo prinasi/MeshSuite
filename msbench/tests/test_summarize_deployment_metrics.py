@@ -76,7 +76,24 @@ def test_flags_incomplete_groups_and_methods_without_configs(tmp_path: Path) -> 
     assert "WARNING: mean covers 1 of 2 scenes; missing: train" in text
     assert "baked RGBA texture atlas" in text
     assert "2DTS (opaque) [2dts-opaque] | Std. (standard engine deployment) | NeRF-Synthetic" in text
-    assert "NOT APPLICABLE: no configs" in text
+    assert "NOT APPLICABLE: 2dts-opaque has no configs for nerf_synthetic" in text
+
+
+def test_variant_scenes_come_from_the_base_method_and_its_overlay(tmp_path: Path) -> None:
+    configs, reports = tmp_path / "configs", tmp_path / "reports"
+    _config(configs, "2dts", "tandt", ["truck", "train"])
+    _config(configs, "2dts", "nerf_synthetic", ["chair"])
+    (configs / "base").mkdir()
+    (configs / "base" / "2dts-opaque-tandt.yaml").write_text("{}\n")
+    _report(reports, "2dts-opaque", "custom-engine", "tandt", [{"scene": "truck", "psnr": 25.0}])
+    text, _ = _summarize(
+        tmp_path, "--methods", "2dts-opaque", "--datasets", "tandt", "nerf_synthetic",
+        "--conditions", "custom-engine",
+    )
+
+    assert "INCOMPLETE, missing train" in text
+    # 2dts has NeRF-Synthetic configs, but --opaque has no overlay there.
+    assert "NOT APPLICABLE: 2dts-opaque has no configs for nerf_synthetic" in text
 
 
 def test_batch_script_parses_and_summarizes_only(tmp_path: Path) -> None:

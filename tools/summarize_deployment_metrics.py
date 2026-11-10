@@ -18,6 +18,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from msbench.methods import configured_scenes
+
 # Method order and display names follow the manuscript; the bracketed config id
 # is printed next to each name so a variant is never mistaken for its base.
 METHODS = {
@@ -83,8 +85,7 @@ def fmt(value: Any, digits: int) -> str:
 
 
 def expected_scenes(config_root: Path, method: str, dataset: str) -> list[str]:
-    directory = config_root / method / dataset
-    present = {path.stem for path in directory.glob("*.yaml")} if directory.is_dir() else set()
+    present = configured_scenes(config_root, method, dataset)
     ordered = [scene for scene in SCENE_ORDER.get(dataset, []) if scene in present]
     return ordered + sorted(present - set(ordered))
 
@@ -148,7 +149,7 @@ def summarize(
                 title = f"{method_name} | {setting} | {DATASETS.get(dataset, dataset)}"
                 sections += ["", "=" * len(title), title, "=" * len(title)]
                 if not scenes:
-                    sections.append(f"NOT APPLICABLE: no configs under {config_root / method / dataset}")
+                    sections.append(f"NOT APPLICABLE: {method} has no configs for {dataset}")
                     continue
                 group = load_group(reports_root, method, condition, dataset)
                 if group is None:
