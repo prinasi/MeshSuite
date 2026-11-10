@@ -82,6 +82,38 @@ def test_delaunay_dependency_is_checked_only_when_enabled(monkeypatch):
     require_method_cuda("mesh-splatting", trainer_cfg={"run_restricted_delaunay": 11000})
 
 
+def test_t2splat_preflight_rejects_effrdel_without_face_selector(monkeypatch):
+    from types import SimpleNamespace
+    import msbench.runtime as runtime
+
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+
+    def stale_run(input_verts, input_faces, verbose=False, orient=False):
+        return input_faces
+
+    def current_run(input_verts, input_faces, verbose=False, orient=False,
+                    return_debug=False, face_selector=None):
+        return input_faces
+
+    def use_rdel(run):
+        rdel = SimpleNamespace(run=run, __file__="rdel/__init__.py")
+        monkeypatch.setattr(runtime.importlib, "import_module", lambda name: rdel)
+
+    use_rdel(stale_run)
+    with pytest.raises(RuntimeError, match="return_debug, face_selector.*submodules/effrdel"):
+        require_method_cuda("t2splat")
+    use_rdel(current_run)
+    require_method_cuda("t2splat")
+
+    def missing(name):
+        if name == "rdel":
+            raise ImportError("not installed")
+
+    monkeypatch.setattr(runtime.importlib, "import_module", missing)
+    with pytest.raises(RuntimeError, match="restricted Delaunay.*rdel"):
+        require_method_cuda("t2-splat")
+
+
 def test_broken_plugin_does_not_hide_healthy_plugin(monkeypatch):
     from types import SimpleNamespace
     from msbench.core import plugins

@@ -290,7 +290,9 @@ video, and export commands remain available through their current entry points.
 
 Training requires a working CUDA device and loadable method-specific rasterizer/KNN
 operators. KNN never falls back silently to `torch.cdist`. Restricted Delaunay's
-`rdel` dependency is checked when enabled. MeshSplatting retains its existing optional
+`rdel` dependency is checked when enabled; T²-Splat always runs it and also rejects an
+effrdel build older than this checkout's `submodules/effrdel` (no `rdel.run`
+`face_selector`/`return_debug`). MeshSplatting retains its existing optional
 fused-SSIM choice and records its availability. Evaluation still runs in the method
 environment to preserve the current metric semantics; shared image scoring is a
 separate next phase.

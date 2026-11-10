@@ -209,6 +209,9 @@ def run_t2splat_native_config(
         print(f"Found final T²-Splat checkpoint {_checkpoint_dir(model_path, max_steps)}; nothing to train.")
         return _summary(max_steps, max_steps, 0.0, stages)
 
+    from msbench.runtime import require_method_cuda
+
+    require_method_cuda("t2splat")
     argv = geometry_argv(
         trainer_cfg,
         dataset_root=dataset_root,

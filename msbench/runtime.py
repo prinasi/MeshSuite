@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import inspect
 
 from msbench.methods import CUDA_MODULES, METHODS, canonical_method_name
 
@@ -37,12 +38,29 @@ def require_method_cuda(method: str, *, trainer_cfg: dict | None = None) -> None
                 f"Original error: {exc}"
             ) from exc
     if name == "mesh-splatting" and int((trainer_cfg or {}).get("run_restricted_delaunay", -1)) >= 0:
-        try:
-            rdel = importlib.import_module("rdel")
-            if not callable(getattr(rdel, "run", None)):
-                raise ImportError("rdel module does not provide run")
-        except (ImportError, OSError) as exc:
-            raise RuntimeError(
-                "MeshSplatting config enables restricted Delaunay but rdel (effrdel) "
-                f"cannot load in this environment. Install submodules/effrdel first. Original error: {exc}"
-            ) from exc
+        _require_rdel(name)
+    if name == "t2splat":
+        # T²-Splat always runs restricted Delaunay (by default at densify_until_iter + 1000)
+        # and passes the face-selector keywords merged into submodules/effrdel.
+        _require_rdel(name, keywords=("return_debug", "face_selector"))
+
+
+def _require_rdel(name: str, keywords: tuple[str, ...] = ()) -> None:
+    """Require effrdel's rdel.run, accepting ``keywords``, before training starts."""
+    install = "pip install --no-build-isolation ./submodules/effrdel"
+    try:
+        rdel = importlib.import_module("rdel")
+        if not callable(getattr(rdel, "run", None)):
+            raise ImportError("rdel module does not provide run")
+    except (ImportError, OSError) as exc:
+        raise RuntimeError(
+            f"Method '{name}' runs restricted Delaunay but rdel (effrdel) cannot load in this "
+            f"environment. Install it first: {install}. Original error: {exc}"
+        ) from exc
+    missing = [key for key in keywords if key not in inspect.signature(rdel.run).parameters]
+    if missing:
+        raise RuntimeError(
+            f"Method '{name}' calls rdel.run with {', '.join(missing)}, which the installed "
+            f"effrdel ({getattr(rdel, '__file__', 'rdel')}) predates. Reinstall it from this "
+            f"checkout: {install}"
+        )
