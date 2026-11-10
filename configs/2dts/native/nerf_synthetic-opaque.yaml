@@ -22,6 +22,14 @@
 #   sample per pixel, so the model would be trained for a renderer it is not evaluated with.
 # As for the other datasets, the densification budget is the 2dts scene config's
 # d2ts.target_point_num, and no geometry is scored on this dataset.
+#
+# Reproduced on chair (30K, RTX 3060, de facto renderer): 30.38 and 30.41 PSNR, 0.957 SSIM, 0.059 LPIPS,
+# with 19K triangles. The paper's Table 10 gives 34.16 / 0.982 / 0.025 with 84K faces, numbers that
+# depend on its own renderer (Table 9: NeRF-Synthetic mean 30.80, 25.60 re-rendered with Kaolin), so
+# the gap is acknowledged rather than tuned away. On the random NeRF-Synthetic initialisation,
+# contribution pruning from the first epoch leaves about 2K triangles within 300 iterations, and
+# max_grow_ratio 0.01 lets densification regrow only to about 20K; starting the pruning at 15K
+# instead gave 31.10 with 29K triangles (not adopted: neither the paper nor upstream sets it).
 lr_delay_steps: &LR_DELAY_STEPS 2_000
 lr_delay_mult: &LR_DELAY_MULT 1.0
 lr_max_steps: &LR_MAX_STEPS 20_000

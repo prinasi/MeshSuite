@@ -646,7 +646,11 @@ section, `max_grow_ratio`, scale pruning, and geometric losses from 3k with
 `w_distortion` 0.05. It leaves out the second stage's settings and its `render_spp: 2`
 (2x2 supersampling in training), since MeshSuite's de facto 2DTS renderer draws one
 sample per pixel. The budget is the 2dts scene config's 1M triangles, while upstream
-prunes its second stage to 41k–112k. This configuration is beyond the v5 manuscript.
+prunes its second stage to 41k–112k. On chair this recipe reaches 30.4 PSNR with about
+19k triangles, against the paper's 34.16 with 84k faces (Table 10). Those numbers depend
+on the paper's own renderer (its Table 9 drops the NeRF-Synthetic mean from 30.80 to
+25.60 under Kaolin), so the gap is expected and left as is. This configuration is
+beyond the v5 manuscript.
 
 ```bash
 # De facto renderer: train, render the held-out views, score them.
