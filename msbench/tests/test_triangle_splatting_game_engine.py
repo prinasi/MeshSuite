@@ -14,6 +14,7 @@ from PIL import Image
 
 from msbench.cli.train import _triangle_splatting_native_argv
 from msbench.core.config import load_config
+from msbench.methods import configured_scenes
 from msbench.vendor.triangle_splatting.train import (
     build_parser,
     final_dead_mask,
@@ -107,15 +108,33 @@ BASE_SCENES = sorted(
 )
 
 
+def _variant_config(scene: Path, directory: Path) -> Path:
+    """The config `triangle-splatting --train_game_engine` runs, generated as the entry scripts do."""
+    result = subprocess.run(
+        ["bash", "-c", f"source tools/pipeline_common.sh; "
+         f"scene_config_for configs {VARIANT} {scene.parent} {scene.stem} {directory}"],
+        cwd=REPO, capture_output=True, text=True, check=True,
+    )
+    path = Path(result.stdout.strip())
+    assert path.parent == directory, path
+    return path
+
+
 def test_every_triangle_splatting_scene_has_a_game_engine_config():
-    variant = sorted(path.relative_to(REPO / "configs" / VARIANT) for path in (REPO / "configs" / VARIANT).rglob("*.yaml"))
+    variant = sorted(
+        Path(dataset) / f"{scene}.yaml"
+        for dataset in ("mipnerf360", "tandt", "nerf_synthetic")
+        for scene in configured_scenes(REPO / "configs", VARIANT, dataset)
+    )
     assert variant == BASE_SCENES
+    assert configured_scenes(REPO / "configs", VARIANT, "dtu") == set()
+    assert not (REPO / "configs" / VARIANT).exists()
 
 
 @pytest.mark.parametrize("scene", BASE_SCENES, ids=str)
-def test_game_engine_configs_differ_from_triangle_splatting_only_by_the_recipe(scene):
+def test_game_engine_configs_differ_from_triangle_splatting_only_by_the_recipe(scene, tmp_path: Path):
     base = _flat(load_config(REPO / "configs" / "triangle-splatting" / scene))
-    variant = _flat(load_config(REPO / "configs" / VARIANT / scene))
+    variant = _flat(load_config(_variant_config(scene, tmp_path)))
 
     assert variant.pop("trainer.game_engine") is True
     assert variant.pop("output.method") == VARIANT
@@ -137,10 +156,27 @@ def _single_train(*args):
     )
 
 
-def test_single_train_flag_selects_the_game_engine_configs(tmp_path: Path):
+def test_single_train_flag_needs_the_dataset_overlay(tmp_path: Path):
+    scene = tmp_path / "triangle-splatting" / "mipnerf360" / "bicycle.yaml"
+    scene.parent.mkdir(parents=True)
+    scene.write_text("{}\n")
     result = _single_train("triangle-splatting", "mipnerf360/bicycle", "0", "--train_game_engine", "--config_root", str(tmp_path))
     assert result.returncode == 1
-    assert f"Config missing: {tmp_path}/{VARIANT}/mipnerf360/bicycle.yaml" in result.stderr
+    assert f"Config missing: {tmp_path}/base/{VARIANT}-mipnerf360.yaml" in result.stderr
+
+
+ENTRY_SCRIPTS = ["single_train.sh", "single_export_unity.sh", "single_unity_eval.sh", "single_unity_video.sh"]
+
+
+@pytest.mark.parametrize("method", [VARIANT, "ts-game-engine"])
+@pytest.mark.parametrize("script", ENTRY_SCRIPTS)
+def test_the_variant_id_is_not_a_method_argument(script, method):
+    result = subprocess.run(
+        ["bash", str(REPO / script), method, "mipnerf360/bicycle", "0", "--python", sys.executable],
+        cwd=REPO, capture_output=True, text=True,
+    )
+    assert result.returncode == 1
+    assert f"Unknown method: {VARIANT}. Use: triangle-splatting ... --train_game_engine" in result.stderr
 
 
 def test_single_train_flag_rejects_other_methods():
@@ -174,10 +210,7 @@ def test_unity_scripts_reject_train_game_engine_for_other_methods(script):
     assert "--train_game_engine applies only to triangle-splatting" in result.stderr
 
 
-@pytest.mark.parametrize(
-    "method_args", [(VARIANT,), ("triangle-splatting", "--train_game_engine")], ids=["method", "flag"]
-)
-def test_unity_eval_deploys_the_variant_as_triangle_splatting(tmp_path: Path, method_args):
+def test_unity_eval_deploys_the_variant_as_triangle_splatting(tmp_path: Path):
     scene = tmp_path / "data" / "garden"
     (scene / "sparse" / "0").mkdir(parents=True)
     for name in ("cameras.bin", "images.bin"):
@@ -185,12 +218,16 @@ def test_unity_eval_deploys_the_variant_as_triangle_splatting(tmp_path: Path, me
     (scene / "images").mkdir()
     Image.new("RGB", (4, 4)).save(scene / "images" / "a.png")
     out_dir = tmp_path / "out" / VARIANT / "mipnerf360" / "garden"
-    config = tmp_path / "configs" / VARIANT / "mipnerf360" / "garden.yaml"
+    config = tmp_path / "configs" / "triangle-splatting" / "mipnerf360" / "garden.yaml"
     config.parent.mkdir(parents=True)
     config.write_text(f"dataset:\n  root: {scene}\noutput:\n  dir: {out_dir}\n")
+    overlay = tmp_path / "configs" / "base" / f"{VARIANT}-mipnerf360.yaml"
+    overlay.parent.mkdir()
+    overlay.write_text(f"_base_: {REPO}/configs/base/{VARIANT}-mipnerf360.yaml\n")
     out = subprocess.run(
         [
-            "bash", str(REPO / "single_unity_eval.sh"), method_args[0], "mipnerf360/garden", "0", *method_args[1:],
+            "bash", str(REPO / "single_unity_eval.sh"), "triangle-splatting", "mipnerf360/garden", "0",
+            "--train_game_engine",
             "--config-root", str(tmp_path / "configs"), "--python", sys.executable,
             "--unity", str(tmp_path / "unity"), "--unity-project", str(tmp_path),
             "--skip-player-build", "--unity-player", str(tmp_path / "player"),
@@ -199,7 +236,7 @@ def test_unity_eval_deploys_the_variant_as_triangle_splatting(tmp_path: Path, me
         cwd=REPO, capture_output=True, text=True, check=True, env=dict(os.environ),
     ).stdout
 
-    assert f"single_export_unity.sh {VARIANT} mipnerf360/garden" in out
+    assert "single_export_unity.sh triangle-splatting --train_game_engine mipnerf360/garden" in out
     assert out.count("--method triangle-splatting ") == 4  # capture and three profile runs
     assert f"--outputs-root {out_dir.parent}" in out
     assert f"--method {VARIANT} --condition custom-engine" in out

@@ -117,22 +117,24 @@ bash single_train.sh t2splat mipnerf360/all 0
 
 ### Triangle Splatting for game engines
 
-`triangle-splatting-game-engine` trains Triangle Splatting with the official
-repository's `train_game_engine.py`, which produces opaque, solid triangles for
-import into a game engine. After densification, an extra loss pushes triangles towards
-opaque and sharp ones, and pruning also drops transparent triangles (opacity
-≤ 0.1, then ≤ 0.7 after 29K iterations) and soft ones (σ ≥ 1 after 28K). Every
-other setting, including the dataset protocol, comes from the matching
-`configs/triangle-splatting` scene config. Configs cover Mip-NeRF 360, Tanks &
-Temples and NeRF-Synthetic. Outputs go to
-`outputs/triangle-splatting-game-engine/<dataset>/<scene>`.
+The optional `--train_game_engine` flag (method id `triangle-splatting-game-engine`)
+trains Triangle Splatting with the official repository's `train_game_engine.py`,
+which produces opaque, solid triangles for import into a game engine. After
+densification, an extra loss pushes triangles towards opaque and sharp ones, and
+pruning also drops transparent triangles (opacity ≤ 0.1, then ≤ 0.7 after 29K
+iterations) and soft ones (σ ≥ 1 after 28K). Every other setting, including the
+dataset protocol, comes from the matching `configs/triangle-splatting` scene config.
+Outputs go to `outputs/triangle-splatting-game-engine/<dataset>/<scene>`.
+
+The flag has no scene configs of its own. Each run uses the `configs/triangle-splatting`
+scene config followed by `configs/base/triangle-splatting-game-engine-<dataset>.yaml`,
+which adds the recipe in `configs/base/triangle-splatting-game-engine.yaml`. Mip-NeRF
+360, Tanks & Temples and NeRF-Synthetic have that overlay. The method id names only
+the output tree and reports and is not accepted as a method argument.
 
 ```bash
 bash single_train.sh triangle-splatting mipnerf360/all 0 --train_game_engine
 bash single_unity_eval.sh triangle-splatting mipnerf360/all 0 --standard-engine --train_game_engine
-# Same as:
-bash single_train.sh triangle-splatting-game-engine mipnerf360/all 0
-bash single_unity_eval.sh triangle-splatting-game-engine mipnerf360/all 0 --standard-engine
 ```
 
 `single_unity_eval.sh`, `single_export_unity.sh` and `single_unity_video.sh`
@@ -709,7 +711,8 @@ rebuilt:
 ### Re-run every deployment metric
 
 `batch_unity_eval.sh` re-evaluates both engine deployment settings for every method
-and variant (`triangle-splatting`, `triangle-splatting-game-engine`, `2dts`,
+and variant (`triangle-splatting`, `triangle-splatting-game-engine`
+(`triangle-splatting --train_game_engine`), `2dts`,
 `2dts-opaque` (`2dts --opaque`), `diffsoup` with its baked Std. package,
 `mesh-splatting`) on
 Mip-NeRF 360, Tanks and Temples and NeRF-Synthetic, and merges the results into one

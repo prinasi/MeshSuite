@@ -136,8 +136,11 @@ Options:
   --cap_mesh_splatting NUM      Limit for mesh-splatting
   --cap_2dts NUM                Limit for 2dts
   --train_game_engine      Triangle Splatting only: train with the official repository's
-                           train_game_engine.py recipe (opaque, solid triangles). Same as
-                           method triangle-splatting-game-engine; outputs go to
+                           train_game_engine.py recipe (opaque, solid triangles; method id
+                           triangle-splatting-game-engine): each triangle-splatting scene
+                           config followed by
+                           configs/base/triangle-splatting-game-engine-<dataset>.yaml
+                           (mipnerf360, tandt, nerf_synthetic); outputs go to
                            outputs/triangle-splatting-game-engine/<dataset>/<scene>
   --opaque                 2DTS only: train the mesh-oriented opaque setting (method id
                            2dts-opaque): each 2dts scene config followed by
@@ -1124,13 +1127,7 @@ fi
 METHOD_ID="$(canonical_method "${METHOD}")"
 reject_variant_method "${METHOD_ID}" || exit 1
 if [[ "${TRAIN_GAME_ENGINE}" -eq 1 ]]; then
-    case "${METHOD_ID}" in
-        triangle-splatting|triangle-splatting-game-engine) METHOD_ID="triangle-splatting-game-engine" ;;
-        *)
-            echo "--train_game_engine applies only to triangle-splatting, not ${METHOD_ID}" >&2
-            exit 1
-            ;;
-    esac
+    METHOD_ID="$(train_game_engine_method "${METHOD_ID}")" || exit 1
 fi
 if [[ "${OPAQUE}" -eq 1 ]]; then
     METHOD_ID="$(opaque_method "${METHOD_ID}")" || exit 1

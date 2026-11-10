@@ -1,0 +1,10 @@
+# @format
+
+# `triangle-splatting --train_game_engine` on NeRF-Synthetic: the shared recipe,
+# applied after each configs/triangle-splatting/nerf_synthetic scene config, whose
+# experiment names carry the dataset.
+
+_base_: triangle-splatting-game-engine.yaml
+
+experiment:
+  name: triangle_splatting_game_engine_nerf_synthetic_{scene}

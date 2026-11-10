@@ -61,6 +61,7 @@ METHODS = {
 # in tools/pipeline_common.sh.
 METHOD_VARIANTS = {
     "2dts-opaque": ("2dts", "--opaque"),
+    "triangle-splatting-game-engine": ("triangle-splatting", "--train_game_engine"),
 }
 
 

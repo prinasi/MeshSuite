@@ -50,8 +50,10 @@ Defaults cover:
   methods   ${ALL_METHODS[*]}
   datasets  ${ALL_DATASETS[*]}
   settings  ${ALL_CONDITIONS[*]}
-The 2dts-opaque group runs 2dts --opaque and keeps the variant id for its reports.
-Groups without configs (2dts-opaque on nerf_synthetic) are skipped.
+Variant groups run their base method with its flag and keep the variant id for their
+reports: triangle-splatting-game-engine is triangle-splatting --train_game_engine and
+2dts-opaque is 2dts --opaque. Groups without configs (2dts-opaque on nerf_synthetic)
+are skipped.
 
 Options:
   --unity PATH           Unity Editor executable (default: \$UNITY)
