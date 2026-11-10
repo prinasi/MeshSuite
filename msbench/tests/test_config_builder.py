@@ -510,6 +510,34 @@ def test_all_methods_share_scene_dataset_protocol():
     assert not mismatches
 
 
+def test_every_scene_dataset_config_reaches_load_dataset(monkeypatch):
+    """Render/eval pass every resolved dataset key on to load_dataset.
+
+    Training can silently ignore a dataset key (native trainers read their own
+    subset), so a key load_dataset lacks only crashes later, at rendering.
+    """
+    import inspect
+
+    import msbench.core.datasets as datasets
+    from msbench.cli.config import dataset_config
+    from msbench.core.builder import build_dataset
+
+    signature = inspect.signature(datasets.load_dataset)
+    monkeypatch.setattr(datasets, "load_dataset", lambda *a, **kw: signature.bind(*a, **kw))
+    repo = Path(__file__).resolve().parents[2]
+    checked = 0
+    for path in sorted((repo / "configs").glob("*/*/*.yaml")):
+        method, dataset = path.parts[-3], path.parts[-2]
+        if method == "base" or dataset == "native":
+            continue
+        try:
+            build_dataset(dataset_config(Config.fromfile(path), stage="render"))
+        except TypeError as exc:
+            raise AssertionError(f"{path.relative_to(repo)}: {exc}") from exc
+        checked += 1
+    assert checked >= 34
+
+
 def test_dtu_trains_every_method_on_all_views():
     """DTU is a mesh benchmark: no method holds out views for training or meshing."""
     import yaml
