@@ -697,6 +697,32 @@ rebuilt:
   --force-profile
 ```
 
+### Re-run every deployment metric
+
+`batch_unity_eval.sh` re-evaluates both engine deployment settings for every method
+and variant (`triangle-splatting`, `triangle-splatting-game-engine`, `2dts`,
+`2dts-opaque`, `diffsoup` with its baked Std. package, `mesh-splatting`) on
+Mip-NeRF 360, Tanks and Temples and NeRF-Synthetic, and merges the results into one
+text file:
+
+```bash
+bash batch_unity_eval.sh 0 --unity "$UNITY" --unity-project unity --display "$DISPLAY"
+# after a failure, finish the remaining scenes with the same options:
+bash batch_unity_eval.sh 0 --unity "$UNITY" --unity-project unity --display "$DISPLAY" --resume
+```
+
+Each scene runs `single_unity_eval.sh` with every stage forced (export or bake,
+capture, Player profile, metrics), and the standalone Player is rebuilt once, so no
+earlier number survives. A failed scene is retried (`--retries`, default 2) and the run
+continues. One report per method x setting x dataset holds only the scenes this
+campaign completed. `tools/summarize_deployment_metrics.py` then writes
+`outputs/deployment_eval/deployment_metrics_summary.txt`: an overview of dataset means,
+then a per-scene table for each group, with missing or incomplete groups marked.
+A companion `.csv` holds the same rows at full precision. `--methods`,
+`--datasets` and `--settings` select a subset, `--dry-run` resolves every command
+without running Unity, `--summary-only` rebuilds the text file, and options after
+`--` go to every `single_unity_eval.sh` call.
+
 ### Resolution and dataset rules
 
 Every method, 2DTS included, reads the stored `images_2`/`images_4` folders the
