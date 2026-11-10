@@ -1,0 +1,9 @@
+# @format
+
+# `2dts --opaque` on Mip-NeRF 360: the shared opaque recipe with this dataset's
+# opaque native preset (applied after each configs/2dts/mipnerf360 scene config).
+
+_base_: 2dts-opaque.yaml
+
+d2ts:
+  native_config: configs/2dts/native/mipnerf360-opaque.yaml

@@ -1,4 +1,4 @@
-"""Mesh-oriented 2DTS: configs, the opacity threshold at export, and the wiring."""
+"""Mesh-oriented 2DTS (`2dts --opaque`): configs, the opacity threshold at export, and the wiring."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ import torch
 import yaml
 
 from msbench.core.config import load_config
+from msbench.methods import METHOD_VARIANTS, configured_scenes, scene_config_inputs
 from msbench.trainers.d2ts_native import _build_d2ts_native_config
 from msbench.unity_assets import D2TS_SOLID_OPACITY_LOGIT, export_triasset
 from tools.validate_unity_triasset_cpu import validate_triasset
@@ -23,6 +24,37 @@ SCENES = {
     "tandt": ("train", "truck"),
 }
 TARGETS = [(dataset, scene) for dataset, scenes in SCENES.items() for scene in scenes]
+ENTRY_SCRIPTS = ("single_train.sh", "single_export_unity.sh", "single_unity_eval.sh", "single_unity_video.sh")
+
+
+def _shell(command: str) -> subprocess.CompletedProcess:
+    """Run bash with the pipeline helpers that every entry script sources."""
+    return subprocess.run(
+        ["bash", "-c", f"source tools/pipeline_common.sh; {command}"],
+        cwd=REPO, capture_output=True, text=True,
+    )
+
+
+def _opaque_config(dataset: str, scene: str, directory: Path) -> Path:
+    """The config `2dts --opaque` runs, generated as the entry scripts do."""
+    result = _shell(f"scene_config_for configs 2dts-opaque {dataset} {scene} {directory}")
+    assert result.returncode == 0, result.stderr
+    path = Path(result.stdout.strip())
+    assert path.parent == directory, path
+    return path
+
+
+def _retired_scene_config(dataset: str, scene: str, directory: Path) -> Path:
+    """configs/2dts-opaque/<dataset>/<scene>.yaml as it was before `--opaque`: the 2dts
+    scene config with the opaque base appended, its opaque native preset and name."""
+    data = yaml.safe_load((REPO / f"configs/2dts/{dataset}/{scene}.yaml").read_text())
+    bases = [str((REPO / f"configs/2dts/{dataset}" / base).resolve()) for base in data["_base_"]]
+    data["_base_"] = [*bases, str(REPO / "configs/base/2dts-opaque.yaml")]
+    data["experiment"] = {"name": f"2dts_opaque_{scene}"}
+    data["d2ts"]["native_config"] = f"configs/2dts/native/{dataset}-opaque.yaml"
+    path = directory / f"retired_{dataset}_{scene}.yaml"
+    path.write_text(yaml.safe_dump(data))
+    return path
 
 
 def _write_checkpoint(path: Path, opacity: list[float], *, gamma: float = 50.0) -> None:
@@ -37,8 +69,17 @@ def _write_checkpoint(path: Path, opacity: list[float], *, gamma: float = 50.0) 
 
 
 @pytest.mark.parametrize("dataset,scene", TARGETS)
-def test_opaque_scene_shares_the_volumetric_protocol_and_budget(dataset: str, scene: str):
-    cfg = load_config(REPO / f"configs/2dts-opaque/{dataset}/{scene}.yaml")
+def test_opaque_flag_reproduces_the_retired_scene_configs(dataset: str, scene: str, tmp_path: Path):
+    # Checkpoints trained from the per-scene 2dts-opaque configs stay valid.
+    flag = load_config(_opaque_config(dataset, scene, tmp_path))
+    assert flag == load_config(_retired_scene_config(dataset, scene, tmp_path))
+    assert flag["experiment"]["name"] == f"2dts_opaque_{scene}"
+    assert flag["d2ts"]["native_config"] == f"configs/2dts/native/{dataset}-opaque.yaml"
+
+
+@pytest.mark.parametrize("dataset,scene", TARGETS)
+def test_opaque_scene_shares_the_volumetric_protocol_and_budget(dataset: str, scene: str, tmp_path: Path):
+    cfg = load_config(_opaque_config(dataset, scene, tmp_path))
     volumetric = load_config(REPO / f"configs/2dts/{dataset}/{scene}.yaml")
 
     assert cfg["dataset"] == volumetric["dataset"]
@@ -54,8 +95,8 @@ def test_opaque_scene_shares_the_volumetric_protocol_and_budget(dataset: str, sc
 
 
 @pytest.mark.parametrize("dataset,scene", TARGETS)
-def test_opaque_outputs_never_touch_the_volumetric_run(dataset: str, scene: str):
-    cfg = load_config(REPO / f"configs/2dts-opaque/{dataset}/{scene}.yaml")
+def test_opaque_outputs_never_touch_the_volumetric_run(dataset: str, scene: str, tmp_path: Path):
+    cfg = load_config(_opaque_config(dataset, scene, tmp_path))
     run = f"outputs/2dts-opaque/{dataset}/{scene}"
 
     assert cfg["output"]["dir"] == run
@@ -68,7 +109,7 @@ def test_opaque_outputs_never_touch_the_volumetric_run(dataset: str, scene: str)
 def test_primitive_cap_keeps_the_variant_in_the_ablation_path(tmp_path: Path):
     config = tmp_path / "capped.yaml"
     config.write_text(
-        f"_base_: {REPO}/configs/2dts-opaque/tandt/truck.yaml\ntrainer:\n  max_primitives: 8000\n"
+        f"_base_: {_opaque_config('tandt', 'truck', tmp_path)}\ntrainer:\n  max_primitives: 8000\n"
     )
     cfg = load_config(config)
     assert cfg["output"]["dir"] == "outputs/abl/2dts-opaque-8000/tandt/truck"
@@ -116,7 +157,7 @@ def test_native_presets_follow_the_paper_schedule_and_upstream_recipe(dataset: s
 @pytest.mark.parametrize("dataset,scene", [("mipnerf360", "bicycle"), ("tandt", "truck")])
 def test_resolved_native_config_solidifies_over_the_last_third(dataset: str, scene: str, tmp_path: Path, monkeypatch):
     monkeypatch.chdir(REPO)
-    cfg = load_config(REPO / f"configs/2dts-opaque/{dataset}/{scene}.yaml")
+    cfg = load_config(_opaque_config(dataset, scene, tmp_path))
     native = _build_d2ts_native_config(
         cfg=cfg,
         dataset_root=f"data/{dataset}/{scene}",
@@ -205,20 +246,24 @@ def test_unity_solid_pass_is_wired_and_included_in_players():
     assert f"guid: {guid}, type: 3" in graphics
 
 
-def _export_dry_run(method: str, tmp_path: Path) -> str:
+def _export_dry_run(method: str, tmp_path: Path, *flags: str) -> str:
     """Resolve the export command for truck against a checkpoint that exists."""
     checkpoint = tmp_path / "ckpt"
     checkpoint.mkdir()
-    config = tmp_path / "configs" / method / "tandt" / "truck.yaml"
-    config.parent.mkdir(parents=True)
-    config.write_text(
-        f"_base_: {REPO}/configs/{method}/tandt/truck.yaml\n"
+    configs = tmp_path / "configs"
+    (configs / "2dts" / "tandt").mkdir(parents=True)
+    (configs / "2dts" / "tandt" / "truck.yaml").write_text(
+        f"_base_: {REPO}/configs/2dts/tandt/truck.yaml\n"
         f"adapter:\n  checkpoint: {checkpoint}\n"
         f"output:\n  dir: {tmp_path}/run\n"
     )
+    (configs / "base").mkdir()
+    (configs / "base" / "2dts-opaque-tandt.yaml").write_text(
+        f"_base_: {REPO}/configs/base/2dts-opaque-tandt.yaml\n"
+    )
     result = subprocess.run(
-        ["bash", "single_export_unity.sh", method, "tandt/truck", "cpu", "--dry-run",
-         "--config-root", str(tmp_path / "configs"), "--python", sys.executable],
+        ["bash", "single_export_unity.sh", method, "tandt/truck", "cpu", "--dry-run", *flags,
+         "--config-root", str(configs), "--python", sys.executable],
         cwd=REPO, check=True, capture_output=True, text=True,
         env={**os.environ, "PYTHONPATH": str(REPO)},
     )
@@ -226,7 +271,7 @@ def _export_dry_run(method: str, tmp_path: Path) -> str:
 
 
 def test_export_wrapper_passes_the_threshold_and_the_engine_method(tmp_path: Path):
-    output = _export_dry_run("2dts-opaque", tmp_path)
+    output = _export_dry_run("2dts", tmp_path, "--opaque")
     assert "--method 2dts " in output
     assert "--d2ts-ste-threshold 0.3" in output
     assert f"{tmp_path}/run/unity_native/2dts" in output
@@ -236,6 +281,59 @@ def test_export_wrapper_leaves_the_volumetric_run_alone(tmp_path: Path):
     output = _export_dry_run("2dts", tmp_path)
     assert "--method 2dts " in output
     assert "--d2ts-ste-threshold" not in output
+
+
+def test_variant_tables_agree_between_shell_and_python():
+    methods = sorted({path.name for path in (REPO / "configs").iterdir() if path.is_dir() and path.name != "base"})
+    for method in [*methods, *METHOD_VARIANTS]:
+        spec = _shell(f"variant_spec {method}").stdout.split()
+        assert (tuple(spec) or None) == METHOD_VARIANTS.get(method), method
+        assert _shell(f"method_cli_args {method}").stdout.split() == (spec or [method])
+        for dataset in ("mipnerf360", "tandt", "nerf_synthetic", "dtu"):
+            inputs = _shell(f"scene_config_inputs configs {method} {dataset} truck").stdout.split()
+            assert inputs == [str(path) for path in scene_config_inputs("configs", method, dataset, "truck")]
+
+
+def test_opaque_covers_exactly_the_datasets_with_an_overlay():
+    assert {dataset: configured_scenes(REPO / "configs", "2dts-opaque", dataset) for dataset in SCENES} == {
+        dataset: set(scenes) for dataset, scenes in SCENES.items()
+    }
+    assert configured_scenes(REPO / "configs", "2dts-opaque", "nerf_synthetic") == set()
+    assert configured_scenes(REPO / "configs", "2dts-opaque", "dtu") == set()
+    assert not (REPO / "configs" / "2dts-opaque").exists()
+
+
+def test_opaque_flag_is_rejected_outside_2dts_and_its_datasets(tmp_path: Path):
+    assert _shell("opaque_method 2dts").stdout.strip() == "2dts-opaque"
+    for method in ("triangle-splatting", "2dts-opaque"):
+        rejected = _shell(f"opaque_method {method}")
+        assert rejected.returncode != 0
+        assert f"--opaque applies only to 2dts, not {method}" in rejected.stderr
+    # No overlay for NeRF-Synthetic: the missing overlay is what callers report.
+    missing = _shell(f"scene_config_for configs 2dts-opaque nerf_synthetic chair {tmp_path}")
+    assert missing.stdout.strip() == "configs/base/2dts-opaque-nerf_synthetic.yaml"
+    assert not any(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize("script", ENTRY_SCRIPTS)
+def test_the_variant_id_is_not_a_method_argument(script: str):
+    # Like a flag-only variant should: 2dts-opaque names outputs and reports only.
+    result = subprocess.run(
+        ["bash", script, "2dts-opaque", "tandt/truck", "0", "--python", sys.executable],
+        cwd=REPO, capture_output=True, text=True,
+    )
+    assert result.returncode != 0
+    assert "Unknown method: 2dts-opaque. Use: 2dts ... --opaque" in result.stderr
+
+
+@pytest.mark.parametrize("script", ENTRY_SCRIPTS)
+def test_every_entry_script_accepts_the_opaque_flag(script: str):
+    text = (REPO / script).read_text()
+    assert "--opaque) " in text and "OPAQUE=1" in text
+    assert 'reject_variant_method "${METHOD_ID}" || exit 1' in text
+    assert 'METHOD_ID="$(opaque_method "${METHOD_ID}")" || exit 1' in text
+    assert "scene_config_for " in text
+    assert "configs/2dts-opaque" not in text
 
 
 def _read(path: Path, dtype: str):

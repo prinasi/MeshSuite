@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -52,6 +53,36 @@ METHODS = {
         "msbench.trainers.diffsoup_native",
     ),
 }
+
+# Method variants selected by a command-line flag: name -> (base method, flag).
+# A variant has no scene configs of its own: it runs its base method's scene
+# config followed by configs/base/<variant>-<dataset>.yaml, and its name labels
+# its output tree (output.method), reports and logs. Mirrors variant_base_method()
+# in tools/pipeline_common.sh.
+METHOD_VARIANTS = {
+    "2dts-opaque": ("2dts", "--opaque"),
+}
+
+
+def scene_config_inputs(config_root: str | Path, method: str, dataset: str, scene: str) -> list[Path]:
+    """The files a method's scene config is made of, in ``_base_`` order."""
+    root = Path(config_root)
+    if method in METHOD_VARIANTS:
+        base = METHOD_VARIANTS[method][0]
+        return [root / base / dataset / f"{scene}.yaml", root / "base" / f"{method}-{dataset}.yaml"]
+    return [root / method / dataset / f"{scene}.yaml"]
+
+
+def configured_scenes(config_root: str | Path, method: str, dataset: str) -> set[str]:
+    """Scenes of ``dataset`` that ``method`` (or variant) has a complete config for."""
+    base = METHOD_VARIANTS.get(method, (method,))[0]
+    directory = Path(config_root) / base / dataset
+    candidates = {path.stem for path in directory.glob("*.yaml")} if directory.is_dir() else set()
+    return {
+        scene for scene in candidates
+        if all(path.is_file() for path in scene_config_inputs(config_root, method, dataset, scene))
+    }
+
 
 CUDA_MODULES = {
     "2dts": "msbench.vendor._cmod.d2ts_rasterization._C",

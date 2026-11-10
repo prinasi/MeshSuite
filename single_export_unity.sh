@@ -33,6 +33,7 @@ TB_EXPORT_ARGS=()
 FORCE=0
 DRY_RUN=0
 TRAIN_GAME_ENGINE=0
+OPAQUE=0
 CONTINUE_ON_ERROR=0
 EXPORTED=0
 SKIPPED=0
@@ -66,6 +67,8 @@ Options:
   --continue-on-error      Export later scenes after an individual failure
   --train_game_engine      Triangle Splatting only: use the train_game_engine.py variant,
                            same as method triangle-splatting-game-engine
+  --opaque                 2DTS only: the mesh-oriented opaque setting (method id
+                           2dts-opaque), trained with single_train.sh --opaque
   --dry-run                Print resolved commands without exporting
   --python PATH            Python executable for config loading/fallback CLI
   -h, --help               Show this help
@@ -214,6 +217,7 @@ while [[ "$#" -gt 0 ]]; do
         --force) FORCE=1; shift ;;
         --continue-on-error) CONTINUE_ON_ERROR=1; shift ;;
         --train_game_engine|--train-game-engine) TRAIN_GAME_ENGINE=1; shift ;;
+        --opaque) OPAQUE=1; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
         --python) require_value "$@"; PYTHON_BIN="$2"; shift 2 ;;
         -h|--help) usage; exit 0 ;;
@@ -233,6 +237,7 @@ else
     TARGETS=("${POSITIONAL[@]:0:$((${#POSITIONAL[@]} - 1))}")
 fi
 METHOD_ID="$(canonical_method "${METHOD}")"
+reject_variant_method "${METHOD_ID}" || exit 1
 if [[ "${TRAIN_GAME_ENGINE}" -eq 1 ]]; then
     case "${METHOD_ID}" in
         triangle-splatting|triangle-splatting-game-engine) METHOD_ID="triangle-splatting-game-engine" ;;
@@ -242,7 +247,12 @@ if [[ "${TRAIN_GAME_ENGINE}" -eq 1 ]]; then
             ;;
     esac
 fi
+if [[ "${OPAQUE}" -eq 1 ]]; then
+    METHOD_ID="$(opaque_method "${METHOD_ID}")" || exit 1
+fi
 ENGINE_METHOD_ID="$(engine_method "${METHOD_ID}")"
+VARIANT_CONFIG_DIR="$(variant_config_dir "${METHOD_ID}")"
+[[ -z "${VARIANT_CONFIG_DIR}" ]] || trap 'rm -rf -- "${VARIANT_CONFIG_DIR}"' EXIT
 GPU_ID="$(lower "${GPU_ID}")"
 if [[ "${GPU_ID}" != "cpu" && ! "${GPU_ID}" =~ ^[0-9]+$ ]]; then
     echo "Invalid gpu_id: ${GPU_ID}. Expected a non-negative integer or 'cpu'." >&2
@@ -257,7 +267,7 @@ FAILED=0
 for target in "${EXPANDED_TARGETS[@]}"; do
     DATASET="$(dataset_label "${target%%/*}")"
     SCENE="${target#*/}"
-    CONFIG_FILE="${CONFIG_ROOT}/${METHOD_ID}/${DATASET}/${SCENE}.yaml"
+    CONFIG_FILE="$(scene_config_for "${CONFIG_ROOT}" "${METHOD_ID}" "${DATASET}" "${SCENE}" "${VARIANT_CONFIG_DIR}")"
     if [[ ! -f "${CONFIG_FILE}" ]]; then
         echo "[${DATASET}/${SCENE}] Config missing: ${CONFIG_FILE}" >&2
         FAILED=1

@@ -66,6 +66,7 @@ EXPLICIT_SKIP_CD_METRICS=0
 EXPLICIT_SKIP_VIDEO=0
 FORCE_RETRAIN=0
 TRAIN_GAME_ENGINE=0
+OPAQUE=0
 FORCE_RERUN_EXISTING=0
 
 SUMMARY_ROWS=()
@@ -105,6 +106,7 @@ Examples:
   bash $0 triangle-splatting all 0
   bash $0 t2splat dtu/all 0           # T²-Splat: mipnerf360, tandt and dtu only
   bash $0 triangle-splatting mipnerf360/all 0 --train_game_engine
+  bash $0 2dts tandt/all 0 --opaque
 
 Legacy form still works:
   bash $0 garden 0 --method triangle-splatting
@@ -137,6 +139,10 @@ Options:
                            train_game_engine.py recipe (opaque, solid triangles). Same as
                            method triangle-splatting-game-engine; outputs go to
                            outputs/triangle-splatting-game-engine/<dataset>/<scene>
+  --opaque                 2DTS only: train the mesh-oriented opaque setting (method id
+                           2dts-opaque): each 2dts scene config followed by
+                           configs/base/2dts-opaque-<dataset>.yaml (mipnerf360, tandt);
+                           outputs go to outputs/2dts-opaque/<dataset>/<scene>
   --dtu_eval_mode MODE     Override DTU mode for this run: foreground (masked) or full (unmasked)
   --dtu-foreground         Shortcut for --dtu_eval_mode foreground (default in dtu.yaml)
   --dtu-masked             Alias for --dtu-foreground
@@ -298,6 +304,10 @@ parse_target() {
 
 scene_config_path() {
     local method="$1" dataset="$2" scene="$3"
+    if variant_base_method "${method}" >/dev/null; then
+        scene_config_for "${CONFIG_ROOT}" "${method}" "$(dataset_label "${dataset}")" "${scene}" "${TEMP_OVERRIDE_CONFIG_DIR}"
+        return 0
+    fi
     if [[ -f "${CONFIG_ROOT}/${method}/${dataset}/${scene}.yaml" ]]; then
         echo "${CONFIG_ROOT}/${method}/${dataset}/${scene}.yaml"
         return 0
@@ -1079,6 +1089,7 @@ while [[ $# -gt 0 ]]; do
         --cap_mesh_splatting|--cap-mesh-splatting) require_value "$@"; CAP_MESH_SPLATTING="$2"; shift 2 ;;
         --cap_2dts|--cap-2dts|--cap_d2ts|--cap-d2ts) require_value "$@"; CAP_2DTS="$2"; shift 2 ;;
         --train_game_engine|--train-game-engine) TRAIN_GAME_ENGINE=1; shift ;;
+        --opaque)            OPAQUE=1; shift ;;
         --python)            require_value "$@"; PYTHON_BIN="$2"; shift 2 ;;
         -h|--help)           usage; exit 0 ;;
         *)
@@ -1111,6 +1122,7 @@ else
 fi
 
 METHOD_ID="$(canonical_method "${METHOD}")"
+reject_variant_method "${METHOD_ID}" || exit 1
 if [[ "${TRAIN_GAME_ENGINE}" -eq 1 ]]; then
     case "${METHOD_ID}" in
         triangle-splatting|triangle-splatting-game-engine) METHOD_ID="triangle-splatting-game-engine" ;;
@@ -1119,6 +1131,9 @@ if [[ "${TRAIN_GAME_ENGINE}" -eq 1 ]]; then
             exit 1
             ;;
     esac
+fi
+if [[ "${OPAQUE}" -eq 1 ]]; then
+    METHOD_ID="$(opaque_method "${METHOD_ID}")" || exit 1
 fi
 
 # Resolve stage flags. With no explicit stage request, run the full pipeline.
