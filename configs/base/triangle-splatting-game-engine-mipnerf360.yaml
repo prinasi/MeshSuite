@@ -1,0 +1,6 @@
+# @format
+
+# `triangle-splatting --train_game_engine` on Mip-NeRF 360: the shared recipe,
+# applied after each configs/triangle-splatting/mipnerf360 scene config.
+
+_base_: triangle-splatting-game-engine.yaml

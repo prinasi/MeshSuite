@@ -150,8 +150,9 @@ Options:
   --force-video            Re-render the --video trajectory video
   --skip-unity-patch       Do not patch legacy Unity project for Linux/Vulkan
   --continue-on-error      Continue with later scenes after a failure
-  --train_game_engine      Triangle Splatting only: use the train_game_engine.py variant,
-                           same as method triangle-splatting-game-engine
+  --train_game_engine      Triangle Splatting only: the train_game_engine.py variant (method
+                           id triangle-splatting-game-engine), trained with
+                           single_train.sh --train_game_engine
   --opaque                 2DTS only: the mesh-oriented opaque setting (method id
                            2dts-opaque), trained with single_train.sh --opaque
   --dry-run                Print resolved commands without running them
@@ -587,13 +588,7 @@ fi
 METHOD_ID="$(canonical_method "${METHOD}")"
 reject_variant_method "${METHOD_ID}" || exit 1
 if [[ "${TRAIN_GAME_ENGINE}" -eq 1 ]]; then
-    case "${METHOD_ID}" in
-        triangle-splatting|triangle-splatting-game-engine) METHOD_ID="triangle-splatting-game-engine" ;;
-        *)
-            echo "--train_game_engine applies only to triangle-splatting, not ${METHOD_ID}" >&2
-            exit 1
-            ;;
-    esac
+    METHOD_ID="$(train_game_engine_method "${METHOD_ID}")" || exit 1
 fi
 if [[ "${OPAQUE}" -eq 1 ]]; then
     METHOD_ID="$(opaque_method "${METHOD_ID}")" || exit 1

@@ -6,7 +6,9 @@ canonical_method() {
     name="${name//_/-}"
     case "${name}" in
         trianglesplatting|ts) echo "triangle-splatting" ;;
+        # Variant ids and their old aliases, rejected by reject_variant_method.
         trianglesplatting-game-engine|ts-game-engine) echo "triangle-splatting-game-engine" ;;
+        d2ts-opaque) echo "2dts-opaque" ;;
         meshsplatting|ms) echo "mesh-splatting" ;;
         t2-splat) echo "t2splat" ;;
         d2ts) echo "2dts" ;;
@@ -23,6 +25,7 @@ canonical_method() {
 variant_spec() {
     case "$1" in
         2dts-opaque) echo "2dts --opaque" ;;
+        triangle-splatting-game-engine) echo "triangle-splatting --train_game_engine" ;;
         *) return 1 ;;
     esac
 }
@@ -49,6 +52,16 @@ reject_variant_method() {
 # The method arguments that select METHOD on another entry script.
 method_cli_args() {
     variant_spec "$1" || echo "$1"
+}
+
+# `--train_game_engine` selects triangle-splatting-game-engine: Triangle Splatting
+# trained with the official train_game_engine.py recipe
+# (configs/base/triangle-splatting-game-engine.yaml).
+train_game_engine_method() {
+    case "$1" in
+        triangle-splatting) echo "triangle-splatting-game-engine" ;;
+        *) echo "--train_game_engine applies only to triangle-splatting, not $1" >&2; return 1 ;;
+    esac
 }
 
 # `--opaque` selects 2dts-opaque: 2DTS trained and deployed under the opaque
