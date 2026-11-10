@@ -113,6 +113,10 @@ The Mip-NeRF 360 presets need a GPU with about 24 GB (bicycle peaks at 24 GB; ga
 runs out of memory on 12 GB in the restricted Delaunay step). DTU and truck fit in
 12 GB.
 
+On NeRF-Synthetic chair (the derived recipe above; there is no paper number to match)
+T²-Splat reaches 33.51 PSNR / 0.975 SSIM / 0.035 LPIPS with 148k faces, peaking at
+8.8 GB and training in 35 minutes on an RTX 3060.
+
 ```bash
 pip install -e ".[t2splat]" && pip install --no-build-isolation ./submodules/effrdel
 MSBENCH_CUDA_BACKENDS=t2splat,simple-knn python setup.py build_ext --inplace
