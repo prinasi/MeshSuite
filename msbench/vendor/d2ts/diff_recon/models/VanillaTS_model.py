@@ -11,7 +11,6 @@ from .point_cloud import PointCloud
 from .raw_triangle import RawTriangle
 from .model_utils import *
 from .Base_model import BaseModel
-from .point_cloud import PointCloud
 from ..renderer.triangle_renderer import TriangleRenderer
 from ..utils.camera import Camera
 from ..utils.config import Config

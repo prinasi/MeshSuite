@@ -59,10 +59,13 @@ def main() -> int:
                 f"{standard.get('reason', 'unsupported')}"
             )
         image_dir = args.reference_image_dir or reference_image_directory(scene, method)
+        from msbench.core.image_sources import unity_reference_image_path
+
+        reference_path = unity_reference_image_path(args.datasets_root.resolve() / scene, image_dir)
         command = [
             str(args.python), str(args.evaluator),
             "--prediction", str(root),
-            "--ground-truth", str(args.datasets_root.resolve() / scene / image_dir),
+            "--ground-truth", str(reference_path),
             "--de-facto", str(scene_root / args.de_facto_render_subdir),
             "--output", str(root / "metrics_summary.json"),
             "--with-lpips", "--lpips-net", "vgg", "--lpips-device", args.lpips_device,

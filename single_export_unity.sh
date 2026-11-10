@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+source "$(dirname "${BASH_SOURCE[0]}")/tools/pipeline_common.sh"
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${REPO_ROOT}"
 
@@ -82,21 +84,6 @@ require_value() {
 
 lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
 
-canonical_method() {
-    local name
-    name="$(lower "$1")"
-    name="${name//_/-}"
-    case "${name}" in
-        trianglesplatting) echo "triangle-splatting" ;;
-        trianglesplatting-game-engine|ts-game-engine) echo "triangle-splatting-game-engine" ;;
-        meshsplatting) echo "mesh-splatting" ;;
-        t2-splat|t2splat) echo "t2splat" ;;
-        2dts|d2ts) echo "2dts" ;;
-        2dts-opaque|d2ts-opaque) echo "2dts-opaque" ;;
-        diffsoup) echo "diffsoup" ;;
-        *) echo "${name}" ;;
-    esac
-}
 
 # Method variants have their own configs, outputs and reports, but run on their
 # base method's package format and Unity renderers: 2dts-opaque is 2DTS trained

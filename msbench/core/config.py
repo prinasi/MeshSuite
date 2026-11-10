@@ -153,7 +153,19 @@ def finalize_config(config: Mapping[str, Any]) -> dict[str, Any]:
 def resolve_dataset_config(config: Mapping[str, Any]) -> dict[str, Any]:
     """Return one dataset config with ``root`` resolved against ``scene``."""
     data = {"dataset": _to_plain_dict(config)}
-    return finalize_config(data)["dataset"]
+    dataset = finalize_config(data)["dataset"]
+    from msbench.core.image_sources import COLMAP_TYPES, is_colmap_scene, resolve_colmap_image_source
+
+    dtype = str(dataset.get("type", dataset.get("dataset_type", "auto"))).lower()
+    root = dataset.get("root", dataset.get("dataset_path", ""))
+    if dtype in COLMAP_TYPES or (dtype == "auto" and is_colmap_scene(root)):
+        image_dir, resolution = resolve_colmap_image_source(
+            str(dataset.get("image_dir", "images")), dataset.get("resolution", 1),
+            root=root, image_preprocessing=str(dataset.get("image_preprocessing", "stored")),
+        )
+        dataset["image_dir"] = image_dir
+        dataset["resolution"] = resolution
+    return dataset
 
 
 def save_config_snapshot(config: Mapping[str, Any], output_dir: str | Path) -> Path:

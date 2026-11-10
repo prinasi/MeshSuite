@@ -501,9 +501,11 @@ def main() -> int:
         triasset = (scene_root / args.asset_subdir / f"{args.method}.triasset").resolve()
         dataset = (args.datasets_root / scene).resolve()
         output = (scene_root / args.output_name).resolve()
-        image_dir = dataset / (
+        from msbench.core.image_sources import unity_reference_image_path
+
+        image_dir = unity_reference_image_path(dataset, (
             args.reference_image_dir or reference_image_directory(scene, args.method)
-        )
+        ))
         if not (triasset / "manifest.json").is_file():
             raise FileNotFoundError(f"missing triasset: {triasset}")
         validate_triasset(triasset, max_faces=10000)

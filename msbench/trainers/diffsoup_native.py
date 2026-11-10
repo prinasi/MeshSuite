@@ -57,6 +57,9 @@ def run_diffsoup_native_config(
                 "final_losses": {},
             }
 
+    from msbench.runtime import require_method_cuda
+
+    require_method_cuda("diffsoup")
     examples_dir = _resolve_examples_dir(trainer_cfg)
 
     dataset_kind = _resolve_dataset_kind(trainer_cfg, dataset_cfg, dataset_root)

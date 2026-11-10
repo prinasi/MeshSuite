@@ -13,9 +13,12 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from msbench.renderers.base import RendererAdapter
 from msbench.renderers.backends import canonical_backend_name
+from msbench.methods import METHODS
+from msbench.core.plugins import discover_plugins
 
 _REGISTRY: dict[str, type[RendererAdapter]] = {}
 _PLUGINS_DISCOVERED = False
+_PLUGIN_ERRORS: dict[str, str] = {}
 
 #: Preferred entry point group that packages use to register renderer adapters.
 ENTRY_POINT_GROUP = "msbench.adapters"
@@ -57,31 +60,15 @@ def _discover_plugins() -> None:
         return
     _PLUGINS_DISCOVERED = True
 
-    for module_name in (
-        "msbench.renderers.exmesh_adapter",
-        "msbench.renderers.d2ts_adapter",
-        "msbench.renderers.triangle_splatting_adapter",
-        "msbench.renderers.mesh_splatting_adapter",
-        "msbench.renderers.t2splat_adapter",
-        "msbench.renderers.diffsoup_adapter",
-    ):
-        try:
-            __import__(module_name)
-        except Exception:
-            pass
+    _PLUGIN_ERRORS.update(discover_plugins(
+        (spec.adapter_module for spec in METHODS.values()), ENTRY_POINT_GROUP,
+    ))
 
-    try:
-        from importlib.metadata import entry_points
-    except ImportError:
-        return
 
-    for ep in entry_points(group=ENTRY_POINT_GROUP):
-        try:
-            ep.load()
-        except Exception:
-            # Silently skip broken entry points so one bad plugin
-            # does not prevent the rest of the framework from working.
-            pass
+def plugin_errors() -> dict[str, str]:
+    """Return discovery failures without hiding errors in other plugins."""
+    _discover_plugins()
+    return dict(_PLUGIN_ERRORS)
 
 
 def get_adapter(name: str) -> type[RendererAdapter]:
@@ -107,7 +94,8 @@ def get_adapter(name: str) -> type[RendererAdapter]:
         available = ", ".join(sorted(_REGISTRY.keys()))
         raise KeyError(
             f"Method '{name}' not found in registry. "
-            f"Available methods: {available or '(none registered)'}"
+            f"Available methods: {available or '(none registered)'}. "
+            f"Plugin errors: {_PLUGIN_ERRORS or '(none)'}"
         )
     return _REGISTRY[lookup_name]
 

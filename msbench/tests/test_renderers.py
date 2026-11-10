@@ -19,13 +19,13 @@ from msbench.renderers.diffsoup_adapter import DiffSoupAdapter
 # CUDA availability check
 _has_cuda = torch.cuda.is_available()
 
-# Check if triangle-splatting CUDA extension is importable
+# Check the bundled operator used by the adapter, including binary load errors.
 _has_ts_cuda = False
 try:
     import importlib
-    spec = importlib.util.find_spec("diff_triangle_rasterization")
-    _has_ts_cuda = spec is not None
-except Exception:
+    importlib.import_module("msbench.vendor._cmod.triangle_splatting_rasterization._C")
+    _has_ts_cuda = True
+except (ImportError, OSError):
     pass
 
 

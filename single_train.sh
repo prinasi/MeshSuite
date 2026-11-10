@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+source "$(dirname "${BASH_SOURCE[0]}")/tools/pipeline_common.sh"
+
 # single_train.sh - config-driven MeshSuite scene/dataset pipeline.
 #
 # Primary interface:
@@ -192,20 +194,6 @@ validate_dtu_eval_mode() {
     esac
 }
 
-canonical_method() {
-    local name
-    name="$(lower "$1")"
-    name="${name//_/-}"
-    case "${name}" in
-        trianglesplatting) echo "triangle-splatting" ;;
-        trianglesplatting-game-engine|ts-game-engine) echo "triangle-splatting-game-engine" ;;
-        meshsplatting) echo "mesh-splatting" ;;
-        t2-splat|t2splat) echo "t2splat" ;;
-        2dts|d2ts) echo "2dts" ;;
-        2dts-opaque|d2ts-opaque) echo "2dts-opaque" ;;
-        *) echo "${name}" ;;
-    esac
-}
 
 normalize_dataset() {
     local name

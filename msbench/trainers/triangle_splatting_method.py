@@ -107,9 +107,10 @@ class TriangleSplattingTrainingMethod(TrainingMethod):
         self.dataset_path = Path(dataset).expanduser()
         self.output_dir = Path(output_dir).expanduser()
         self.max_steps = max_steps
-        self.images_dir = images
+        from msbench.core.image_sources import resolve_scene_image_source
+
+        self.images_dir, self.resolution = resolve_scene_image_source(self.dataset_path, images, resolution)
         self.llffhold = llffhold
-        self.resolution = resolution
         self.eval_split = eval_split
         self.white_background = white_background
         self.extra_args = extra_args or {}
@@ -166,6 +167,9 @@ class TriangleSplattingTrainingMethod(TrainingMethod):
     def _ensure_initialized(self) -> None:
         if self._initialized:
             return
+        from msbench.runtime import require_method_cuda
+
+        require_method_cuda("triangle-splatting")
         self._initialized = True
         seed = self.extra_args.get("seed", 0)
         if seed is not None:

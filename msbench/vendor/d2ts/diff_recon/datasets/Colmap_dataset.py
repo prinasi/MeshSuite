@@ -197,12 +197,6 @@ class ColmapDatasetFactory(BaseDatasetFactory):
         self._file_handler = self._get_file_handler()
 
         train_cam_infos, test_cam_infos = self.getCameraInfos()
-        fallback_res = getattr(self, "_fallback_target_res", None)
-        if fallback_res is not None:
-            if train_target_res is None or train_target_res == 1:
-                train_target_res = fallback_res
-            if test_target_res is None or test_target_res == 1:
-                test_target_res = fallback_res
         if not hold_test_set:
             train_cam_infos += test_cam_infos
             self._logger.warning(f"hold_test_set not set, will merge test set into train set")
@@ -257,16 +251,9 @@ class ColmapDatasetFactory(BaseDatasetFactory):
         cameras_bin_path = "sparse/0/cameras.bin"
         cameras_txt_path = "sparse/0/cameras.txt"
         images_folder = getattr(self._config, "image_dir", None) or "images"
-        if not fs.hasFile(images_folder) and fs.hasFile("images"):
-            self._logger.warning(
-                f"Configured image_dir '{images_folder}' not found; falling back to 'images'."
-            )
-            if images_folder.startswith("images_"):
-                try:
-                    self._fallback_target_res = int(images_folder.split("_")[-1])
-                except ValueError:
-                    pass
-            images_folder = "images"
+        from msbench.core.image_sources import is_prepared_image_dir, is_legacy_image_cache, require_prepared_image_dir
+
+        require_prepared_image_dir(fs.getFilePath(), images_folder)
 
         if fs.hasFile(images_bin_path):
             images_path = fs.getFilePath(images_bin_path)
@@ -287,6 +274,12 @@ class ColmapDatasetFactory(BaseDatasetFactory):
             raise FileNotFoundError(f"Cannot find {cameras_bin_path} or {cameras_txt_path}")
 
         cam_infos = readColmapCameras(images_path, cameras_path, images_folder)
+        if is_legacy_image_cache(images_folder):
+            cam_infos = [cam._replace(image_path=cam.image_path + ".png") for cam in cam_infos]
+        if is_prepared_image_dir(images_folder):
+            for cam_info in cam_infos:
+                if not fs.hasFile(cam_info.image_path):
+                    raise FileNotFoundError(f"Prepared COLMAP image missing: {cam_info.image_path}")
         cam_infos = sorted(cam_infos, key=lambda x: x.image_name)
 
         hold_interval = self._config.hold_interval if self._config.hold_interval is not None else 8

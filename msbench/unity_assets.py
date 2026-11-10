@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 import torch
+from msbench.methods import canonical_method_name
 
 
 SCHEMA_VERSION = "1.0"
@@ -62,26 +63,21 @@ class TriAssetPackage:
     buffers: dict[str, BufferSpec] = field(default_factory=dict)
 
 
+UNITY_METHODS = frozenset({"2dts", "triangle-splatting", "mesh-splatting", "t2splat", "diffsoup"})
+
+
 def canonical_method(method: str) -> str:
     """Normalize public method aliases without importing CUDA-backed adapters."""
 
-    value = method.strip().lower().replace("_", "-")
-    aliases = {
-        "2dts": "2dts",
-        "d2ts": "2dts",
-        "triangle-splatting": "triangle-splatting",
-        "trianglesplatting": "triangle-splatting",
-        "mesh-splatting": "mesh-splatting",
-        "meshsplatting": "mesh-splatting",
-        "t2splat": "t2splat",
-        "t2-splat": "t2splat",
-        "diffsoup": "diffsoup",
-    }
+    # ExMesh has no Unity package format; every other bundled method does.
     try:
-        return aliases[value]
-    except KeyError as exc:
-        names = ", ".join(sorted(set(aliases.values())))
-        raise ValueError(f"Unsupported Unity export method {method!r}; expected one of: {names}") from exc
+        name = canonical_method_name(method)
+    except KeyError:
+        name = None
+    if name not in UNITY_METHODS:
+        names = ", ".join(sorted(UNITY_METHODS))
+        raise ValueError(f"Unsupported Unity export method {method!r}; expected one of: {names}")
+    return name
 
 
 def resolve_checkpoint(method: str, checkpoint: str | Path) -> Path:
