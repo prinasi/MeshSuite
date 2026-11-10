@@ -699,25 +699,29 @@ rebuilt:
 
 ### Resolution and dataset rules
 
-The scene config determines the image preprocessing protocol. **2DTS** uses
-`dataset.image_preprocessing: legacy_bilinear_floor`: offline PIL bilinear
-resizing with integer-floor dimensions, saved as lossless PNG. This reproduces
-its historical native training/evaluation pixels without resizing during training.
-Existing `images_2/4` JPEG files are a different protocol and are not substituted.
+Every method, 2DTS included, reads the stored `images_2`/`images_4` folders the
+scene config names (`image_dir: images` with `resolution: 2/4/8` resolves to
+`images_2/4/8`). A missing prepared folder or image fails instead of being
+downsampled at load time.
 
-Prepare all nine scenes once in the 2DTS runtime environment:
+The historical 2DTS input (offline PIL bilinear resizing with integer-floor
+dimensions, saved as lossless PNG) is an opt-in protocol: set
+`dataset.image_preprocessing: legacy_bilinear_floor` with `image_dir: images` and
+`resolution: 2/4/8`, then prepare the caches in the 2DTS runtime environment:
 
 ```bash
-python -m tools.prepare_2dts_images --config configs/2dts/mipnerf360 --workers 4
+python -m tools.prepare_2dts_images --config path/to/scene-configs --workers 4
 ```
 
-Caches live in `.cache/msbench/images/` (override with
-`MSBENCH_IMAGE_CACHE_DIR`, using the same value for preparation and all runs).
-The manifest records the protocol, Pillow version, source hashes, pixel hashes,
-dimensions and source file metadata. Training/evaluation reject missing caches
-and changed source files. Explicit cache directories can also be selected with
-`image_dir` and `resolution: 1`. Other methods retain their stored `images_X`
-protocol. DTU and synthetic preprocessing remain as configured.
+Its pixels differ from the stored `images_N` JPEGs every other method reads (the
+same 2DTS bicycle checkpoint scores 26.25 dB on it and 25.15 dB on `images_4`), so
+its results are not comparable with the shared protocol. Caches live in
+`.cache/msbench/images/` (override with `MSBENCH_IMAGE_CACHE_DIR`, using the same
+value for preparation and all runs). The manifest records the protocol, Pillow
+version, source hashes, pixel hashes, dimensions and source file metadata.
+Training/evaluation reject missing caches and changed source files. Explicit
+cache directories can also be selected with `image_dir` and `resolution: 1`. DTU
+and synthetic preprocessing remain as configured.
 
 COLMAP loaders set the effective resize factor to `1` for prepared images.
 Stored pixel dimensions determine camera size and scaled intrinsics.

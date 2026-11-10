@@ -503,7 +503,7 @@ def main() -> int:
         output = (scene_root / args.output_name).resolve()
         from msbench.core.image_sources import unity_reference_image_path
 
-        image_dir = unity_reference_image_path(dataset, args.method if not args.reference_image_dir else "custom", (
+        image_dir = unity_reference_image_path(dataset, (
             args.reference_image_dir or reference_image_directory(scene, args.method)
         ))
         if not (triasset / "manifest.json").is_file():

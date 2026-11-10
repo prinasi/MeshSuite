@@ -110,12 +110,12 @@ def resolve_scene_image_source(root: str | Path, image_dir: str, resolution: int
     return image_dir, resolution
 
 
-def unity_reference_image_path(root: str | Path, method: str, folder: str) -> Path:
-    """Keep standalone MipNeRF360 Unity tools on the native image protocol."""
-    root = Path(root)
-    if method.replace("_", "-").lower() in {"2dts", "d2ts"} and folder in {"images_2", "images_4"}:
-        directory = legacy_image_cache_dir(root, int(folder.rsplit("_", 1)[1]))
-    else:
-        directory = root / folder
+def unity_reference_image_path(root: str | Path, folder: str) -> Path:
+    """Validate a standalone Unity tool's reference images.
+
+    Every method, 2DTS included, is scored against the stored ``images_N``
+    pixels; a legacy cache is used only when passed explicitly as ``folder``.
+    """
+    directory = Path(root) / folder
     require_prepared_image_dir(root, str(directory))
     return directory

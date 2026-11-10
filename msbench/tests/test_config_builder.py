@@ -486,8 +486,8 @@ def test_all_methods_share_scene_dataset_protocol():
     from collections import defaultdict
 
     repo = Path(__file__).resolve().parents[2]
-    fields = ("name", "type", "root", "image_dir", "resolution", "eval_split", "eval_every",
-              "dtu_eval_mode", "background")
+    fields = ("name", "type", "root", "image_dir", "resolution", "image_preprocessing",
+              "eval_split", "eval_every", "dtu_eval_mode", "background")
     by_scene = defaultdict(dict)
     for path in sorted((repo / "configs").glob("*/*/*.yaml")):
         method, dataset = path.parts[-3], path.parts[-2]

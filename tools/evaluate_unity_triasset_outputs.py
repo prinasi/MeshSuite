@@ -61,9 +61,7 @@ def main() -> int:
         image_dir = args.reference_image_dir or reference_image_directory(scene, method)
         from msbench.core.image_sources import unity_reference_image_path
 
-        reference_path = unity_reference_image_path(
-            args.datasets_root.resolve() / scene, method if not args.reference_image_dir else "custom", image_dir,
-        )
+        reference_path = unity_reference_image_path(args.datasets_root.resolve() / scene, image_dir)
         command = [
             str(args.python), str(args.evaluator),
             "--prediction", str(root),

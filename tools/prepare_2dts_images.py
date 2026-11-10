@@ -1,6 +1,9 @@
 """Prepare the historical 2DTS image protocol without runtime downsampling.
 
-Example: python -m tools.prepare_2dts_images --config configs/2dts/mipnerf360/bicycle.yaml
+Opt-in: only scene configs that set dataset.image_preprocessing: legacy_bilinear_floor
+with image_dir: images and resolution 2/4/8 are prepared; the defaults use stored images_N.
+
+Example: python -m tools.prepare_2dts_images --config path/to/scene.yaml
 """
 
 import argparse

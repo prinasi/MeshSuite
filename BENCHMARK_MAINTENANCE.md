@@ -257,9 +257,11 @@ the supplied `images_4` yields 25.149dB. The earlier historical result was
 comparisons on sampled cameras differ by less than 0.00003dB, so the image
 protocol explains substantial evaluation loss without a renderer regression.
 
-The final 2DTS defaults therefore select `legacy_bilinear_floor`. The offline
-preparer `python -m tools.prepare_2dts_images --config configs/2dts/mipnerf360`
-decodes original images once, applies native bilinear/floor preprocessing, writes
+`legacy_bilinear_floor` reproduces those historical inputs, but it stays opt-in:
+the 2DTS defaults use the stored `images_N` that every other method reads, so all
+methods are scored on identical pixels (the shared dataset protocol). The offline
+preparer `python -m tools.prepare_2dts_images --config path/to/scene-configs`
+(scene configs that select the protocol) decodes original images once, applies native bilinear/floor preprocessing, writes
 lossless PNGs, verifies them against the resized pixels, and publishes a cache
 manifest atomically. Caches under `.cache/msbench/images` are ignored by Git;
 `MSBENCH_IMAGE_CACHE_DIR` overrides the shared cache location. Dataset identity

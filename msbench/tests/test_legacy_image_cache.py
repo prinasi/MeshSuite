@@ -111,21 +111,22 @@ def test_manifest_protocol_is_validated(scene):
         validate_legacy_image_cache(scene, cache)
 
 
-def test_only_2dts_selects_legacy_cache_in_existing_configs():
-    cfg = Config.fromfile("configs/2dts/mipnerf360/bicycle.yaml")
-    assert cfg.dataset.image_preprocessing == LEGACY_PREPROCESSING
-    for method in ("triangle-splatting", "mesh-splatting", "diffsoup"):
-        cfg = Config.fromfile(f"configs/{method}/mipnerf360/bicycle.yaml")
-        assert cfg.dataset.get("image_preprocessing", "stored") == "stored"
-        assert resolve_dataset_config(cfg.dataset)["image_dir"] == "images_4"
+@pytest.mark.parametrize("method", ["2dts", "triangle-splatting", "mesh-splatting", "diffsoup"])
+def test_existing_configs_use_the_stored_images(method):
+    # The legacy cache is opt-in: 2DTS reads the same stored images_N as every method.
+    cfg = Config.fromfile(f"configs/{method}/mipnerf360/bicycle.yaml")
+    assert cfg.dataset.get("image_preprocessing", "stored") == "stored"
+    assert resolve_dataset_config(cfg.dataset)["image_dir"] == "images_4"
 
 
-def test_unity_defaults_and_image_matching_use_same_protocol(scene):
+def test_unity_references_use_stored_images_and_accept_an_explicit_cache(scene):
     from msbench.core.image_sources import unity_reference_image_path
     from tools.evaluate_deployment_images import _image_key
 
+    (scene / "images_4").mkdir()
+    assert unity_reference_image_path(scene, "images_4") == scene / "images_4"
     prepare_legacy_image_cache(scene, 4)
-    cache = unity_reference_image_path(scene, "2dts", "images_4")
-    assert cache == legacy_image_cache_dir(scene, 4)
+    cache = legacy_image_cache_dir(scene, 4)
+    assert unity_reference_image_path(scene, str(cache)) == cache
     assert _image_key(cache / "nested/frame.JPG.png") == _image_key(scene / "images/nested/frame.JPG")
     assert _image_key(cache / "nested/frame.JPG.png") == "frame"
