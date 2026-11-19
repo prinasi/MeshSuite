@@ -342,6 +342,8 @@ def _export_mesh_splatting(
         "terminal_solid_condition": "opacity_floor>=0.999 and exp(sigma_logits)<=0.001",
         "native_coverage_space": "screen_space_projected_incenter",
         "native_compositing": "tile_depth_sorted_front_to_back",
+        "native_visibility": "first_triangle_in_centroid_view_depth_order",
+        "native_render_scaling": MESH_SPLATTING_NATIVE_RENDER_SCALING,
         "requires_per_camera_depth_sort": True,
         "unity_method_aware_requires_per_camera_depth_sort": not terminal_solid_eligible,
         "unity_method_aware_status": (
@@ -349,6 +351,11 @@ def _export_mesh_splatting(
         ),
         "active_sh_degree": int(state.get("active_sh_degree", 0)),
     }
+
+
+# MeshSplatting's render.py (and its final training stage) draws at 4x the
+# image resolution and area-downsamples; the Unity terminal pass reproduces it.
+MESH_SPLATTING_NATIVE_RENDER_SCALING = 4
 
 
 # T²-Splat evaluates checkpoints through TriangleModel.load_parameters, which

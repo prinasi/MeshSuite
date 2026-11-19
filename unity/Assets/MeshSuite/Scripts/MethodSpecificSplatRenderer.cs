@@ -30,6 +30,10 @@ namespace MeshSuite.UnityNative
         Vector3[] triangleCentroids;
         int[] triangleOrder;
         float[] triangleDepths;
+        // Mesh-Splatting draws at its native render scaling and box-filters down
+        // (MeshSplatTerminalSolid pass 1), as its native renderer does.
+        int supersample = 1, supersampleWidth, supersampleHeight;
+        static readonly int SupersampleTargetId = Shader.PropertyToID("_MeshSuiteSupersampleTarget");
         Vector3 lastSortCameraPosition = new Vector3(float.NaN, float.NaN, float.NaN);
         Vector3 lastSortCameraForward = new Vector3(float.NaN, float.NaN, float.NaN);
         public override bool IsReady => ready;
@@ -56,6 +60,9 @@ namespace MeshSuite.UnityNative
             faceMipLevels = ReadInt(json, "face_mip_levels", 0);
             faceTexelsPerFace = ReadInt(json, "face_mip_texels_per_face", 0);
             lodPixelScale = ReadFloat(json, "native_render_scaling", 1f);
+            if (mode == 1)
+                supersample = TriAssetRuntimeOptions.GetInt("-mesh-supersample",
+                    Mathf.Max(1, Mathf.RoundToInt(ReadFloat(json, "native_render_scaling", 1f))));
             bool d2tsSolid = mode == 2 && Regex.IsMatch(json, "\"terminal_solid_eligible\"\\s*:\\s*true");
             if (primitiveCount <= 0) { Fail("Invalid primitive_count."); yield break; }
             string b = Path.Combine(AssetDirectory, "buffers");
@@ -114,6 +121,8 @@ namespace MeshSuite.UnityNative
             // Native window G = exp(-0.5 ecc^(2 gamma)) crosses 1/2 at this ecc.
             material.SetFloat("_SolidVertexScale", gammaVertexRescale * Mathf.Pow(2f * Mathf.Log(2f), 0.5f / gamma));
             material.SetInt("_RawCode", 1);
+            material.SetInt("_SupersampleFactor", supersample);
+            if (mode == 1) Debug.Log($"[MeshSuite] mesh-splatting supersampling {supersample}x{supersample} (native_render_scaling).");
             if (mode == 3)
             {
                 material.SetBuffer("_FaceMip", faceMip);
@@ -193,9 +202,29 @@ namespace MeshSuite.UnityNative
                 return false;
             }
             msBenchDrawCommands = new CommandBuffer { name = "MeshSuite/MethodSpecificSplatRenderer procedural draw" };
-            msBenchDrawCommands.DrawProcedural(
-                Matrix4x4.identity, material, 0, MeshTopology.Triangles,
-                primitiveCount * 3, 1);
+            if (supersample > 1)
+            {
+                // Native Mesh-Splatting rendering: draw at supersample x the
+                // target resolution, then area-average back (shader pass 1).
+                supersampleWidth = TargetCamera.pixelWidth;
+                supersampleHeight = TargetCamera.pixelHeight;
+                msBenchDrawCommands.GetTemporaryRT(SupersampleTargetId,
+                    supersampleWidth * supersample, supersampleHeight * supersample, 24,
+                    FilterMode.Point, RenderTextureFormat.ARGBFloat, RenderTextureReadWrite.Linear, 1);
+                msBenchDrawCommands.SetRenderTarget(SupersampleTargetId);
+                msBenchDrawCommands.ClearRenderTarget(true, true, TargetCamera.backgroundColor);
+                msBenchDrawCommands.DrawProcedural(
+                    Matrix4x4.identity, material, 0, MeshTopology.Triangles,
+                    primitiveCount * 3, 1);
+                msBenchDrawCommands.Blit(SupersampleTargetId, BuiltinRenderTextureType.CameraTarget, material, 1);
+                msBenchDrawCommands.ReleaseTemporaryRT(SupersampleTargetId);
+            }
+            else
+            {
+                msBenchDrawCommands.DrawProcedural(
+                    Matrix4x4.identity, material, 0, MeshTopology.Triangles,
+                    primitiveCount * 3, 1);
+            }
             msBenchCommandCamera = TargetCamera;
             msBenchCommandCamera.AddCommandBuffer(CameraEvent.AfterForwardAlpha, msBenchDrawCommands);
             Debug.Log("[MeshSuite] Installed explicit camera draw for MethodSpecificSplatRenderer on "

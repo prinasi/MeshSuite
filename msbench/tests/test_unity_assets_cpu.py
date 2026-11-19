@@ -94,9 +94,28 @@ class MeshOpacityTests(unittest.TestCase):
                 "min_after_activation",
             )
             self.assertFalse(manifest["rendering"]["terminal_solid_eligible"])
+            # Native rasterizer rules the Unity terminal pass reproduces.
+            self.assertEqual(manifest["rendering"]["native_render_scaling"], 4)
+            self.assertEqual(
+                manifest["rendering"]["native_visibility"],
+                "first_triangle_in_centroid_view_depth_order",
+            )
             validation = validate_triasset(package.path, max_faces=1)
             self.assertEqual(validation["status"], "ok")
             self.assertEqual(validation["mesh_opacity"]["faces_checked"], 1)
+
+    def test_terminal_pass_reproduces_native_visibility_and_supersampling(self) -> None:
+        unity = Path(__file__).resolve().parents[2] / "unity" / "Assets" / "MeshSuite"
+        shader = (unity / "Shaders" / "MeshSplatTerminalSolid.shader").read_text()
+        renderer = (unity / "Scripts" / "MethodSpecificSplatRenderer.cs").read_text()
+        # One depth per triangle at its centroid, with the native centroid near cull.
+        self.assertIn("o.p.z=cc.z/cc.w*o.p.w", shader)
+        self.assertIn("if(cc.w<=0.2)", shader)
+        self.assertIn("noperspective centroid float3 c", shader)
+        # Pass 1 box-filters the native_render_scaling x target.
+        self.assertIn("#pragma fragment Down", shader)
+        self.assertIn('ReadFloat(json, "native_render_scaling", 1f)', renderer)
+        self.assertIn("Blit(SupersampleTargetId, BuiltinRenderTextureType.CameraTarget, material, 1)", renderer)
 
     def test_generic_preview_uses_the_same_minimum_reduction(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
